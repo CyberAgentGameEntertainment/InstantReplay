@@ -1,0 +1,44 @@
+// swift-interface-format-version: 1.0
+// swift-compiler-version: Apple Swift version 5.10 (swiftlang-5.10.0.13 clang-1500.3.9.4)
+// swift-module-flags: -target arm64-apple-ios16.6 -enable-objc-interop -enable-library-evolution -swift-version 5 -enforce-exclusivity=checked -O -enable-bare-slash-regex -module-name InstantReplay_Transcoder
+import AVFoundation
+import Foundation
+import Swift
+import VideoToolbox
+import _Concurrency
+import _StringProcessing
+import _SwiftConcurrencyShims
+public class VideoSink {
+  public init(filePath: Swift.String, fileType: AVFoundation.AVFileType, codec: CoreMedia.CMVideoCodecType, width: Swift.Int, height: Swift.Int, sampleRate: Swift.Float64, channels: Swift.UInt32, pullVideoSampleBuffer: InstantReplay_Transcoder.PullSampleBufferCallback, pullAudioSampleBuffer: InstantReplay_Transcoder.PullSampleBufferCallback) throws
+  #if compiler(>=5.3) && $AsyncAwait
+  public func close() async throws
+  #endif
+  @objc deinit
+}
+@_cdecl("InstantReplay_CreateSession")
+public func InstantReplay_CreateSession(width: Swift.Int32, height: Swift.Int32, sampleRate: Swift.Int, channels: Swift.Int32, destination: Swift.UnsafePointer<Swift.CChar>, pullVideoSampleBuffer: @convention(c) (Swift.UnsafeRawPointer, Swift.UnsafeMutablePointer<Swift.UnsafePointer<CoreMedia.CMSampleBuffer>?>) -> Swift.Int32, pullVideoSampleBufferCtx: Swift.UnsafeRawPointer, pullAudioSampleBuffer: @convention(c) (Swift.UnsafeRawPointer, Swift.UnsafeMutablePointer<Swift.UnsafePointer<CoreMedia.CMSampleBuffer>?>) -> Swift.Int32, pullAudioSampleBufferCtx: Swift.UnsafeRawPointer) -> Swift.UnsafeRawPointer?
+@_cdecl("InstantReplay_EncodeVideoFrame")
+public func InstantReplay_EncodeVideoFrame(transcoderPtr: Swift.UnsafeRawPointer, pixelBufferPtr: Swift.UnsafeRawPointer, timestamp: Swift.Double, callback: @convention(c) (Swift.UnsafeRawPointer, Swift.UnsafeRawPointer?, Swift.UnsafePointer<Swift.CChar>?) -> Swift.Void, ctx: Swift.UnsafeRawPointer)
+@_cdecl("InstantReplay_CompleteVideoFrames")
+public func InstantReplay_CompleteVideoFrames(transcoderPtr: Swift.UnsafeRawPointer) -> Swift.Int32
+@_cdecl("InstantReplay_CreateAudioSampleBuffer")
+public func InstantReplay_CreateAudioSampleBuffer(transcoderPtr: Swift.UnsafeRawPointer, audioSamplesPtr: Swift.UnsafeMutableRawPointer, length: Swift.Int) -> Swift.UnsafeRawPointer?
+@_cdecl("InstantReplay_Complete")
+public func InstantReplay_Complete(transcoderPtr: Swift.UnsafeRawPointer, onComplete: @convention(c) (Swift.UnsafeRawPointer, Swift.UnsafePointer<Swift.CChar>?) -> Swift.Void, ctx: Swift.UnsafeRawPointer) -> Swift.Int32
+@_cdecl("InstantReplay_LoadJpeg")
+public func InstantReplay_LoadJpeg(transcoderPtr: Swift.UnsafeRawPointer, filename: Swift.UnsafePointer<Swift.CChar>) -> Swift.UnsafeRawPointer?
+public enum PullState : Swift.Int32 {
+  case pulled
+  case continues
+  case completed
+  public init?(rawValue: Swift.Int32)
+  public typealias RawValue = Swift.Int32
+  public var rawValue: Swift.Int32 {
+    get
+  }
+}
+public struct PullSampleBufferCallback {
+}
+extension InstantReplay_Transcoder.PullState : Swift.Equatable {}
+extension InstantReplay_Transcoder.PullState : Swift.Hashable {}
+extension InstantReplay_Transcoder.PullState : Swift.RawRepresentable {}
