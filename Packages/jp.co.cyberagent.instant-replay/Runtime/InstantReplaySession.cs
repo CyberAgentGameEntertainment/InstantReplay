@@ -33,7 +33,7 @@ namespace InstantReplay
         /// <param name="fixedFrameRate">Frame rate. If omitted, all produces frames are transcoded.</param>
         /// <param name="frameProvider">
         ///     Custom frame provider. If omitted,
-        ///     <see cref="UnityEngine.Rendering.RenderPipelineManager.endFrameRendering" />
+        ///     <see cref="UnityEngine.Rendering.RenderPipelineManager.endContextRendering" />
         ///     and
         ///     <see cref="UnityEngine.ScreenCapture.CaptureScreenshotIntoRenderTexture" />
         ///     will be used.

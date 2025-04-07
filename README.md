@@ -95,7 +95,7 @@ await Task.Delay(10000, ct);
 
 // Stop recording and transcode
 var outputPath = await session.StopAndTranscodeAsync(ct: ct);
-File.Move(outputPath, Path.Combine(Application.persistentDataPath, Path.GetFileName(output)));
+File.Move(outputPath, Path.Combine(Application.persistentDataPath, Path.GetFileName(outputPath)));
 ```
 
 ## Detailed Usage
@@ -117,7 +117,7 @@ By default, it records at the actual screen size, but you can also specify `maxW
 
 ### Setting the Video Source
 
-By default, it uses `RenderPipelineManager.endFrameRendering` and `ScreenCapture.CaptureScreenshotIntoRenderTexture` provided for SRP to capture the screen, but you can also use any RenderTexture as the source.
+By default, it uses `RenderPipelineManager.endContextRendering` and `ScreenCapture.CaptureScreenshotIntoRenderTexture` provided for SRP to capture the screen, but you can also use any RenderTexture as the source.
 
 Create a class that inherits `InstantReplay.IFrameProvider` and pass it as `frameProvider` to the `InstantReplaySession` constructor. You can also specify whether `InstantReplaySession` automatically discards `frameProvider` by `disposeFrameProvider`.
 

@@ -6,7 +6,8 @@
 
 [English](README.md)
 
-直近 N 秒間のゲームプレイを常時録画し、任意のタイミングで動画として書き出すことができるライブラリです。
+Instant Replay は直近 N 秒間のゲームプレイをいつでも動画として保存できるライブラリです。
+常時録画し、任意のタイミングで動画として書き出すことができるライブラリです。
 
 #### SNS へのゲームプレイ共有機能として
 
@@ -93,7 +94,7 @@ await Task.Delay(10000, ct);
 
 // 録画停止と書き出し
 var outputPath = await session.StopAndTranscodeAsync(ct: ct);
-File.Move(outputPath, Path.Combine(Application.persistentDataPath, Path.GetFileName(output)));
+File.Move(outputPath, Path.Combine(Application.persistentDataPath, Path.GetFileName(outputPath)));
 ```
 
 ## 詳細な使い方
@@ -115,7 +116,7 @@ new InstantReplaySession(numFrames: 900, fixedFrameRate: 30);
 
 ### 映像ソースの設定
 
-デフォルトでは SRP 向けに提供されている `RenderPipelineManager.endFrameRendering` と `ScreenCapture.CaptureScreenshotIntoRenderTexture` を使用してスクリーンのキャプチャを行いますが、BiRP を使用している場合や、独自のレンダリングパイプラインを使用している場合などは、任意の RenderTexture をソースとして使用することも可能です。
+デフォルトでは SRP 向けに提供されている `RenderPipelineManager.endContextRendering` と `ScreenCapture.CaptureScreenshotIntoRenderTexture` を使用してスクリーンのキャプチャを行いますが、BiRP を使用している場合や、独自のレンダリングパイプラインを使用している場合などは、任意の RenderTexture をソースとして使用することも可能です。
 
 `InstantReplay.IFrameProvider` を継承したクラスを作成し、`InstantReplaySession` のコンストラクタに`frameProvider` として渡してください。また `disposeFrameProvider` によって `InstantReplaySession` 側で `frameProvider` を自動的に破棄するかどうかを指定できます。
 
