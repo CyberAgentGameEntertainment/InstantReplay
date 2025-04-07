@@ -3,7 +3,7 @@
 // --------------------------------------------------------------
 
 using System;
-using System.Collections.Generic;
+using System.Collections.Concurrent;
 
 namespace InstantReplay
 {
@@ -13,7 +13,7 @@ namespace InstantReplay
     /// <typeparam name="TContext"></typeparam>
     internal readonly struct PooledActionOnce<TContext> : IDisposable
     {
-        private static readonly Stack<Core> Pool = new();
+        private static readonly ConcurrentQueue<Core> Pool = new();
 
         private readonly ushort _version;
         private readonly Core _core;
@@ -30,7 +30,7 @@ namespace InstantReplay
         public static PooledActionOnce<TContext> Get(
             Action<TContext> callback, TContext context)
         {
-            if (!Pool.TryPop(out var pooled))
+            if (!Pool.TryDequeue(out var pooled))
                 pooled = new Core();
 
             pooled.Set(callback, context);
@@ -41,7 +41,6 @@ namespace InstantReplay
         {
             if (_core._version != _version) return;
             _core.Release();
-            Pool.Push(_core);
         }
 
         private PooledActionOnce(Core core)
@@ -78,6 +77,7 @@ namespace InstantReplay
                 _callback = default;
                 _context = default;
                 _version++;
+                Pool.Enqueue(this);
             }
         }
     }

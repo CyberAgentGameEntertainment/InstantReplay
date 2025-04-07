@@ -42,7 +42,6 @@ namespace InstantReplay
         {
             if (_core._version != _version) return;
             _core.Release();
-            Pool.Push(_core);
         }
 
         private PooledAsyncGPUReadbackCallback(Core core)
@@ -79,6 +78,7 @@ namespace InstantReplay
                 _callback = default;
                 _context = default;
                 _version++;
+                Pool.Push(this);
                 return true;
             }
         }

@@ -2,6 +2,7 @@
 // Copyright 2025 CyberAgent, Inc.
 // --------------------------------------------------------------
 
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Rendering;
 using Object = UnityEngine.Object;
@@ -18,14 +19,14 @@ namespace InstantReplay
         public SrpScreenshotFrameProvider()
         {
             _renderTexture = new RenderTexture(Screen.width, Screen.height, 0, RenderTextureFormat.ARGB32);
-            RenderPipelineManager.endFrameRendering += EndFrameRendering;
+            RenderPipelineManager.endContextRendering += EndContextRendering;
         }
 
         public event IFrameProvider.ProvideFrame OnFrameProvided;
 
         public void Dispose()
         {
-            RenderPipelineManager.endFrameRendering -= EndFrameRendering;
+            RenderPipelineManager.endContextRendering -= EndContextRendering;
 
             if (_renderTexture)
             {
@@ -34,7 +35,7 @@ namespace InstantReplay
             }
         }
 
-        private void EndFrameRendering(ScriptableRenderContext context, Camera[] cameras)
+        private void EndContextRendering(ScriptableRenderContext context, List<Camera> cameras)
         {
             var time = Time.unscaledTimeAsDouble;
 
