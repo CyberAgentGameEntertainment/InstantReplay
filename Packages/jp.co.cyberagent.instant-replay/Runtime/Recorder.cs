@@ -47,6 +47,10 @@ namespace InstantReplay
 
             // init slots
             _slots = new Slot[numFrames];
+
+            directory = Path.GetFullPath(directory);
+
+            // NOTE: Path.GetFullPath produces too much garbage, so we ensure the path is transformed to full path here instead of calling Path.GetFullPath every time we write to the file.
             for (var i = 0; i < _slots.Length; i++)
                 _slots[i] = new Slot(Path.Combine(directory, $"{i}.jpg"));
 
@@ -76,7 +80,7 @@ namespace InstantReplay
                 else
                 {
                     var startTime = slots.Min(s => s._time);
-                    frames = slots.Select(s => new RecorderFrame(s._path, s._time - startTime)).ToArray();
+                    frames = slots.Select(s => new RecorderFrame(s._definiteFullPath, s._time - startTime)).ToArray();
                 }
 
                 var width = 0;
@@ -132,7 +136,7 @@ namespace InstantReplay
             try
             {
                 _ = new FrameReadbackRequest<(Recorder session, int currentSlot)>(renderTexture,
-                    slot._path,
+                    slot._definiteFullPath,
                     (this, currentSlot),
                     static (_, context, exception) =>
                     {
@@ -170,18 +174,18 @@ namespace InstantReplay
             }, null);
         }
 
-        internal struct Slot
+        private struct Slot
         {
-            public readonly string _path;
+            public readonly string _definiteFullPath;
             public int _isBusy;
             public double _time;
             public double _processingTime;
             public int _width;
             public int _height;
 
-            public Slot(string path) : this()
+            public Slot(string definiteFullPath) : this()
             {
-                _path = path;
+                _definiteFullPath = definiteFullPath;
             }
         }
     }
