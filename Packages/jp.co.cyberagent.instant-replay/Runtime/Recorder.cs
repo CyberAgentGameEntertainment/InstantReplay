@@ -48,9 +48,11 @@ namespace InstantReplay
             // init slots
             _slots = new Slot[numFrames];
 
+            directory = Path.GetFullPath(directory);
+
             // NOTE: Path.GetFullPath produces too much garbage, so we ensure the path is transformed to full path here instead of calling Path.GetFullPath every time we write to the file.
             for (var i = 0; i < _slots.Length; i++)
-                _slots[i] = new Slot(Path.GetFullPath(Path.Combine(directory, $"{i}.jpg")));
+                _slots[i] = new Slot(Path.Combine(directory, $"{i}.jpg"));
 
             frameProvider.OnFrameProvided += OnFrameProvided;
         }

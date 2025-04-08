@@ -30,6 +30,8 @@ namespace InstantReplay
         public static PooledActionOnce<TContext> Get(
             Action<TContext> callback, TContext context)
         {
+            if (callback == null) throw new ArgumentNullException(nameof(callback));
+
             if (!Pool.TryDequeue(out var pooled))
                 pooled = new Core();
 

@@ -102,61 +102,72 @@ namespace InstantReplay
                         frameReq._format,
                         frameReq._width,
                         frameReq._height);
+                    frameReq._data.Dispose();
 
                     try
                     {
                         var path = frameReq._definiteFullPath;
-                        var handlePtr = MonoIOProxy.Open(path, FileMode.Create, FileAccess.Write, FileShare.Read,
-                            FileOptions.SequentialScan, out var error);
-                        if (handlePtr == (IntPtr)(-1))
-                            throw MonoIOProxy.GetException(path, error);
 
-                        var handle = new SafeFileHandle(handlePtr, false);
-                        try
+                        Span<byte> src;
+                        unsafe
                         {
-                            // We use MonoIO (backend of FileStream) directly to bypass FileStream overhead.
-                            // MonoIO only accepts managed arrays, not arbitrary pointers and spans.
-                            // We need to copy an encoded NativeArray to a managed array. 
-                            var buffer = ArrayPool<byte>.Shared.Rent(Math.Min(4096, encoded.Length));
+                            src = new Span<byte>(encoded.GetUnsafePtr(), encoded.Length);
+                        }
+
+                        if (!MonoIOProxy.IsSupported)
+                        {
+                            using var file = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.Read,
+                                4096, FileOptions.SequentialScan);
+                            file.Write(src);
+                        }
+                        else
+                        {
+                            var handlePtr = MonoIOProxy.Open(path, FileMode.Create, FileAccess.Write, FileShare.Read,
+                                FileOptions.SequentialScan, out var error);
+                            if (handlePtr == (IntPtr)(-1))
+                                throw MonoIOProxy.GetException(path, error);
+
+                            var handle = new SafeFileHandle(handlePtr, false);
                             try
                             {
-                                Span<byte> src;
-                                unsafe
+                                // We use MonoIO (backend of FileStream) directly to bypass FileStream overhead.
+                                // MonoIO only accepts managed arrays, not arbitrary pointers and spans.
+                                // We need to copy an encoded NativeArray to a managed array. 
+                                var buffer = ArrayPool<byte>.Shared.Rent(Math.Min(4096, encoded.Length));
+                                try
                                 {
-                                    src = new Span<byte>(encoded.GetUnsafePtr(), encoded.Length);
-                                }
-
-                                while (src.Length > 0)
-                                {
-                                    var l = Math.Min(buffer.Length, src.Length);
-                                    src[..l].CopyTo(buffer);
-
-                                    var offset = 0;
-
-                                    while (offset < l)
+                                    while (src.Length > 0)
                                     {
-                                        var n = MonoIOProxy.Write(handle, buffer, offset, l - offset, out error);
-                                        if (handlePtr == (IntPtr)(-1))
-                                            throw MonoIOProxy.GetException(path, error);
-                                        offset += n;
-                                    }
+                                        var l = Math.Min(buffer.Length, src.Length);
+                                        src[..l].CopyTo(buffer);
 
-                                    src = src[l..];
+                                        var offset = 0;
+
+                                        while (offset < l)
+                                        {
+                                            var n = MonoIOProxy.Write(handle, buffer, offset, l - offset, out error);
+                                            if (handlePtr == (IntPtr)(-1))
+                                                throw MonoIOProxy.GetException(path, error);
+                                            offset += n;
+                                        }
+
+                                        src = src[l..];
+                                    }
+                                }
+                                finally
+                                {
+                                    ArrayPool<byte>.Shared.Return(buffer);
                                 }
                             }
                             finally
                             {
-                                ArrayPool<byte>.Shared.Return(buffer);
-                            }
-                        }
-                        finally
-                        {
-                            MonoIOProxy.Close(handle.DangerousGetHandle(), out error);
-                            if (error != 0)
-                                throw MonoIOProxy.GetException(path, error);
+                                MonoIOProxy.Close(handle.DangerousGetHandle(), out error);
+                                if (error != 0)
+                                    throw MonoIOProxy.GetException(path, error);
 
-                            handle.Dispose();
-                            handle = null;
+                                handle.Dispose();
+                                handle = null;
+                            }
                         }
                     }
                     finally
