@@ -146,7 +146,7 @@ namespace InstantReplay
                                         while (offset < l)
                                         {
                                             var n = MonoIOProxy.Write(handle, buffer, offset, l - offset, out error);
-                                            if (handlePtr == (IntPtr)(-1))
+                                            if (error != 0)
                                                 throw MonoIOProxy.GetException(path, error);
                                             offset += n;
                                         }
