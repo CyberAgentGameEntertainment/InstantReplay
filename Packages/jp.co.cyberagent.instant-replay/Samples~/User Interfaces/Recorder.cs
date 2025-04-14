@@ -21,6 +21,7 @@ namespace InstantReplay.Examples
         [SerializeField] private GameObject transcodingPanel;
         [SerializeField] private Text transcodingProgressText;
         [SerializeField] private Image transcodingProgressImage;
+        [SerializeField] private VideoPlayerView videoPlayerView;
 
         #endregion
 
@@ -44,7 +45,6 @@ namespace InstantReplay.Examples
             ShowText("Recording...", 3f);
         }
 
-
         private void OnDisable()
         {
             _currentSession.Dispose();
@@ -56,7 +56,8 @@ namespace InstantReplay.Examples
         private void NewSession()
         {
             if (_currentSession != null) return;
-            _currentSession = new InstantReplaySession(numFrames, fixedFrameRate, maxWidth: 640, maxHeight: 640);
+            _currentSession =
+                new InstantReplaySession(numFrames, fixedFrameRate, maxWidth: maxWidth, maxHeight: maxHeight);
         }
 
         public void StopAndTranscode()
@@ -93,6 +94,8 @@ namespace InstantReplay.Examples
                 File.Move(outputFileName, dest);
 
                 ShowText($"Video saved: {dest}", 10f);
+
+                videoPlayerView.Open(dest);
             }
             catch (Exception ex)
             {
