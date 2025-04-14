@@ -81,7 +81,25 @@ https://github.com/CyberAgentGameEntertainment/InstantReplay.git?path=Packages/j
 
 ## Quick Start
 
-Use `InstantReplaySession`.
+Import "User Interfaces" sample from the package manager.
+
+<img width="913" alt="Image" src="https://github.com/user-attachments/assets/970ad1e3-a5cf-410c-a2cb-70e0004e88e2" />
+
+Place `InstantReplay Recorder.prefab` in the scene. This prefab has `Recorder` component, which will automatically record the gameplay during enabled.
+
+<img width="672" alt="Image" src="https://github.com/user-attachments/assets/2dd76940-3b68-40c4-86a4-984133439135" />
+
+Then, you can stop the recording and save the video by calling `Recorder.StopAndTranscode()`. For example, you can trigger this method by clicking the button in the scene.
+
+<img width="618" alt="Image" src="https://github.com/user-attachments/assets/0a14a29d-7d95-49d4-bec9-205bc48feee9" />
+
+Output filename will be displayed on the screen.
+
+![Image](https://github.com/user-attachments/assets/a19e7aca-78cb-4df3-96b9-cc3c05e8b006)
+
+## Detailed Usage
+
+To record the gameplay, use `InstantReplaySession`.
 
 ```csharp
 using InstantReplay;
@@ -98,8 +116,6 @@ await Task.Delay(10000, ct);
 var outputPath = await session.StopAndTranscodeAsync(ct: ct);
 File.Move(outputPath, Path.Combine(Application.persistentDataPath, Path.GetFileName(outputPath)));
 ```
-
-## Detailed Usage
 
 ### Setting Recording Time and Frame Rate
 
