@@ -6,7 +6,8 @@
 
 [日本語](README.ja.md)
 
-Instant Replay allows you to constantly record the last N seconds of gameplay and export it as a video at any time.
+Instant Replay is a library that allows you to save recent gameplay videos at any time in Unity.
+You can save recent game footage retroactively when needed, ensuring you don't miss recording important moments. The recording time is limited to a pre-specified length, and frames exceeding this limit are discarded.
 
 ### For Sharing Gameplay on SNS
 
