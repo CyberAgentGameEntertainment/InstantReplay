@@ -10,5 +10,12 @@
   "author": {
     "name": "CyberAgent"
   },
-  "unityRelease": "0f1"
+  "unityRelease": "0f1",
+  "samples" : [
+    {
+      "displayName": "User Interfaces",
+      "description": "Minimum example of user interfaces",
+      "path": "Samples~/User Interfaces"
+    }
+  ]
 }
