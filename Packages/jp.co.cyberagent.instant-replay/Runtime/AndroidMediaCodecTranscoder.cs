@@ -30,11 +30,14 @@ namespace InstantReplay
 
         private readonly CancellationTokenSource _cancellation = new();
         private readonly TaskCompletionSource<bool> _completionSource = new();
+        private readonly int _expectedHeight;
+        private readonly int _expectedWidth;
         private readonly ChannelWriter<ValueTask<Frame>> _framesChannelWriter;
         private readonly MediaMuxer _muxer;
         private readonly AudioPcmEncoding _pcmEncoding;
         private readonly MediaCodec _videoCodec;
         private readonly Task<(Yuv420Layout layout, int initialBufferId)> _yuvLayoutTask;
+
         private int _audioTrackIndex;
         private int _audioWroteSamples;
         private int _videoTrackIndex;
@@ -49,7 +52,7 @@ namespace InstantReplay
 
             MediaCodecInfo[] availableCodecs = null;
 
-            // video codec must support YUV420Flexible. (assumes NV12)
+            // video codec must support YUV420Flexible.
             using var videoCodecInfo = FindCodec(videoMime,
                 MediaCodecInfo.CodecCapabilities.get_COLOR_FormatYUV420Flexible(), ref availableCodecs);
             using var audioCodecInfo = FindCodec(audioMime, null, ref availableCodecs);
@@ -58,6 +61,8 @@ namespace InstantReplay
 
             // NOTE: Encoders on some devices don't support non-16-aligned size.
             // Green padding may appear on the right and bottom of the frame.
+            _expectedWidth = outputWidth;
+            _expectedHeight = outputHeight;
             var extendedWidth = (outputWidth + 15) / 16 * 16;
             var extendedHeight = (outputHeight + 15) / 16 * 16;
 
@@ -473,7 +478,7 @@ namespace InstantReplay
                 using var _ = argb;
 
                 var yuv420Array = ArrayPool<sbyte>.Shared.Rent((int)layout._length);
-                Array.Clear(yuv420Array, 0, yuv420Array.Length);
+                Array.Fill(yuv420Array, (sbyte)16); // black
                 try
                 {
                     unsafe
@@ -592,7 +597,13 @@ namespace InstantReplay
 
                             if (outputBufferId == MediaCodec.get_INFO_OUTPUT_FORMAT_CHANGED())
                             {
-                                _videoTrackIndex = _muxer.addTrack(_videoCodec.getOutputFormat());
+                                using var format = _videoCodec.getOutputFormat();
+
+                                // NOTE: This can crop the video to expected size but is it valid?
+                                format.setInteger("width", _expectedWidth);
+                                format.setInteger("height", _expectedHeight);
+
+                                _videoTrackIndex = _muxer.addTrack(format);
                                 if (!isVideoStart)
                                 {
                                     isVideoStart = true;
@@ -635,22 +646,19 @@ namespace InstantReplay
                             }
                             else if (outputBufferId >= 0)
                             {
-                                if (isVideoStart)
+                                using var outputBuffer = _audioCodec.getOutputBuffer(outputBufferId);
+
+                                if (outputBuffer != null)
                                 {
-                                    using var outputBuffer = _audioCodec.getOutputBuffer(outputBufferId);
+                                    isAudioEnd =
+                                        (bufferInfo.get_flags() & MediaCodec.get_BUFFER_FLAG_END_OF_STREAM()) !=
+                                        0;
 
-                                    if (outputBuffer != null)
-                                    {
-                                        isAudioEnd =
-                                            (bufferInfo.get_flags() & MediaCodec.get_BUFFER_FLAG_END_OF_STREAM()) !=
-                                            0;
-
-                                        if (bufferInfo.get_size() > 0)
-                                            _muxer.writeSampleData(_audioTrackIndex, outputBuffer, bufferInfo);
-                                    }
-
-                                    _audioCodec.releaseOutputBuffer(outputBufferId, false);
+                                    if (bufferInfo.get_size() > 0)
+                                        _muxer.writeSampleData(_audioTrackIndex, outputBuffer, bufferInfo);
                                 }
+
+                                _audioCodec.releaseOutputBuffer(outputBufferId, false);
                             }
                         }
 
