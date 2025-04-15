@@ -67,8 +67,8 @@ namespace InstantReplay.Examples
         public void Open(string path)
         {
             videoPlayer.url = path;
-            videoPlayer.Play();
             gameObject.SetActive(true);
+            videoPlayer.Play();
         }
 
         private void UpdateRenderTexture()
