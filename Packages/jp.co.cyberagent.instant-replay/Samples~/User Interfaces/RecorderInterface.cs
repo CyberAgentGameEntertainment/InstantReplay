@@ -39,10 +39,23 @@ namespace InstantReplay.Examples
 
         public void StopAndTranscode()
         {
-            _ = StopAndTranscodeAsync();
+            _ = Wrap();
+            return;
+
+            async ValueTask Wrap()
+            {
+                try
+                {
+                    await StopAndTranscodeAsync();
+                }
+                catch (Exception ex)
+                {
+                    Debug.LogException(ex);
+                }
+            }
         }
 
-        private async ValueTask StopAndTranscodeAsync()
+        public async ValueTask<string> StopAndTranscodeAsync()
         {
             try
             {
@@ -56,7 +69,7 @@ namespace InstantReplay.Examples
                 if (string.IsNullOrEmpty(outputFileName))
                 {
                     ShowText("No data to save", 3f);
-                    return;
+                    return null;
                 }
 
                 var dest = Path.Combine(Application.persistentDataPath, Path.GetFileName(outputFileName));
@@ -65,11 +78,12 @@ namespace InstantReplay.Examples
                 ShowText($"Video saved: {dest}", 10f);
 
                 videoPlayerView.Open(dest);
+                return dest;
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                Debug.LogException(ex);
                 ShowText("Failed to save video", 3f);
+                throw;
             }
             finally
             {

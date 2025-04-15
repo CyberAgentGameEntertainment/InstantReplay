@@ -42,7 +42,6 @@ namespace InstantReplay.Examples
         private void OnEnable()
         {
             _sampleRate = AudioSettings.outputSampleRate;
-            Debug.Log(_sampleRate);
             _isActive = true;
         }
 
