@@ -611,6 +611,7 @@ GameObject:
   m_Component:
   - component: {fileID: 4943374491514910144}
   - component: {fileID: 8246656478238479090}
+  - component: {fileID: 8184478129286110952}
   m_Layer: 0
   m_Name: InstantReplay Recorder
   m_TagString: Untagged
@@ -646,14 +647,27 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 5d83dd30251c4c30aab14ba0c7bbba87, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  transcodingPanel: {fileID: 7608919729999765115}
+  transcodingProgressText: {fileID: 5602487763018457153}
+  transcodingProgressImage: {fileID: 6454920258696464915}
+  recorder: {fileID: 8184478129286110952}
+  videoPlayerView: {fileID: 3169146159616011662}
+--- !u!114 &8184478129286110952
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3368231985767190699}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 380084a6b7f7432d8f731b4a4012eb4a, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
   maxWidth: 1280
   maxHeight: 1280
   numFrames: 900
   fixedFrameRate: 30
-  transcodingPanel: {fileID: 7608919729999765115}
-  transcodingProgressText: {fileID: 5602487763018457153}
-  transcodingProgressImage: {fileID: 6454920258696464915}
-  videoPlayerView: {fileID: 3169146159616011662}
 --- !u!1 &3469109916350291750
 GameObject:
   m_ObjectHideFlags: 0

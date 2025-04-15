@@ -10,22 +10,18 @@ using UnityEngine.UI;
 
 namespace InstantReplay.Examples
 {
-    public class Recorder : MonoBehaviour
+    public class RecorderInterface : MonoBehaviour
     {
         #region Serialized Fields
 
-        [SerializeField] private int maxWidth = 640;
-        [SerializeField] private int maxHeight = 640;
-        [SerializeField] private int numFrames = 900;
-        [SerializeField] private int fixedFrameRate = 30;
         [SerializeField] private GameObject transcodingPanel;
         [SerializeField] private Text transcodingProgressText;
         [SerializeField] private Image transcodingProgressImage;
+        [SerializeField] private PersistentRecorder recorder;
         [SerializeField] private VideoPlayerView videoPlayerView;
 
         #endregion
 
-        private InstantReplaySession _currentSession;
         private float? _textExpires;
 
         #region Event Functions
@@ -39,26 +35,7 @@ namespace InstantReplay.Examples
             }
         }
 
-        private void OnEnable()
-        {
-            NewSession();
-            ShowText("Recording...", 3f);
-        }
-
-        private void OnDisable()
-        {
-            _currentSession.Dispose();
-            _currentSession = null;
-        }
-
         #endregion
-
-        private void NewSession()
-        {
-            if (_currentSession != null) return;
-            _currentSession =
-                new InstantReplaySession(numFrames, fixedFrameRate, maxWidth: maxWidth, maxHeight: maxHeight);
-        }
 
         public void StopAndTranscode()
         {
@@ -69,17 +46,9 @@ namespace InstantReplay.Examples
         {
             try
             {
-                if (!enabled || _currentSession == null)
-                {
-                    Debug.LogWarning("Recorder is not enabled");
-                    return;
-                }
-
-                var session = _currentSession;
-                _currentSession = null;
                 ShowText("Transcoding...");
                 transcodingProgressImage.fillAmount = 0f;
-                var outputFileName = await session.StopAndTranscodeAsync(new Progress<float>(value =>
+                var outputFileName = await recorder.StopAndTranscodeAsync(new Progress<float>(value =>
                 {
                     transcodingProgressImage.fillAmount = value;
                 }));
@@ -104,9 +73,6 @@ namespace InstantReplay.Examples
             }
             finally
             {
-                if (enabled)
-                    NewSession();
-
                 transcodingProgressImage.fillAmount = 0f;
             }
         }
