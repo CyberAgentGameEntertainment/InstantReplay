@@ -85,17 +85,17 @@ Import "User Interfaces" sample from the package manager.
 
 <img width="913" alt="Image" src="https://github.com/user-attachments/assets/970ad1e3-a5cf-410c-a2cb-70e0004e88e2" />
 
-Place `InstantReplay Recorder.prefab` in the scene. This prefab has `Recorder` component, which will automatically record the gameplay during enabled.
+Place `InstantReplay Recorder.prefab` in the scene. This prefab has `RecorderInterface` and `PersistentRecorder` component, which will automatically record the gameplay during enabled.
 
-<img width="672" alt="Image" src="https://github.com/user-attachments/assets/2dd76940-3b68-40c4-86a4-984133439135" />
+<img width="585" alt="Image" src="https://github.com/user-attachments/assets/0724b264-f92b-4a68-b6dc-85b9aae9c05b" />
 
-Then, you can stop the recording and save the video by calling `Recorder.StopAndTranscode()`. For example, you can trigger this method by clicking the button in the scene.
+Then, you can stop the recording and save the video by calling `RecorderInterface.StopAndTranscode()`. For example, you can trigger this method by clicking the button in the scene.
 
-<img width="618" alt="Image" src="https://github.com/user-attachments/assets/0a14a29d-7d95-49d4-bec9-205bc48feee9" />
+<img width="585" alt="Image" src="https://github.com/user-attachments/assets/0674da6c-e7e8-4988-8890-01baa11f4322" />
 
-Output filename will be displayed on the screen.
+Recorded video will be displayed on the screen.
 
-![Image](https://github.com/user-attachments/assets/a19e7aca-78cb-4df3-96b9-cc3c05e8b006)
+![image](https://github.com/user-attachments/assets/f147e50d-a3e8-4dda-bfa3-22c1240f2904)
 
 ## Detailed Usage
 

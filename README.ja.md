@@ -83,17 +83,17 @@ Package Manager から "User Interfaces" サンプルをインポートしてく
 
 <img width="913" alt="Image" src="https://github.com/user-attachments/assets/970ad1e3-a5cf-410c-a2cb-70e0004e88e2" />
 
-シーンに `InstantReplay Recorder.prefab` を配置します。この Prefab には `Recorder` コンポーネントが付いており、有効な間は自動的にゲームプレイを録画します。
+シーンに `InstantReplay Recorder.prefab` を配置します。この Prefab には `RecorderInterface` と `PersistentRecorder` コンポーネントが付いており、有効な間は自動的にゲームプレイを録画します。
 
-<img width="672" alt="Image" src="https://github.com/user-attachments/assets/2dd76940-3b68-40c4-86a4-984133439135" />
+<img width="585" alt="Image" src="https://github.com/user-attachments/assets/0724b264-f92b-4a68-b6dc-85b9aae9c05b" />
 
-その後、`Recorder.StopAndTranscode()` を呼び出すことで録画を停止してビデオを保存できます。例えば、シーン内のボタンをクリックすることでこのメソッドを呼び出すことができます。
+その後、`RecorderInterface.StopAndTranscode()` を呼び出すことで録画を停止してビデオを保存できます。例えば、シーン内のボタンをクリックすることでこのメソッドを呼び出すことができます。
 
-<img width="618" alt="Image" src="https://github.com/user-attachments/assets/0a14a29d-7d95-49d4-bec9-205bc48feee9" />
+<img width="585" alt="Image" src="https://github.com/user-attachments/assets/0674da6c-e7e8-4988-8890-01baa11f4322" />
 
-出力されたファイル名が画面に表示されます。
+録画したビデオが画面に表示されます。
 
-![Image](https://github.com/user-attachments/assets/a19e7aca-78cb-4df3-96b9-cc3c05e8b006)
+![image](https://github.com/user-attachments/assets/f147e50d-a3e8-4dda-bfa3-22c1240f2904)
 
 ## 詳細な使い方
 
