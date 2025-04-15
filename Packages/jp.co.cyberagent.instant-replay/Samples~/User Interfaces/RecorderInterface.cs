@@ -3,7 +3,6 @@
 // --------------------------------------------------------------
 
 using System;
-using System.IO;
 using System.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.UI;
@@ -72,13 +71,10 @@ namespace InstantReplay.Examples
                     return null;
                 }
 
-                var dest = Path.Combine(Application.persistentDataPath, Path.GetFileName(outputFileName));
-                File.Move(outputFileName, dest);
+                ShowText($"Video saved: {outputFileName}", 10f);
 
-                ShowText($"Video saved: {dest}", 10f);
-
-                videoPlayerView.Open(dest);
-                return dest;
+                videoPlayerView.Open(outputFileName);
+                return outputFileName;
             }
             catch (Exception)
             {

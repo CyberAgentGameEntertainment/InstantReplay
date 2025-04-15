@@ -3,6 +3,7 @@
 // --------------------------------------------------------------
 
 using System;
+using System.IO;
 using System.Threading.Tasks;
 using UnityEngine;
 
@@ -65,17 +66,26 @@ namespace InstantReplay.Examples
 
         public async ValueTask<string> StopAndTranscodeAsync(IProgress<float> progress)
         {
+            using var session = _currentSession;
+            _currentSession = null;
+
             try
             {
-                if (!isActiveAndEnabled || _currentSession == null)
+                if (!isActiveAndEnabled || session == null)
                 {
                     Debug.LogWarning("Recorder is not enabled");
                     return null;
                 }
 
-                var session = _currentSession;
-                _currentSession = null;
-                return await session.StopAndTranscodeAsync(progress);
+                var outputFilename = await session.StopAndTranscodeAsync(progress);
+
+                if (string.IsNullOrEmpty(outputFilename))
+                    return null;
+
+                var dest = Path.Combine(Application.temporaryCachePath, Path.GetFileName(outputFilename));
+                File.Move(outputFilename, dest);
+
+                return dest;
             }
             finally
             {
