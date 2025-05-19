@@ -84,6 +84,8 @@ namespace InstantReplay.Examples
 
                 var dest = Path.Combine(directory, Path.GetFileName(outputFilename));
 
+                Directory.CreateDirectory(directory);
+
                 // Some platforms do not support moving files between specific directories (e.g. Application.persistentDataPath and Application.temporaryCachePath)
                 File.Copy(outputFilename, dest);
 
