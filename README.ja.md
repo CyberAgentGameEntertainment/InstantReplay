@@ -79,7 +79,25 @@ https://github.com/CyberAgentGameEntertainment/InstantReplay.git?path=Packages/j
 
 ## クイックスタート
 
-`InstantReplaySession` を使用します。
+Package Manager から "User Interfaces" サンプルをインポートしてください。
+
+<img width="913" alt="Image" src="https://github.com/user-attachments/assets/970ad1e3-a5cf-410c-a2cb-70e0004e88e2" />
+
+シーンに `InstantReplay Recorder.prefab` を配置します。この Prefab には `RecorderInterface` と `PersistentRecorder` コンポーネントが付いており、有効な間は自動的にゲームプレイを録画します。
+
+<img width="585" alt="Image" src="https://github.com/user-attachments/assets/0724b264-f92b-4a68-b6dc-85b9aae9c05b" />
+
+その後、`RecorderInterface.StopAndTranscode()` を呼び出すことで録画を停止してビデオを保存できます。例えば、シーン内のボタンをクリックすることでこのメソッドを呼び出すことができます。
+
+<img width="585" alt="Image" src="https://github.com/user-attachments/assets/0674da6c-e7e8-4988-8890-01baa11f4322" />
+
+録画したビデオが画面に表示されます。
+
+![image](https://github.com/user-attachments/assets/f147e50d-a3e8-4dda-bfa3-22c1240f2904)
+
+## 詳細な使い方
+
+録画を行うには `InstantReplaySession` を使用します。
 
 ```csharp
 using InstantReplay;
@@ -96,8 +114,6 @@ await Task.Delay(10000, ct);
 var outputPath = await session.StopAndTranscodeAsync(ct: ct);
 File.Move(outputPath, Path.Combine(Application.persistentDataPath, Path.GetFileName(outputPath)));
 ```
-
-## 詳細な使い方
 
 ### 録画時間とフレームレートの設定
 

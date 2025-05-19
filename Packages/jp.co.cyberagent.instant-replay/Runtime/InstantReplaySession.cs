@@ -109,7 +109,10 @@ namespace InstantReplay
         /// </summary>
         /// <param name="progress">Progress of the transcoding.</param>
         /// <param name="ct"></param>
-        /// <returns>Output mp4 file name, or null if there are no captured data.</returns>
+        /// <returns>
+        ///     Output mp4 file name, or null if there are no captured data. Containing directory will be deleted after the
+        ///     disposal, so you need to move or copy the file.
+        /// </returns>
         /// <exception cref="InvalidOperationException"></exception>
         public async ValueTask<string> StopAndTranscodeAsync(IProgress<float> progress = default,
             CancellationToken ct = default)
