@@ -3,6 +3,7 @@
 // --------------------------------------------------------------
 
 using System;
+using System.IO;
 using System.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.UI;
@@ -18,6 +19,8 @@ namespace InstantReplay.Examples
         [SerializeField] private Image transcodingProgressImage;
         [SerializeField] private PersistentRecorder recorder;
         [SerializeField] private VideoPlayerView videoPlayerView;
+        [SerializeField] private OutputLocationKind outputLocation = OutputLocationKind.ApplicationTemporaryCachePath;
+        [SerializeField] private string outputDirectory = "InstantReplayVideos";
 
         #endregion
 
@@ -60,10 +63,17 @@ namespace InstantReplay.Examples
             {
                 ShowText("Transcoding...");
                 transcodingProgressImage.fillAmount = 0f;
-                var outputFileName = await recorder.StopAndTranscodeAsync(new Progress<float>(value =>
+                var location = outputLocation switch
                 {
-                    transcodingProgressImage.fillAmount = value;
-                }));
+                    OutputLocationKind.ApplicationPersistentDataPath => Application.persistentDataPath,
+                    OutputLocationKind.ApplicationTemporaryCachePath => Application.temporaryCachePath,
+                    _ => throw new ArgumentOutOfRangeException()
+                };
+                var directory = Path.Combine(location, outputDirectory);
+                var outputFileName = await recorder.StopAndTranscodeAsync(
+                    new Progress<float>(value => { transcodingProgressImage.fillAmount = value; }),
+                    directory
+                );
 
                 if (string.IsNullOrEmpty(outputFileName))
                 {
@@ -95,5 +105,15 @@ namespace InstantReplay.Examples
             if (duration.HasValue)
                 _textExpires = Time.time + duration.Value;
         }
+
+        #region Nested type
+
+        private enum OutputLocationKind
+        {
+            ApplicationPersistentDataPath,
+            ApplicationTemporaryCachePath
+        }
+
+        #endregion
     }
 }

@@ -64,7 +64,7 @@ namespace InstantReplay.Examples
                 new InstantReplaySession(numFrames, fixedFrameRate, maxWidth: maxWidth, maxHeight: maxHeight);
         }
 
-        public async ValueTask<string> StopAndTranscodeAsync(IProgress<float> progress)
+        public async ValueTask<string> StopAndTranscodeAsync(IProgress<float> progress, string directory)
         {
             using var session = _currentSession;
             _currentSession = null;
@@ -82,8 +82,10 @@ namespace InstantReplay.Examples
                 if (string.IsNullOrEmpty(outputFilename))
                     return null;
 
-                var dest = Path.Combine(Application.temporaryCachePath, Path.GetFileName(outputFilename));
-                File.Move(outputFilename, dest);
+                var dest = Path.Combine(directory, Path.GetFileName(outputFilename));
+
+                // Some platforms do not support moving files between specific directories (e.g. Application.persistentDataPath and Application.temporaryCachePath)
+                File.Copy(outputFilename, dest);
 
                 return dest;
             }
