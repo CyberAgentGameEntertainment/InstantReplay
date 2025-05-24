@@ -10,7 +10,7 @@ namespace InstantReplay
     /// <summary>
     ///     A frame provider that captures the screen using Built-in Render Pipeline.
     /// </summary>
-    internal class BrpScreenshotFrameProvider : IFrameProvider
+    public class BrpScreenshotFrameProvider : IFrameProvider
     {
         private RenderTexture _renderTexture;
 
