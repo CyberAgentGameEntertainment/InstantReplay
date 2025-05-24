@@ -148,6 +148,9 @@ new InstantReplaySession(900, frameProvider: new CustomFrameProvider(), disposeF
 
 ```
 
+> [!TIP]  
+> BiRP向けの `IFrameProvider` 実装として `InstantReplay.BrpScreenshotFrameProvider` を利用できます。
+
 ### 音声ソースの設定
 
 デフォルトでは Unity デフォルトの出力音声を `OnAudioFilterRead` を使用してキャプチャします。これはシーン上の特定の AudioListener を自動的に検索して使用します。
