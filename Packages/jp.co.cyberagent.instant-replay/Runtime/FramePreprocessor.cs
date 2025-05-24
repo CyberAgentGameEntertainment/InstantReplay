@@ -4,6 +4,7 @@
 
 using System;
 using UnityEngine;
+using UnityEngine.Rendering;
 using Object = UnityEngine.Object;
 
 namespace InstantReplay
@@ -56,7 +57,7 @@ namespace InstantReplay
             }
 
             var active = RenderTexture.active;
-            if (SystemInfo.graphicsUVStartsAtTop)
+            if (SystemInfo.graphicsUVStartsAtTop && IsUrp())
                 // We need to flip the image vertically on some platforms
                 Graphics.Blit(source, _output, new Vector2(1f, -1f), new Vector2(0, 1f));
             else
@@ -64,6 +65,12 @@ namespace InstantReplay
 
             RenderTexture.active = active;
             return _output;
+        }
+
+        private static bool IsUrp()
+        {
+            return GraphicsSettings.currentRenderPipeline;
+            // Note: if using Built-in Render Pipeline, GraphicsSettings.currentRenderPipeline will be null.
         }
     }
 }

@@ -150,6 +150,9 @@ new InstantReplaySession(900, frameProvider: new CustomFrameProvider(), disposeF
 
 ```
 
+> [!TIP]  
+> If you use BiRP, you can use `InstantReplay.BrpScreenshotFrameProvider` for `IFrameProvider` implementation.
+
 ### Setting the Audio Source
 
 By default, it captures the audio via `OnAudioFilterRead`. THis automatically searches for and uses a specific AudioListener on the scene.
