@@ -75,7 +75,7 @@ PluginImporter:
         AddToEmbeddedBinaries: true
         CPU: AnyCPU
         CompileFlags: 
-        FrameworkDependencies: 
+        FrameworkDependencies: CoreFoundation;AVFAudio;VideoToolbox;
   userData: 
   assetBundleName: 
   assetBundleVariant: 
