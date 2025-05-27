@@ -2,41 +2,49 @@
 // Copyright 2025 CyberAgent, Inc.
 // --------------------------------------------------------------
 
-using System.Collections.Generic;
 using UnityEngine;
-using UnityEngine.Rendering;
 using Object = UnityEngine.Object;
 
 namespace InstantReplay
 {
     /// <summary>
-    ///     A frame provider that captures the screen using SRP.
+    ///     A frame provider that captures the screen using Built-in Render Pipeline.
     /// </summary>
-    public class SrpScreenshotFrameProvider : IFrameProvider
+    public class BrpScreenshotFrameProvider : IFrameProvider
     {
         private RenderTexture _renderTexture;
 
-        public SrpScreenshotFrameProvider()
+        public BrpScreenshotFrameProvider()
         {
             _renderTexture = new RenderTexture(Screen.width, Screen.height, 0, RenderTextureFormat.ARGB32);
-            RenderPipelineManager.endContextRendering += EndContextRendering;
+            Camera.onPostRender += EndContextRendering;
         }
 
         public event IFrameProvider.ProvideFrame OnFrameProvided;
 
         public void Dispose()
         {
-            RenderPipelineManager.endContextRendering -= EndContextRendering;
+            Camera.onPostRender -= EndContextRendering;
 
             if (_renderTexture)
             {
                 Object.Destroy(_renderTexture);
-                _renderTexture = default;
+                _renderTexture = null;
             }
         }
 
-        private void EndContextRendering(ScriptableRenderContext context, List<Camera> cameras)
+        private void EndContextRendering(Camera camera)
         {
+            if (camera != Camera.main)
+                return;
+
+            if (Application.isPlaying && !camera.forceIntoRenderTexture)
+            {
+                // NOTE: BiRP camera flips the buffer vertically depending on the settings (HDR, MSAA, Post-processing etc.) but this make the camera not flip the buffer.
+                camera.forceIntoRenderTexture = true;
+                return; // skip first frame (may or may not be flipped)
+            }
+
             var time = Time.unscaledTimeAsDouble;
 
             var width = Screen.width;
@@ -54,7 +62,7 @@ namespace InstantReplay
 
             ScreenCapture.CaptureScreenshotIntoRenderTexture(_renderTexture);
 
-            OnFrameProvided?.Invoke(new IFrameProvider.Frame(_renderTexture, time, SystemInfo.graphicsUVStartsAtTop));
+            OnFrameProvided?.Invoke(new IFrameProvider.Frame(_renderTexture, time));
         }
     }
 }
