@@ -54,7 +54,7 @@ namespace InstantReplay
 
             ScreenCapture.CaptureScreenshotIntoRenderTexture(_renderTexture);
 
-            OnFrameProvided?.Invoke(_renderTexture, time);
+            OnFrameProvided?.Invoke(new IFrameProvider.Frame(_renderTexture, time, SystemInfo.graphicsUVStartsAtTop));
         }
     }
 }

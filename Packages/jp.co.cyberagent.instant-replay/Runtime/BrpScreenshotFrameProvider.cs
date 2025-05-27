@@ -36,15 +36,13 @@ namespace InstantReplay
         private void EndContextRendering(Camera camera)
         {
             if (camera != Camera.main)
-            {
                 return;
-            }
 
             if (Application.isPlaying && !camera.forceIntoRenderTexture)
             {
                 // NOTE: BiRP camera flips the buffer vertically depending on the settings (HDR, MSAA, Post-processing etc.) but this make the camera not flip the buffer.
                 camera.forceIntoRenderTexture = true;
-                return; // skip first frame (maybe flipped)
+                return; // skip first frame (may or may not be flipped)
             }
 
             var time = Time.unscaledTimeAsDouble;
@@ -64,7 +62,7 @@ namespace InstantReplay
 
             ScreenCapture.CaptureScreenshotIntoRenderTexture(_renderTexture);
 
-            OnFrameProvided?.Invoke(_renderTexture, time);
+            OnFrameProvided?.Invoke(new IFrameProvider.Frame(_renderTexture, time));
         }
     }
 }
