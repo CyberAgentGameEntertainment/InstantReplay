@@ -9,6 +9,7 @@ using System.IO.Pipelines;
 using System.Threading;
 using System.Threading.Tasks;
 using UnityEngine;
+using UnityEngine.Rendering;
 
 namespace InstantReplay
 {
@@ -71,7 +72,7 @@ namespace InstantReplay
 
             if (frameProvider == null)
             {
-                frameProvider = new SrpScreenshotFrameProvider();
+                frameProvider = GraphicsSettings.currentRenderPipeline ? new SrpScreenshotFrameProvider() : new BrpScreenshotFrameProvider();
                 disposeFrameProvider = true;
             }
 
