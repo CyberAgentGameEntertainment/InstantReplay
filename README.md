@@ -134,7 +134,7 @@ By default, it records at the actual screen size, but you can also specify `maxW
 
 ### Setting the Video Source
 
-By default, it uses `RenderPipelineManager.endContextRendering` and `ScreenCapture.CaptureScreenshotIntoRenderTexture` provided for SRP to capture the screen, but you can also use any RenderTexture as the source.
+By default, it supports BiRP and SRP (using  `RenderPipelineManager.endContextRendering` and `ScreenCapture.CaptureScreenshotIntoRenderTexture`). You can also use any RenderTexture as the source.
 
 Create a class that inherits `InstantReplay.IFrameProvider` and pass it as `frameProvider` to the `InstantReplaySession` constructor. You can also specify whether `InstantReplaySession` automatically discards `frameProvider` by `disposeFrameProvider`.
 
@@ -149,9 +149,6 @@ public interface IFrameProvider : IDisposable
 new InstantReplaySession(900, frameProvider: new CustomFrameProvider(), disposeFrameProvider: true);
 
 ```
-
-> [!TIP]  
-> If you use BiRP, you can use `InstantReplay.BrpScreenshotFrameProvider` for `IFrameProvider` implementation.
 
 ### Setting the Audio Source
 
