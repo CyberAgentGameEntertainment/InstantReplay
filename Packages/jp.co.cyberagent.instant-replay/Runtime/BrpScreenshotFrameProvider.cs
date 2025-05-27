@@ -40,6 +40,13 @@ namespace InstantReplay
                 return;
             }
 
+            if (Application.isPlaying && !camera.forceIntoRenderTexture)
+            {
+                // NOTE: BiRP camera flips the buffer vertically depending on the settings (HDR, MSAA, Post-processing etc.) but this make the camera not flip the buffer.
+                camera.forceIntoRenderTexture = true;
+                return; // skip first frame (maybe flipped)
+            }
+
             var time = Time.unscaledTimeAsDouble;
 
             var width = Screen.width;
