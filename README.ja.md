@@ -45,9 +45,11 @@ Instant Replay は Unity で直近のゲームプレイ動画をいつでも保�
 
 ### 対応プラットフォーム
 
-- iOS (**13.0以降**)
+- iOS
+  - **13.0以降**
 - Android
 - macOS (Editor and Standalone)
+  - **10.15 (Catalina) 以降**
 - Windows (Editor and Standalone)
 
 ## インストール
