@@ -45,9 +45,11 @@ When a bug occurs, you can export the operations performed up to that point as a
 
 ### Supported Platforms
 
-- iOS (**13.0 or later**)
+- iOS
+  - **13.0 or later**
 - Android
 - macOS (Editor and Standalone)
+  - **10.15 (Catalina) or later**
 - Windows (Editor and Standalone)
 
 ## Installation
