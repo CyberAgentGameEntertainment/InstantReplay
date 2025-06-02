@@ -59,7 +59,7 @@ Instant Replay は Unity で直近のゲームプレイ動画をいつでも保�
 [UnityNuGet の scoped registry を追加して](https://github.com/xoofx/UnityNuGet#add-scope-registry-manifestjson)、以下の git URL を Package Manager に追加してください。
 
 ```
-https://github.com/CyberAgentGameEntertainment/InstantReplay.git?path=/Packages/jp.co.cyberagent.instant-replay.dependencies
+https://github.com/CyberAgentGameEntertainment/InstantReplay.git?path=/Packages/jp.co.cyberagent.instant-replay.dependencies#release
 ```
 
 #### 方法2: 手動でのインストール
@@ -74,7 +74,7 @@ https://github.com/CyberAgentGameEntertainment/InstantReplay.git?path=/Packages/
 以下の git URL を Package Manager に追加してください。
 
 ```
-https://github.com/CyberAgentGameEntertainment/InstantReplay.git?path=Packages/jp.co.cyberagent.instant-replay
+https://github.com/CyberAgentGameEntertainment/InstantReplay.git?path=Packages/jp.co.cyberagent.instant-replay#release
 ```
 
 ## クイックスタート

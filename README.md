@@ -61,7 +61,7 @@ There are two ways to install the dependencies. You can use either of them.
 [Add UnityNuGet scoped registry](https://github.com/xoofx/UnityNuGet#add-scope-registry-manifestjson) and add the following git URL to the package manager:
 
 ```
-https://github.com/CyberAgentGameEntertainment/InstantReplay.git?path=/Packages/jp.co.cyberagent.instant-replay.dependencies
+https://github.com/CyberAgentGameEntertainment/InstantReplay.git?path=/Packages/jp.co.cyberagent.instant-replay.dependencies#release
 ```
 
 #### Method 2: Install manually
@@ -76,7 +76,7 @@ Install individual packages using [NuGetForUnity](https://github.com/GlitchEnzo/
 Add the following git URL to the package manager:
 
 ```
-https://github.com/CyberAgentGameEntertainment/InstantReplay.git?path=Packages/jp.co.cyberagent.instant-replay
+https://github.com/CyberAgentGameEntertainment/InstantReplay.git?path=Packages/jp.co.cyberagent.instant-replay#release
 ```
 
 ## Quick Start
