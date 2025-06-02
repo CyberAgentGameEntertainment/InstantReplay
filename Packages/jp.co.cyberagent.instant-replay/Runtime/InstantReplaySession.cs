@@ -72,7 +72,9 @@ namespace InstantReplay
 
             if (frameProvider == null)
             {
-                frameProvider = GraphicsSettings.currentRenderPipeline ? new SrpScreenshotFrameProvider() : new BrpScreenshotFrameProvider();
+                frameProvider = GraphicsSettings.currentRenderPipeline
+                    ? new SrpScreenshotFrameProvider()
+                    : new BrpScreenshotFrameProvider();
                 disposeFrameProvider = true;
             }
 
@@ -115,7 +117,24 @@ namespace InstantReplay
         ///     disposal, so you need to move or copy the file.
         /// </returns>
         /// <exception cref="InvalidOperationException"></exception>
-        public async ValueTask<string> StopAndTranscodeAsync(IProgress<float> progress = default,
+        public ValueTask<string> StopAndTranscodeAsync(IProgress<float> progress = default,
+            CancellationToken ct = default)
+        {
+            return StopAndTranscodeAsync(null, progress, ct);
+        }
+
+        /// <summary>
+        ///     Stop recording and transcode frames. This method can be called only once.
+        /// </summary>
+        /// <param name="maxDuration">Max duration of output video in seconds. Older frames will be discarded.</param>
+        /// <param name="progress">Progress of the transcoding.</param>
+        /// <param name="ct"></param>
+        /// <returns>
+        ///     Output mp4 file name, or null if there are no captured data. Containing directory will be deleted after the
+        ///     disposal, so you need to move or copy the file.
+        /// </returns>
+        /// <exception cref="InvalidOperationException"></exception>
+        public async ValueTask<string> StopAndTranscodeAsync(double? maxDuration, IProgress<float> progress = default,
             CancellationToken ct = default)
         {
             if (State != SessionState.Recording) throw new InvalidOperationException();
@@ -152,9 +171,39 @@ namespace InstantReplay
                 }
                 else
                 {
-                    var duration = result.Frames.Length >= 2
-                        ? result.Frames[^1].Time - result.Frames[0].Time
+                    ReadOnlyMemory<RecorderFrame> frames = result.Frames;
+
+                    var duration = frames.Length >= 2
+                        ? frames.Span[^1].Time - frames.Span[0].Time
                         : 1f / 30f /* single frame with 30FPS */;
+
+                    if (duration > maxDuration && frames.Length > 1)
+                    {
+                        var endTime = frames.Span[^1].Time;
+                        var minStartTime = endTime - maxDuration.Value;
+
+                        // binary search for the first frame that is after the minStartTime
+                        var startIndex = 0;
+                        var endIndex = frames.Length - 1;
+                        while (startIndex < endIndex)
+                        {
+                            var midIndex = (startIndex + endIndex) / 2;
+                            if (frames.Span[midIndex].Time < minStartTime)
+                                startIndex = midIndex + 1;
+                            else
+                                endIndex = midIndex;
+                        }
+
+                        if (startIndex > 0)
+                        {
+                            frames = frames.Slice(startIndex);
+                            duration = frames.Length >= 2
+                                ? frames.Span[^1].Time - frames.Span[0].Time
+                                : 1f / 30f /* single frame with 30FPS */;
+
+                            Debug.Log($"{frames.Length} frames, {duration} seconds");
+                        }
+                    }
 
                     if (duration < 0)
                         throw new InvalidOperationException("Negative duration");
@@ -211,11 +260,14 @@ namespace InstantReplay
                             await reader.CompleteAsync();
                         }, default);
 
-                        for (var i = 0; i < result.Frames.Length; i++)
+                        var startTime = frames.Span[0].Time;
+
+                        for (var i = 0; i < frames.Length; i++)
                         {
-                            var frame = result.Frames[i];
-                            await transcoder.PushFrameAsync(frame.Path, frame.Time, ct).ConfigureAwait(false);
-                            progress?.Report(0.01f + (float)i / result.Frames.Length * 0.89f);
+                            var frame = frames.Span[i];
+                            await transcoder.PushFrameAsync(frame.Path, frame.Time - startTime, ct)
+                                .ConfigureAwait(false);
+                            progress?.Report(0.01f + (float)i / frames.Length * 0.89f);
                         }
 
                         await encodeAudioSamplesTask;
