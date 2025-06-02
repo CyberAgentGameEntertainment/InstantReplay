@@ -1,0 +1,27 @@
+# Fast-forward release branch to the latest release commit
+on:
+  release:
+    types: [released]
+  workflow_dispatch:
+name: Update release branch
+jobs:
+  fast-forward-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Fast-forward release branch
+        run: |
+          git fetch origin
+          git checkout release || git checkout -b release
+          git reset --hard ${{ github.event.release.tag_name || github.ref_name }}
+          git push origin release --force
+    
