@@ -1,3 +1,15 @@
+## [0.2.0] - 2025/06/03
+
+### Added
+
+- Added `maxDuration` parameter to `InstantReplaySession.StopAndTranscodeAsync()`, allowing you to shorten the recording duration when transcoding.
+- Added Built-in Render Pipeline support.
+
+### Changed
+
+- Changed instruction to install the package via `release` branch.
+- Changed minimum macOS version from 14.3 to 10.15 (Catalina).
+
 ## [0.1.2] - 2025/05/26
 
 ### Fixed
