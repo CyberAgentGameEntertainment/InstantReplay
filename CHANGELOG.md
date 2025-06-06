@@ -1,3 +1,9 @@
+## [0.2.1] - 2025/06/06
+
+### Fixed
+
+- Fixed `OldIosWorkaroundPostProcessor` fails to be compiled when there is no `UnityEditor.iOS.Xcode`.
+
 ## [0.2.0] - 2025/06/03
 
 ### Added
