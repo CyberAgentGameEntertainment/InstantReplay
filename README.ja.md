@@ -141,7 +141,7 @@ new InstantReplaySession(numFrames: 900, fixedFrameRate: 30);
 ```csharp
 public interface IFrameProvider : IDisposable
 {
-    public delegate void ProvideFrame(RenderTexture frame, double timestamp);
+    public delegate void ProvideFrame(Frame frame);
 
     event ProvideFrame OnFrameProvided;
 }
