@@ -143,7 +143,7 @@ Create a class that inherits `InstantReplay.IFrameProvider` and pass it as `fram
 ```csharp
 public interface IFrameProvider : IDisposable
 {
-    public delegate void ProvideFrame(RenderTexture frame, double timestamp);
+    public delegate void ProvideFrame(Frame frame);
 
     event ProvideFrame OnFrameProvided;
 }
