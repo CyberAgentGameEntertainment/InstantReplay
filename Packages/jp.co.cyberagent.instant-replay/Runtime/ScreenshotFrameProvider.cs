@@ -13,11 +13,11 @@ namespace InstantReplay
     /// <summary>
     ///     A frame provider that captures the screen using SRP.
     /// </summary>
-    public class SrpScreenshotFrameProvider : IFrameProvider
+    public class ScreenshotFrameProvider : IFrameProvider
     {
         private RenderTexture _renderTexture;
 
-        public SrpScreenshotFrameProvider()
+        public ScreenshotFrameProvider()
         {
             _renderTexture = new RenderTexture(Screen.width, Screen.height, 0, RenderTextureFormat.ARGB32);
 
