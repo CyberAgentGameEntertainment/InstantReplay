@@ -1,6 +1,6 @@
 {
   "name": "jp.co.cyberagent.instant-replay",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "displayName": "Instant Replay",
   "description": "Instant Replay allows you to constantly record the last N seconds of gameplay and export it as a video at any time.",
   "unity": "2022.3",
