@@ -72,9 +72,7 @@ namespace InstantReplay
 
             if (frameProvider == null)
             {
-                frameProvider = GraphicsSettings.currentRenderPipeline
-                    ? new SrpScreenshotFrameProvider()
-                    : new BrpScreenshotFrameProvider();
+                frameProvider = new ScreenshotFrameProvider();
                 disposeFrameProvider = true;
             }
 
