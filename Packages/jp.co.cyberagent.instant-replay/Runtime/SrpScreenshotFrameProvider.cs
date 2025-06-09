@@ -2,9 +2,10 @@
 // Copyright 2025 CyberAgent, Inc.
 // --------------------------------------------------------------
 
-using System.Collections.Generic;
+#if UNITY_2023_1_OR_NEWER
+using System.Threading;
+#endif
 using UnityEngine;
-using UnityEngine.Rendering;
 using Object = UnityEngine.Object;
 
 namespace InstantReplay
@@ -19,14 +20,37 @@ namespace InstantReplay
         public SrpScreenshotFrameProvider()
         {
             _renderTexture = new RenderTexture(Screen.width, Screen.height, 0, RenderTextureFormat.ARGB32);
-            RenderPipelineManager.endContextRendering += EndContextRendering;
+
+#if UNITY_2023_1_OR_NEWER
+            _ = EndOfFrameLoop();
+            async Awaitable EndOfFrameLoop()
+            {
+                var ct = _cancelOnDispose.Token;
+                do
+                {
+                    await Awaitable.EndOfFrameAsync(); // passing cancellation token emits too much garbage
+                    if (ct.IsCancellationRequested) break;
+                    OnEndOfFrame();
+                } while (true);
+            }
+#else
+            EventCallbackEntryPoint.EndOfFrame += OnEndOfFrame;
+#endif
         }
+
+#if UNITY_2023_1_OR_NEWER
+        private readonly CancellationTokenSource _cancelOnDispose = new();
+#endif
 
         public event IFrameProvider.ProvideFrame OnFrameProvided;
 
         public void Dispose()
         {
-            RenderPipelineManager.endContextRendering -= EndContextRendering;
+#if UNITY_2023_1_OR_NEWER
+            _cancelOnDispose.Cancel();
+#else
+            EventCallbackEntryPoint.EndOfFrame -= OnEndOfFrame;
+#endif
 
             if (_renderTexture)
             {
@@ -35,7 +59,7 @@ namespace InstantReplay
             }
         }
 
-        private void EndContextRendering(ScriptableRenderContext context, List<Camera> cameras)
+        private void OnEndOfFrame()
         {
             var time = Time.unscaledTimeAsDouble;
 
