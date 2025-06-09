@@ -11,7 +11,7 @@ using Object = UnityEngine.Object;
 namespace InstantReplay
 {
     /// <summary>
-    ///     A frame provider that captures the screen using SRP.
+    ///     A frame provider using ScreenCapture.CaptureScreenshotIntoRenderTexture().
     /// </summary>
     public class ScreenshotFrameProvider : IFrameProvider
     {

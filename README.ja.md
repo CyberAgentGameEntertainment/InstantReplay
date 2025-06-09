@@ -134,7 +134,7 @@ new InstantReplaySession(numFrames: 900, fixedFrameRate: 30);
 
 ### 映像ソースの設定
 
-デフォルトでは BiRP と SRP (`RenderPipelineManager.endContextRendering` と `ScreenCapture.CaptureScreenshotIntoRenderTexture` を使用) に対応しています。独自のレンダリングパイプラインを使用している場合などは、任意の RenderTexture をソースとして使用することも可能です。
+デフォルトでは `ScreenCapture.CaptureScreenshotIntoRenderTexture()` を使用して録画を行いますが、任意の RenderTexture をソースとして使用することも可能です。
 
 `InstantReplay.IFrameProvider` を継承したクラスを作成し、`InstantReplaySession` のコンストラクタに`frameProvider` として渡してください。また `disposeFrameProvider` によって `InstantReplaySession` 側で `frameProvider` を自動的に破棄するかどうかを指定できます。
 
