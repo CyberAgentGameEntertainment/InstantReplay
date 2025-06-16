@@ -51,6 +51,7 @@ Instant Replay は Unity で直近のゲームプレイ動画をいつでも保�
 - macOS (Editor and Standalone)
   - **10.15 (Catalina) 以降**
 - Windows (Editor and Standalone)
+- その他 `ffmpeg` コマンドラインツールが PATH にインストールされたシステム
 
 ## インストール
 
