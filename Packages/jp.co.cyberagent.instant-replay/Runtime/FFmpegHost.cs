@@ -41,7 +41,6 @@ namespace InstantReplay
 
         public void Dispose()
         {
-            GC.SuppressFinalize(this);
             DisposeCore();
         }
 
@@ -65,6 +64,7 @@ namespace InstantReplay
 
         ~FFmpegHost()
         {
+            GC.SuppressFinalize(this);
             DisposeCore();
         }
 
