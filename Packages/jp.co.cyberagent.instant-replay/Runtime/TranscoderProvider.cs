@@ -15,7 +15,7 @@ namespace InstantReplay
 #elif UNITY_EDITOR_WIN || (!UNITY_EDITOR && UNITY_STANDALONE_WIN)
             return new WindowsMediaFoundationTranscoder(outputWidth, outputHeight, sampleRate, channels, outputFilename);
 #else
-            throw new System.PlatformNotSupportedException();
+            return new FFmpegTranscoder(channels, sampleRate, outputFilename);
 #endif
         }
     }
