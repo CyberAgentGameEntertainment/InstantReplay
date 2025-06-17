@@ -12,15 +12,15 @@ namespace InstantReplay
 {
     internal class FFmpegHost : IDisposable
     {
-        private readonly Process process;
+        private readonly Process _process;
 
         public FFmpegHost(string arguments, bool redirectStandardInput)
         {
-            process = new Process
+            _process = new Process
             {
                 StartInfo = new ProcessStartInfo
                 {
-#if UNITY_STANDALONE_OSX || UNITY_EDITOR_OSX
+#if (!UNITY_EDITOR && UNITY_STANDALONE_OSX) || UNITY_EDITOR_OSX
                     FileName = "/bin/bash",
                     Arguments = $"-cl 'ffmpeg {arguments}'",
 #else
@@ -37,7 +37,7 @@ namespace InstantReplay
             };
         }
 
-        public StreamWriter StandardInput => process.StandardInput;
+        public StreamWriter StandardInput => _process.StandardInput;
 
         public void Dispose()
         {
@@ -48,11 +48,11 @@ namespace InstantReplay
         public async ValueTask RunAsync()
         {
             var tcs = new TaskCompletionSource<int>();
-            process.Exited += (sender, e) => { tcs.SetResult(process.ExitCode); };
-            process.Start();
+            _process.Exited += (_, _) => tcs.SetResult(_process.ExitCode);
+            _process.Start();
 
-            var results = await Task.WhenAll(process.StandardOutput.ReadToEndAsync(),
-                process.StandardError.ReadToEndAsync());
+            var results = await Task.WhenAll(_process.StandardOutput.ReadToEndAsync(),
+                _process.StandardError.ReadToEndAsync());
 
             var code = await tcs.Task;
 
@@ -70,7 +70,7 @@ namespace InstantReplay
 
         private void DisposeCore()
         {
-            process?.Dispose();
+            _process?.Dispose();
         }
     }
 }
