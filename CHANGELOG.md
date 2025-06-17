@@ -1,3 +1,8 @@
+## [0.3.0] - 2025/06/17
+
+### Added
+- Added fallback transcoder using FFmpeg installed to `PATH` of the system for platforms other than iOS, Android, macOS, and Windows.
+
 ## [0.2.2] - 2025/06/09
 
 ### Breaking Changes
