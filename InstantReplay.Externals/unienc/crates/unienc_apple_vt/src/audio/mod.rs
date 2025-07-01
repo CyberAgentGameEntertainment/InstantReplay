@@ -1,6 +1,7 @@
 use std::{ffi::c_void, ptr::NonNull};
 
 use anyhow::Result;
+use bincode::{Decode, Encode};
 use objc2_audio_toolbox::{
     kAudioConverterPropertyMaximumOutputPacketSize, AudioConverterDispose, AudioConverterFillComplexBuffer, AudioConverterGetProperty, AudioConverterGetPropertyInfo, AudioConverterNew, AudioConverterPropertyID, AudioConverterRef
 };
@@ -9,7 +10,6 @@ use objc2_core_audio_types::{
     kAudioFormatFlagIsPacked, kAudioFormatFlagIsSignedInteger, kAudioFormatLinearPCM,
     kAudioFormatMPEG4AAC,
 };
-use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
 use unienc_common::{AudioSample, EncodedData, Encoder, EncoderInput, EncoderOutput};
 
@@ -33,7 +33,7 @@ pub struct AudioToolboxEncoderOutput {
     rx: mpsc::Receiver<AudioPacket>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Encode, Decode)]
 pub struct AudioPacket {
     pub data: Vec<u8>,
     pub timestamp_in_samples: u64,

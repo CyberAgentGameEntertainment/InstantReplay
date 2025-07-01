@@ -1,7 +1,7 @@
 use std::path::Path;
 
 use anyhow::Result;
-use serde::{Deserialize, Serialize};
+use bincode::{Decode, Encode};
 
 pub trait Encoder {
     type InputType: EncoderInput + 'static;
@@ -87,6 +87,6 @@ pub trait EncoderInput: Send + 'static {
 }
 
 pub trait EncoderOutput: Send {
-    type Data: EncodedData + Serialize + for<'de> Deserialize<'de> + Send;
+    type Data: EncodedData + Send + Encode + Decode<()>;
     fn pull(&mut self) -> impl Future<Output = Result<Option<Self::Data>>> + Send;
 }

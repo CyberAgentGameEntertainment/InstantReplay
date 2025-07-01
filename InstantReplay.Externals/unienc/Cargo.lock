@@ -722,6 +722,7 @@ name = "unienc_apple_vt"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "bincode",
  "bitflags",
  "block2",
  "dispatch2",
@@ -735,7 +736,6 @@ dependencies = [
  "objc2-core-video",
  "objc2-foundation",
  "objc2-video-toolbox",
- "serde",
  "tokio",
  "unienc_common",
 ]
@@ -745,7 +745,7 @@ name = "unienc_common"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "serde",
+ "bincode",
  "tokio",
 ]
 

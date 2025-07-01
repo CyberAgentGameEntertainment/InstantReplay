@@ -3,6 +3,7 @@ members = [ "./crates/*"]
 
 
 [workspace.dependencies]
+objc2 = { version = "0.6.1", features = ["catch-all"] }
 unienc_common = { path = "./crates/unienc_common" }
 unienc_android_mc = { path = "./crates/unienc_android_mc" }
 unienc_windows_mf = { path = "./crates/unienc_windows_mf" }

@@ -1,3 +1,4 @@
+mod serialization;
 use std::{
     ffi::c_void,
     ptr::NonNull,
@@ -16,11 +17,13 @@ use objc2_video_toolbox::{
     VTCompressionSession, VTEncodeInfoFlags, VTSessionSetProperty,
     kVTCompressionPropertyKey_AllowFrameReordering, kVTCompressionPropertyKey_RealTime,
 };
-use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
 use unienc_common::{EncodedData, Encoder, EncoderInput, EncoderOutput, VideoSample};
 
-use crate::{OsStatus, common::UnsafeSendRetained};
+use crate::{
+    OsStatus,
+    common::UnsafeSendRetained,
+};
 
 pub struct VideoToolboxEncoder {
     input: VideoToolboxEncoderInput,
@@ -39,23 +42,6 @@ pub struct VideoToolboxEncoderOutput {
 
 pub struct VideoEncodedData {
     pub sample_buffer: UnsafeSendRetained<CMSampleBuffer>,
-}
-impl Serialize for VideoEncodedData {
-    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        todo!()
-    }
-}
-
-impl<'de> Deserialize<'de> for VideoEncodedData {
-    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        todo!()
-    }
 }
 
 impl EncodedData for VideoEncodedData {
