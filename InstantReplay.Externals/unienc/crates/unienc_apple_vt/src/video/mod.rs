@@ -31,7 +31,7 @@ pub struct VideoToolboxEncoder {
 }
 pub struct VideoToolboxEncoderInput {
     session: Retained<VTCompressionSession>,
-    tx: Box<mpsc::Sender<VideoEncodedData>>,
+    _tx: Box<mpsc::Sender<VideoEncodedData>>,
 }
 
 unsafe impl Send for VideoToolboxEncoderInput {}
@@ -53,8 +53,8 @@ impl EncodedData for VideoEncodedData {
 unsafe extern "C-unwind" fn handle_video_encode_output(
     output_callback_ref_con: *mut c_void,
     source_frame_ref_con: *mut c_void,
-    status: i32,
-    info_flags: VTEncodeInfoFlags,
+    _status: i32,
+    _info_flags: VTEncodeInfoFlags,
     sample_bufer: *mut CMSampleBuffer,
 ) {
     let tx = unsafe { &*(output_callback_ref_con as *const mpsc::Sender<VideoEncodedData>) };
@@ -188,7 +188,7 @@ impl VideoToolboxEncoder {
         }
         .to_result()?;
         Ok(VideoToolboxEncoder {
-            input: VideoToolboxEncoderInput { session, tx },
+            input: VideoToolboxEncoderInput { session, _tx: tx },
             output: VideoToolboxEncoderOutput { rx },
         })
     }

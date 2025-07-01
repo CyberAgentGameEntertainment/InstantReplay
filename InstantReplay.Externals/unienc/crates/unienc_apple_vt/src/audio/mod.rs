@@ -199,6 +199,7 @@ impl AudioConverter {
         Ok(())
     }
 
+    #[allow(dead_code)]
     fn get_property_raw(
         &self,
         property_id: AudioConverterPropertyID,
