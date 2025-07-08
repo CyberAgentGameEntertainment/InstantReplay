@@ -1,9 +1,14 @@
 [package]
 name = "unienc"
 version = "0.1.0"
-edition = "2024"
+edition.workspace = true
+
+
+[lib]
+crate-type = ["cdylib", "staticlib", "rlib"]
 
 [dependencies]
+anyhow = "1.0"
 bincode = { version = "2.0.1", features = ["serde"] }
 rand = "0.9.1"
 tokio = { version = "1.45.1", features = ["rt", "macros", "rt-multi-thread"] }
@@ -17,3 +22,6 @@ unienc_windows_mf = { workspace = true }
 
 [target.'cfg(target_vendor = "apple")'.dependencies]
 unienc_apple_vt = { workspace = true }
+
+[build-dependencies]
+csbindgen = "1.9.3"

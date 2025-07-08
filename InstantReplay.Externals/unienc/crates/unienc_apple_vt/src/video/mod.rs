@@ -1,16 +1,13 @@
 mod serialization;
-use std::{
-    ffi::c_void,
-    ptr::NonNull,
-};
+use std::{ffi::c_void, ptr::NonNull};
 
 use anyhow::{Context, Result};
 use objc2::rc::Retained;
 use objc2_core_foundation::{
-    CFType, kCFAllocatorDefault, kCFBooleanFalse,
+    CFBoolean, CFDictionary, CFString, CFType, kCFAllocatorDefault, kCFBooleanFalse,
 };
 use objc2_core_media::{
-    CMSampleBuffer, CMTime, kCMTimeInvalid, kCMVideoCodecType_H264,
+    CMSampleBuffer, CMTime, kCMSampleAttachmentKey_NotSync, kCMTimeInvalid, kCMVideoCodecType_H264,
 };
 use objc2_core_video::{CVPixelBuffer, CVPixelBufferCreateWithBytes, kCVPixelFormatType_32ARGB};
 use objc2_video_toolbox::{
@@ -20,10 +17,7 @@ use objc2_video_toolbox::{
 use tokio::sync::mpsc;
 use unienc_common::{EncodedData, Encoder, EncoderInput, EncoderOutput, VideoSample};
 
-use crate::{
-    OsStatus,
-    common::UnsafeSendRetained,
-};
+use crate::{OsStatus, common::UnsafeSendRetained};
 
 pub struct VideoToolboxEncoder {
     input: VideoToolboxEncoderInput,
@@ -42,11 +36,44 @@ pub struct VideoToolboxEncoderOutput {
 
 pub struct VideoEncodedData {
     pub sample_buffer: UnsafeSendRetained<CMSampleBuffer>,
+    pub not_sync: bool,
+}
+
+impl VideoEncodedData {
+    pub fn new(sample_buffer: UnsafeSendRetained<CMSampleBuffer>) -> Self {
+        let attachments = unsafe { sample_buffer.sample_attachments_array(false) };
+        let not_sync = attachments
+            .map(|attachments| {
+                assert_eq!(attachments.len(), 1);
+                let dict = unsafe {
+                    Retained::<CFDictionary<CFString, CFType>>::retain(
+                        attachments.value_at_index(0) as *mut _,
+                    )
+                    .unwrap()
+                };
+                dict.get(unsafe { kCMSampleAttachmentKey_NotSync })
+                    .map(|v| {
+                        v.downcast::<CFBoolean>()
+                            .map(|v| v.as_bool())
+                            .unwrap_or_default()
+                    })
+                    .unwrap_or_default()
+            })
+            .unwrap_or_default();
+        Self {
+            sample_buffer,
+            not_sync,
+        }
+    }
 }
 
 impl EncodedData for VideoEncodedData {
     fn timestamp(&self) -> f64 {
         todo!()
+    }
+
+    fn is_key(&self) -> bool {
+        !self.not_sync
     }
 }
 
@@ -62,11 +89,7 @@ unsafe extern "C-unwind" fn handle_video_encode_output(
     drop(unsafe { Retained::from_raw(source_frame_ref_con as *mut CVPixelBuffer) });
 
     if let Some(sample_buffer) = unsafe { Retained::retain(sample_bufer) } {
-        _ = tx.try_send(VideoEncodedData {
-            sample_buffer: UnsafeSendRetained {
-                inner: sample_buffer,
-            },
-        });
+        _ = tx.try_send(VideoEncodedData::new(sample_buffer.into()));
     } // otherwise dropped
 }
 
@@ -146,7 +169,7 @@ impl Drop for VideoToolboxEncoderInput {
 }
 
 impl VideoToolboxEncoder {
-    pub fn new(options: &unienc_common::VideoEncoderOptions) -> Result<Self> {
+    pub fn new(options: &impl unienc_common::VideoEncoderOptions) -> Result<Self> {
         let mut session: *mut VTCompressionSession = std::ptr::null_mut();
         let (tx, rx) = mpsc::channel(32);
 
@@ -155,8 +178,8 @@ impl VideoToolboxEncoder {
         unsafe {
             VTCompressionSession::create(
                 kCFAllocatorDefault,
-                options.width as i32,
-                options.height as i32,
+                options.width() as i32,
+                options.height() as i32,
                 kCMVideoCodecType_H264,
                 None,
                 None,

@@ -1,9 +1,9 @@
 [package]
 name = "unienc_common"
 version = "0.1.0"
-edition = "2024"
+edition.workspace = true
 
 [dependencies]
 anyhow = "1.0.98"
-bincode = "2.0.1"
+bincode = { workspace = true }
 tokio = { version = "1.45.1", features = ["sync"] }

@@ -22,7 +22,7 @@ use objc2_core_media::{
 };
 use objc2_foundation::{NSString, NSURL};
 use tokio::sync::{mpsc, oneshot};
-use unienc_common::{Muxer, MuxerCompletionHandle, MuxerInput};
+use unienc_common::{Muxer, CompletionHandle, MuxerInput};
 
 use crate::OsStatus;
 use crate::common::UnsafeSendRetained;
@@ -48,8 +48,8 @@ pub struct AVFMuxerAudioInput {
 impl MuxerInput for AVFMuxerVideoInput {
     type Data = VideoEncodedData;
 
-    async fn push(&mut self, data: &Self::Data) -> Result<()> {
-        self.tx.send(data.sample_buffer.clone().into()).await?;
+    async fn push(&mut self, data: Self::Data) -> Result<()> {
+        self.tx.send(data.sample_buffer.into()).await?;
 
         Ok(())
     }
@@ -66,8 +66,8 @@ impl MuxerInput for AVFMuxerVideoInput {
 impl MuxerInput for AVFMuxerAudioInput {
     type Data = AudioPacket;
 
-    async fn push(&mut self, data: &Self::Data) -> Result<()> {
-        let sample_buffer = create_audio_sample_buffer(data, &mut self.asbd)?;
+    async fn push(&mut self, data: Self::Data) -> Result<()> {
+        let sample_buffer = create_audio_sample_buffer(&data, &mut self.asbd)?;
         self.tx.send(sample_buffer.into()).await?;
 
         Ok(())
@@ -85,10 +85,10 @@ impl MuxerInput for AVFMuxerAudioInput {
 unsafe impl Send for AVFMuxer {}
 
 pub struct AVFMuxerCompletionHandle {
-    writer: Retained<AVAssetWriter>,
+    writer: UnsafeSendRetained<AVAssetWriter>,
 }
 
-impl MuxerCompletionHandle for AVFMuxerCompletionHandle {
+impl CompletionHandle for AVFMuxerCompletionHandle {
     async fn finish(self) -> Result<()> {
         let writer = self.writer;
         let (tx, rx) = oneshot::channel();
@@ -110,26 +110,27 @@ impl MuxerCompletionHandle for AVFMuxerCompletionHandle {
 impl Muxer for AVFMuxer {
     type VideoInputType = AVFMuxerVideoInput;
     type AudioInputType = AVFMuxerAudioInput;
+    type CompletionHandleType = AVFMuxerCompletionHandle;
 
     fn get_inputs(
         self,
     ) -> Result<(
         Self::VideoInputType,
         Self::AudioInputType,
-        impl MuxerCompletionHandle,
+        Self::CompletionHandleType,
     )> {
         Ok((
             self.video_input,
             self.audio_input,
             AVFMuxerCompletionHandle {
-                writer: self.writer,
+                writer: self.writer.into(),
             },
         ))
     }
 }
 
 impl AVFMuxer {
-    pub fn new<P: AsRef<Path>>(output_path: P, video_options: &unienc_common::VideoEncoderOptions, audio_options: &unienc_common::AudioEncoderOptions) -> Result<Self> {
+    pub fn new<P: AsRef<Path>>(output_path: P, video_options: &impl unienc_common::VideoEncoderOptions, audio_options: &impl unienc_common::AudioEncoderOptions) -> Result<Self> {
         let path = output_path.as_ref();
         _ = fs::remove_file(path);
         let url =
@@ -145,8 +146,8 @@ impl AVFMuxer {
             CMVideoFormatDescriptionCreate(
                 kCFAllocatorDefault,
                 kCMVideoCodecType_H264,
-                video_options.width as i32,
-                video_options.height as i32,
+                video_options.width() as i32,
+                video_options.height() as i32,
                 None,
                 NonNull::new(&mut format_desc).unwrap(),
             )
@@ -162,7 +163,7 @@ impl AVFMuxer {
         };
 
         let mut asbd = AudioStreamBasicDescription {
-            mSampleRate: audio_options.sample_rate as f64,
+            mSampleRate: audio_options.sample_rate() as f64,
             mFormatID: kAudioFormatMPEG4AAC,
             mFormatFlags: 0,
             mBytesPerPacket: 0,

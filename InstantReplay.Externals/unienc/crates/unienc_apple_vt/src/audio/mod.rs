@@ -90,27 +90,27 @@ impl EncoderInput for AudioToolboxEncoderInput {
 }
 
 impl AudioToolboxEncoder {
-    pub fn new(options: &unienc_common::AudioEncoderOptions) -> anyhow::Result<Self> {
+    pub fn new(options: &impl unienc_common::AudioEncoderOptions) -> anyhow::Result<Self> {
         let mut from = AudioStreamBasicDescription {
-            mSampleRate: options.sample_rate as f64,
+            mSampleRate: options.sample_rate() as f64,
             mFormatID: kAudioFormatLinearPCM,
             mFormatFlags: kAudioFormatFlagIsSignedInteger | kAudioFormatFlagIsPacked,
             mBytesPerPacket: 4,
             mFramesPerPacket: 1,
             mBytesPerFrame: 4,
-            mChannelsPerFrame: options.channels,
+            mChannelsPerFrame: options.channels(),
             mBitsPerChannel: 16,
             mReserved: 0,
         };
 
         let mut to = AudioStreamBasicDescription {
-            mSampleRate: options.sample_rate as f64,
+            mSampleRate: options.sample_rate() as f64,
             mFormatID: kAudioFormatMPEG4AAC,
             mFormatFlags: 0,
             mBytesPerPacket: 0,
             mFramesPerPacket: 1024,
             mBytesPerFrame: 0,
-            mChannelsPerFrame: options.channels,
+            mChannelsPerFrame: options.channels(),
             mBitsPerChannel: 0,
             mReserved: 0,
         };
@@ -130,7 +130,7 @@ impl AudioToolboxEncoder {
                 tx,
                 converter,
                 max_output_packet_size,
-                sample_rate: options.sample_rate,
+                sample_rate: options.sample_rate(),
             },
             output: AudioToolboxEncoderOutput { rx },
         })
@@ -148,6 +148,10 @@ impl EncoderOutput for AudioToolboxEncoderOutput {
 impl EncodedData for AudioPacket {
     fn timestamp(&self) -> f64 {
         self.timestamp_in_samples as f64 / self.sample_rate as f64
+    }
+    
+    fn is_key(&self) -> bool {
+        true
     }
 }
 

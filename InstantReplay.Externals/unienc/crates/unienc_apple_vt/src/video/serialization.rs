@@ -6,7 +6,7 @@ use std::{
 use bincode::{Decode, Encode};
 use objc2::rc::Retained;
 use objc2_core_foundation::{
-    CFBoolean, CFDictionary, CFMutableDictionary, CFString, CFType, kCFAllocatorDefault,
+    CFMutableDictionary, CFString, CFType, kCFAllocatorDefault,
     kCFBooleanTrue,
 };
 use objc2_core_media::{
@@ -150,25 +150,7 @@ impl Encode for VideoEncodedData {
         };
 
         // is key frame
-        let attachments = unsafe { self.sample_buffer.sample_attachments_array(false) };
-        let not_sync = attachments
-            .map(|attachments| {
-                assert_eq!(attachments.len(), 1);
-                let dict = unsafe {
-                    Retained::<CFDictionary<CFString, CFType>>::retain(
-                        attachments.value_at_index(0) as *mut _,
-                    )
-                    .unwrap()
-                };
-                dict.get(unsafe { kCMSampleAttachmentKey_NotSync })
-                    .map(|v| {
-                        v.downcast::<CFBoolean>()
-                            .map(|v| v.as_bool())
-                            .unwrap_or_default()
-                    })
-                    .unwrap_or_default()
-            })
-            .unwrap_or_default();
+        let not_sync = self.not_sync;
 
         // format description
         let format_desc = unsafe { CMSampleBuffer::format_description(&self.sample_buffer) };
@@ -392,6 +374,7 @@ impl Decode<()> for VideoEncodedData {
 
         Ok(VideoEncodedData {
             sample_buffer: sample_buffer.into(),
+            not_sync,
         })
     }
 }

@@ -10,13 +10,15 @@ mod common;
 pub mod mux;
 pub mod video;
 
-pub struct VideoToolboxEncodingSystem
-{
-    video_options: unienc_common::VideoEncoderOptions,
-    audio_options: unienc_common::AudioEncoderOptions,
+pub struct VideoToolboxEncodingSystem<V: unienc_common::VideoEncoderOptions, A: unienc_common::AudioEncoderOptions> {
+    video_options: V,
+    audio_options: A,
 }
 
-impl EncodingSystem for VideoToolboxEncodingSystem {
+impl<V: unienc_common::VideoEncoderOptions, A: unienc_common::AudioEncoderOptions> EncodingSystem for VideoToolboxEncodingSystem<V, A> {
+    type VideoEncoderOptionsType = V;
+    type AudioEncoderOptionsType = A;
+
     type VideoEncoderType = VideoToolboxEncoder;
 
     type AudioEncoderType = AudioToolboxEncoder;
@@ -35,11 +37,11 @@ impl EncodingSystem for VideoToolboxEncodingSystem {
         AudioToolboxEncoder::new(&self.audio_options)
     }
 
-    fn new_muxer(&self, output_path: impl AsRef<Path>) -> Result<Self::MuxerType> {
+    fn new_muxer(&self, output_path: &Path) -> Result<Self::MuxerType> {
         AVFMuxer::new(output_path, &self.video_options, &self.audio_options)
     }
     
-    fn new(video_options: &unienc_common::VideoEncoderOptions, audio_options: &unienc_common::AudioEncoderOptions) -> Self {
+    fn new(video_options: &V, audio_options: &A) -> Self {
         Self {
             video_options: *video_options,
             audio_options: *audio_options,
