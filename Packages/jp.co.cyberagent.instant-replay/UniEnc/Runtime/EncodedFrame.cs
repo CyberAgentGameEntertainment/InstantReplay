@@ -48,16 +48,6 @@ namespace UniEnc
         }
 
         /// <summary>
-        ///     Copies the frame data to a new byte array. Use this if you need to keep the data after disposal.
-        /// </summary>
-        public byte[] ToArray()
-        {
-            var result = new byte[_length];
-            Data.CopyTo(result);
-            return result;
-        }
-
-        /// <summary>
         ///     Returns the rented array to the pool. After calling this, Data becomes invalid.
         /// </summary>
         public void Dispose()

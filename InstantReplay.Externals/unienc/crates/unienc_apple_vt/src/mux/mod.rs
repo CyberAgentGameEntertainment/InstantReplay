@@ -49,7 +49,7 @@ impl MuxerInput for AVFMuxerVideoInput {
     type Data = VideoEncodedData;
 
     async fn push(&mut self, data: Self::Data) -> Result<()> {
-        self.tx.send(data.sample_buffer.into()).await?;
+        self.tx.send(data.sample_buffer).await?;
 
         Ok(())
     }
@@ -249,7 +249,9 @@ impl AVFMuxer {
                         Err(mpsc::error::TryRecvError::Disconnected) => unsafe {
                             if let Some(finish_tx) = finish_tx.borrow_mut().take() {
                                 input_clone.markAsFinished();
-                                finish_tx.send(Ok(())).unwrap();
+                                finish_tx.send(Ok(())).unwrap_or_else(|e| {
+                                    println!("failed to send finish signal: {e:?}");
+                                });
                             }
                             return;
                         },

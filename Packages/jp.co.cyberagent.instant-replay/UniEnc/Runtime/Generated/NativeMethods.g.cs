@@ -40,7 +40,7 @@ namespace UniEnc
         internal static extern bool unienc_new_muxer(void* system, byte* output_path, Mutex** video_input_out, Mutex** audio_input_out, Mutex** completion_handle_out);
 
         [DllImport(__DllName, EntryPoint = "unienc_audio_encoder_push", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
-        internal static extern void unienc_audio_encoder_push(SendPtr input, SendPtr data, nuint sample_count, ulong timestamp_in_samples, delegate* unmanaged[Cdecl]<void*, UniencErrorKind, void> callback, SendPtr user_data);
+        internal static extern void unienc_audio_encoder_push(SendPtr input, SendPtr data, nuint sample_count, ulong timestamp_in_samples, delegate* unmanaged[Cdecl]<void*, UniencErrorNative, void> callback, SendPtr user_data);
 
         [DllImport(__DllName, EntryPoint = "unienc_audio_encoder_pull", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
         internal static extern void unienc_audio_encoder_pull(SendPtr output, delegate* unmanaged[Cdecl]<void*, byte*, nuint, double, bool, UniencErrorNative, void> callback, SendPtr user_data);
@@ -52,19 +52,19 @@ namespace UniEnc
         internal static extern void unienc_free_audio_encoder_output(SendPtr audio_output);
 
         [DllImport(__DllName, EntryPoint = "unienc_muxer_push_video", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
-        internal static extern void unienc_muxer_push_video(SendPtr video_input, SendPtr data, nuint size, delegate* unmanaged[Cdecl]<void*, UniencErrorKind, void> callback, SendPtr user_data);
+        internal static extern void unienc_muxer_push_video(SendPtr video_input, SendPtr data, nuint size, delegate* unmanaged[Cdecl]<void*, UniencErrorNative, void> callback, SendPtr user_data);
 
         [DllImport(__DllName, EntryPoint = "unienc_muxer_push_audio", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
-        internal static extern void unienc_muxer_push_audio(SendPtr audio_input, SendPtr data, nuint size, delegate* unmanaged[Cdecl]<void*, UniencErrorKind, void> callback, SendPtr user_data);
+        internal static extern void unienc_muxer_push_audio(SendPtr audio_input, SendPtr data, nuint size, delegate* unmanaged[Cdecl]<void*, UniencErrorNative, void> callback, SendPtr user_data);
 
         [DllImport(__DllName, EntryPoint = "unienc_muxer_finish_video", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
-        internal static extern void unienc_muxer_finish_video(SendPtr video_input, delegate* unmanaged[Cdecl]<void*, UniencErrorKind, void> callback, SendPtr user_data);
+        internal static extern void unienc_muxer_finish_video(SendPtr video_input, delegate* unmanaged[Cdecl]<void*, UniencErrorNative, void> callback, SendPtr user_data);
 
         [DllImport(__DllName, EntryPoint = "unienc_muxer_finish_audio", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
-        internal static extern void unienc_muxer_finish_audio(SendPtr audio_input, delegate* unmanaged[Cdecl]<void*, UniencErrorKind, void> callback, SendPtr user_data);
+        internal static extern void unienc_muxer_finish_audio(SendPtr audio_input, delegate* unmanaged[Cdecl]<void*, UniencErrorNative, void> callback, SendPtr user_data);
 
         [DllImport(__DllName, EntryPoint = "unienc_muxer_complete", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
-        internal static extern void unienc_muxer_complete(SendPtr completion_handle, delegate* unmanaged[Cdecl]<void*, UniencErrorKind, void> callback, SendPtr user_data);
+        internal static extern void unienc_muxer_complete(SendPtr completion_handle, delegate* unmanaged[Cdecl]<void*, UniencErrorNative, void> callback, SendPtr user_data);
 
         [DllImport(__DllName, EntryPoint = "unienc_free_muxer_video_input", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
         internal static extern void unienc_free_muxer_video_input(SendPtr video_input);
@@ -76,7 +76,7 @@ namespace UniEnc
         internal static extern void unienc_free_muxer_completion_handle(SendPtr completion_handle);
 
         [DllImport(__DllName, EntryPoint = "unienc_video_encoder_push", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
-        internal static extern void unienc_video_encoder_push(SendPtr input, SendPtr data, nuint data_size, uint width, uint height, double timestamp, delegate* unmanaged[Cdecl]<void*, UniencErrorKind, void> callback, SendPtr user_data);
+        internal static extern void unienc_video_encoder_push(SendPtr input, SendPtr data, nuint data_size, uint width, uint height, double timestamp, delegate* unmanaged[Cdecl]<void*, UniencErrorNative, void> callback, SendPtr user_data);
 
         [DllImport(__DllName, EntryPoint = "unienc_video_encoder_pull", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
         internal static extern void unienc_video_encoder_pull(SendPtr output, delegate* unmanaged[Cdecl]<void*, byte*, nuint, double, bool, UniencErrorNative, void> callback, SendPtr user_data);

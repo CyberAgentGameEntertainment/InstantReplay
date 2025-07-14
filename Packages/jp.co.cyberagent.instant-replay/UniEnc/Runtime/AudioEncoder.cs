@@ -1,6 +1,8 @@
 using System;
+using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using UniEnc.Internal;
+using UnityEngine;
 
 namespace UniEnc
 {
@@ -33,38 +35,40 @@ namespace UniEnc
         ///     Pushes raw audio samples to the encoder.
         /// </summary>
         /// <param name="audioData">Raw audio samples (PCM int16 signed)</param>
-        /// <param name="sampleCount">Number of samples (per channel)</param>
+        /// <param name="sampleCount">Number of samples</param>
         /// <param name="timestampInSamples">Timestamp in samples since start</param>
-        public ValueTask PushSamplesAsync(byte[] audioData, ulong sampleCount, ulong timestampInSamples)
-        {
-            return PushSamplesAsync(audioData.AsSpan(), sampleCount, timestampInSamples);
-        }
-
-        /// <summary>
-        ///     Pushes raw audio samples to the encoder.
-        /// </summary>
-        /// <param name="audioData">Raw audio samples (PCM int16 signed)</param>
-        /// <param name="sampleCount">Number of samples (per channel)</param>
-        /// <param name="timestampInSamples">Timestamp in samples since start</param>
-        public ValueTask PushSamplesAsync(ReadOnlySpan<byte> audioData, ulong sampleCount, ulong timestampInSamples)
+        public ValueTask PushSamplesAsync(ReadOnlyMemory<short> audioData, ulong timestampInSamples)
         {
             ThrowIfDisposed();
 
-            var context = CallbackHelper.SimpleCallbackContext.Rent();
-            var contextHandle = CallbackHelper.CreateSendPtr(context);
+            if (_inputHandle == 0) return default;
 
-            unsafe
+            if (!MemoryMarshal.TryGetArray(audioData, out var segment))
+                throw new ArgumentException("Audio data must be a contiguous array", nameof(audioData));
+
+            var handle = GCHandle.Alloc(segment.Array, GCHandleType.Pinned);
+            var addr = handle.AddrOfPinnedObject() + segment.Offset * sizeof(short);
+            var context = CallbackHelper.SimpleCallbackContext.Rent(handle);
+
+            try
             {
-                fixed (byte* dataPtr = audioData)
+                var contextHandle = CallbackHelper.CreateSendPtr(context);
+
+                unsafe
                 {
                     NativeMethods.unienc_audio_encoder_push(
                         _inputHandle,
-                        (nint)dataPtr,
-                        (nuint)sampleCount,
+                        (nint)addr,
+                        (nuint)segment.Count,
                         timestampInSamples,
                         CallbackHelper.GetSimpleCallbackPtr(),
                         contextHandle);
                 }
+            }
+            catch
+            {
+                context.Return();
+                throw;
             }
 
             return context.Task;
@@ -90,6 +94,23 @@ namespace UniEnc
             }
 
             return context.Task;
+        }
+
+        /// <summary>
+        ///     Completes the encoding by disposing the input handle.
+        ///     This signals that no more samples will be pushed.
+        ///     The output handle remains valid to pull remaining encoded frames.
+        /// </summary>
+        public void CompleteInput()
+        {
+            lock (_lock)
+            {
+                if (_inputHandle != 0)
+                {
+                    NativeMethods.unienc_free_audio_encoder_input(_inputHandle);
+                    _inputHandle = 0;
+                }
+            }
         }
 
         private void Dispose(bool disposing)

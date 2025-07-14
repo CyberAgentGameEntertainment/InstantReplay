@@ -8,7 +8,7 @@ edition.workspace = true
 crate-type = ["cdylib", "staticlib", "rlib"]
 
 [dependencies]
-anyhow = "1.0"
+anyhow = { workspace = true }
 bincode = { version = "2.0.1", features = ["serde"] }
 rand = "0.9.1"
 tokio = { version = "1.45.1", features = ["rt", "macros", "rt-multi-thread"] }

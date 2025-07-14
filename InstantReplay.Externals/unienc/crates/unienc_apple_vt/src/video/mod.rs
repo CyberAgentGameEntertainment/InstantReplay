@@ -4,12 +4,12 @@ use std::{ffi::c_void, ptr::NonNull};
 use anyhow::{Context, Result};
 use objc2::rc::Retained;
 use objc2_core_foundation::{
-    CFBoolean, CFDictionary, CFString, CFType, kCFAllocatorDefault, kCFBooleanFalse,
+    kCFAllocatorDefault, kCFBooleanFalse, kCFBooleanTrue, CFBoolean, CFDictionary, CFString, CFType
 };
 use objc2_core_media::{
     CMSampleBuffer, CMTime, kCMSampleAttachmentKey_NotSync, kCMTimeInvalid, kCMVideoCodecType_H264,
 };
-use objc2_core_video::{CVPixelBuffer, CVPixelBufferCreateWithBytes, kCVPixelFormatType_32ARGB};
+use objc2_core_video::{kCVPixelFormatType_32ARGB, CVPixelBuffer, CVPixelBufferCreateWithBytes};
 use objc2_video_toolbox::{
     VTCompressionSession, VTEncodeInfoFlags, VTSessionSetProperty,
     kVTCompressionPropertyKey_AllowFrameReordering, kVTCompressionPropertyKey_RealTime,
@@ -69,7 +69,7 @@ impl VideoEncodedData {
 
 impl EncodedData for VideoEncodedData {
     fn timestamp(&self) -> f64 {
-        todo!()
+        unsafe { self.sample_buffer.presentation_time_stamp().seconds() }
     }
 
     fn is_key(&self) -> bool {
@@ -198,7 +198,7 @@ impl VideoToolboxEncoder {
             VTSessionSetProperty(
                 &session,
                 kVTCompressionPropertyKey_RealTime,
-                kCFBooleanFalse.map(|b| b as &CFType),
+                kCFBooleanTrue.map(|b| b as &CFType),
             )
         }
         .to_result()?;

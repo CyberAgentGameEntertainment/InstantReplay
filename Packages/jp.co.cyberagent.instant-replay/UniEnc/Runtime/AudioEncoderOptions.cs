@@ -23,16 +23,6 @@ namespace UniEnc
         public uint Bitrate { get; set; }
 
         /// <summary>
-        ///     Creates a new AudioEncoderOptions with default values.
-        /// </summary>
-        public static AudioEncoderOptions Default => new()
-        {
-            SampleRate = 48000,
-            Channels = 2,
-            Bitrate = 128_000 // 128 kbps
-        };
-
-        /// <summary>
         ///     Validates the options and throws if invalid.
         /// </summary>
         internal void Validate()

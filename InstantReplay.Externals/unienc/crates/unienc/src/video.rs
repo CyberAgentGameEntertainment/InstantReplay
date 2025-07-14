@@ -28,10 +28,9 @@ pub unsafe extern "C" fn unienc_video_encoder_push(
     }
 
     unsafe {
-        RUNTIME.with(|rt| {
-            rt.spawn(async move {
-                let input = arc_from_raw_retained(*input);
-                let mut input = input.lock().await;
+        RUNTIME.spawn(async move {
+            let input = arc_from_raw_retained(*input);
+            let mut input = input.lock().await;
                 let data_slice = std::slice::from_raw_parts(*data, data_size);
                 let sample = VideoSample {
                     data: data_slice.to_vec(),
@@ -48,8 +47,7 @@ pub unsafe extern "C" fn unienc_video_encoder_push(
                     Err(err) => Err(err),
                 };
 
-                result.apply_callback(callback, user_data);
-            });
+            result.apply_callback(callback, user_data);
         });
     }
 }
@@ -68,18 +66,19 @@ pub unsafe extern "C" fn unienc_video_encoder_pull(
 
     let output = arc_from_raw_retained(*output);
 
-    RUNTIME.with(|rt| {
-        rt.spawn(async move {
-            let mut output = output.lock().await;
-            let result = match output
+    RUNTIME.spawn(async move {
+        let mut output = output.lock().await;
+        let result = match output
                 .as_mut()
                 .ok_or(UniencError::resource_allocation_error("Resource is None"))
             {
-                Ok(output) => output.pull().await.map_err(UniencError::from_anyhow),
+                Ok(output) => {
+                    let result = output.pull().await.map_err(UniencError::from_anyhow);
+                    result
+                },
                 Err(err) => Err(err),
-            };
-            result.apply_callback(callback, user_data);
-        });
+        };
+        result.apply_callback(callback, user_data);
     });
 }
 

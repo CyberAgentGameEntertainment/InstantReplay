@@ -96,7 +96,7 @@ impl Encode for VideoEncodedData {
         encoder: &mut E,
     ) -> std::result::Result<(), bincode::error::EncodeError> {
         if unsafe { self.sample_buffer.num_samples() } != 1 {
-            todo!("not supported")
+            return Err(bincode::error::EncodeError::OtherString("not supported".to_string()));
         }
 
         let data_buffer = unsafe { self.sample_buffer.data_buffer() };

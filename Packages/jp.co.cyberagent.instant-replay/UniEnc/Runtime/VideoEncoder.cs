@@ -1,6 +1,8 @@
 using System;
 using System.Threading.Tasks;
 using UniEnc.Internal;
+using Unity.Collections;
+using Unity.Collections.LowLevel.Unsafe;
 
 namespace UniEnc
 {
@@ -21,6 +23,11 @@ namespace UniEnc
         }
 
         /// <summary>
+        ///     Gets whether the input has been completed (no more frames can be pushed).
+        /// </summary>
+        internal bool IsInputCompleted => _inputHandle == 0;
+
+        /// <summary>
         ///     Releases all resources used by the video encoder.
         /// </summary>
         public void Dispose()
@@ -36,32 +43,23 @@ namespace UniEnc
         /// <param name="width">Frame width in pixels</param>
         /// <param name="height">Frame height in pixels</param>
         /// <param name="timestamp">Frame timestamp in seconds</param>
-        public ValueTask PushFrameAsync(byte[] frameData, uint width, uint height, double timestamp)
-        {
-            return PushFrameAsync(frameData.AsSpan(), width, height, timestamp);
-        }
-
-        /// <summary>
-        ///     Pushes a raw video frame to the encoder.
-        /// </summary>
-        /// <param name="frameData">Raw frame data (e.g., RGBA or YUV)</param>
-        /// <param name="width">Frame width in pixels</param>
-        /// <param name="height">Frame height in pixels</param>
-        /// <param name="timestamp">Frame timestamp in seconds</param>
-        public ValueTask PushFrameAsync(ReadOnlySpan<byte> frameData, uint width, uint height, double timestamp)
+        public ValueTask PushFrameAsync(NativeArray<byte> frameData, uint width, uint height, double timestamp)
         {
             ThrowIfDisposed();
 
-            var context = CallbackHelper.SimpleCallbackContext.Rent();
-            var contextHandle = CallbackHelper.CreateSendPtr(context);
+            if (_inputHandle == 0) return default;
 
-            unsafe
+            var context = CallbackHelper.SimpleCallbackContext.Rent();
+
+            try
             {
-                fixed (byte* dataPtr = frameData)
+                var contextHandle = CallbackHelper.CreateSendPtr(context);
+
+                unsafe
                 {
                     NativeMethods.unienc_video_encoder_push(
                         _inputHandle,
-                        (nint)dataPtr,
+                        (nint)frameData.GetUnsafeReadOnlyPtr(),
                         (nuint)frameData.Length,
                         width,
                         height,
@@ -69,9 +67,14 @@ namespace UniEnc
                         CallbackHelper.GetSimpleCallbackPtr(),
                         contextHandle);
                 }
-            }
 
-            return context.Task;
+                return context.Task;
+            }
+            catch
+            {
+                context.Return();
+                throw;
+            }
         }
 
         /// <summary>
@@ -94,6 +97,23 @@ namespace UniEnc
             }
 
             return context.Task;
+        }
+
+        /// <summary>
+        ///     Completes the encoding by disposing the input handle.
+        ///     This signals that no more frames will be pushed.
+        ///     The output handle remains valid to pull remaining encoded frames.
+        /// </summary>
+        public void CompleteInput()
+        {
+            lock (_lock)
+            {
+                if (_inputHandle != 0)
+                {
+                    NativeMethods.unienc_free_video_encoder_input(_inputHandle);
+                    _inputHandle = 0;
+                }
+            }
         }
 
         private void Dispose(bool disposing)

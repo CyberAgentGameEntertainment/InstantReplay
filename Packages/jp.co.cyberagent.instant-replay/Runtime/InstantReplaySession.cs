@@ -9,7 +9,6 @@ using System.IO.Pipelines;
 using System.Threading;
 using System.Threading.Tasks;
 using UnityEngine;
-using UnityEngine.Rendering;
 
 namespace InstantReplay
 {
@@ -82,7 +81,7 @@ namespace InstantReplay
                 directory,
                 frameProvider,
                 disposeFrameProvider,
-                new FramePreprocessor(maxWidth, maxHeight),
+                FramePreprocessor.WithMaxSize(maxWidth, maxHeight),
                 keepSeconds => { _audioRecorder?.DiscardSamples(keepSeconds); },
                 result => { _recorderCompletion.TrySetResult(result); });
         }
@@ -316,6 +315,11 @@ namespace InstantReplay
         ///     Transcoding frames.
         /// </summary>
         Transcoding,
+
+        /// <summary>
+        ///     Exporting encoded frames (realtime mode).
+        /// </summary>
+        Exporting = Transcoding,
 
         /// <summary>
         ///     Completed.

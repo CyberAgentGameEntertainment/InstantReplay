@@ -27,23 +27,21 @@ pub unsafe extern "C" fn unienc_audio_encoder_push(
     let input = arc_from_raw_retained(*input);
 
     unsafe {
-        RUNTIME.with(|rt| {
-            rt.spawn(async move {
-                let data_slice = std::slice::from_raw_parts(*data, sample_count);
-                let sample = AudioSample {
-                    data: data_slice.to_vec(),
-                    timestamp_in_samples,
-                };
-                let mut input = input.lock().await;
-                let result = match input
-                    .as_mut()
-                    .ok_or(UniencError::resource_allocation_error("Resource is None"))
-                {
-                    Ok(input) => input.push(&sample).await.map_err(UniencError::from_anyhow),
-                    Err(err) => Err(err),
-                };
-                result.apply_callback(callback, user_data);
-            });
+        RUNTIME.spawn(async move {
+            let data_slice = std::slice::from_raw_parts(*data, sample_count);
+            let sample = AudioSample {
+                data: data_slice.to_vec(),
+                timestamp_in_samples,
+            };
+            let mut input = input.lock().await;
+            let result = match input
+                .as_mut()
+                .ok_or(UniencError::resource_allocation_error("Resource is None"))
+            {
+                Ok(input) => input.push(&sample).await.map_err(UniencError::from_anyhow),
+                Err(err) => Err(err),
+            };
+            result.apply_callback(callback, user_data);
         });
     }
 }
@@ -61,18 +59,16 @@ pub unsafe extern "C" fn unienc_audio_encoder_pull(
     }
     let output = arc_from_raw_retained(*output);
 
-    RUNTIME.with(|rt| {
-        rt.spawn(async move {
-            let mut output = output.lock().await;
-            let result = match output
-                .as_mut()
-                .ok_or(UniencError::resource_allocation_error("Resource is None"))
-            {
-                Ok(output) => output.pull().await.map_err(UniencError::from_anyhow),
-                Err(err) => Err(err),
-            };
-            result.apply_callback(callback, user_data);
-        });
+    RUNTIME.spawn(async move {
+        let mut output = output.lock().await;
+        let result = match output
+            .as_mut()
+            .ok_or(UniencError::resource_allocation_error("Resource is None"))
+        {
+            Ok(output) => output.pull().await.map_err(UniencError::from_anyhow),
+            Err(err) => Err(err),
+        };
+        result.apply_callback(callback, user_data);
     });
 }
 

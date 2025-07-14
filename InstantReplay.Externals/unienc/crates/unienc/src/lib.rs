@@ -1,7 +1,7 @@
 use std::ffi::{c_char, c_void, CStr, CString};
 use std::ops::Deref;
 use std::path::Path;
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock};
 
 use tokio::sync::Mutex;
 use unienc_common::{EncodedData, Encoder, EncodingSystem, Muxer};
@@ -49,11 +49,12 @@ impl UniencError {
             .map(|string| CString::new(string.as_str()).unwrap());
         f(&UniencErrorNative {
             kind: self.kind,
-            message: match message {
+            message: match message.as_ref() {
                 Some(string) => string.as_ptr(),
                 None => std::ptr::null(),
             },
         });
+        drop(message);
     }
 
     /// Convert an anyhow::Error to UniencError with appropriate categorization
@@ -171,7 +172,7 @@ impl UniencError {
 }
 
 // Callback types for async operations
-pub type UniencCallback = unsafe extern "C" fn(user_data: *mut c_void, error: UniencErrorKind);
+pub type UniencCallback = unsafe extern "C" fn(user_data: *mut c_void, error: UniencErrorNative);
 pub type UniencDataCallback = unsafe extern "C" fn(
     user_data: *mut c_void,
     data: *const u8,
@@ -297,9 +298,7 @@ pub use unienc_common::{AudioEncoderOptions, VideoEncoderOptions};
 // Runtime for async operations
 use tokio::runtime::Runtime;
 
-thread_local! {
-    static RUNTIME: Runtime = Runtime::new().unwrap();
-}
+static RUNTIME: LazyLock<Runtime> = LazyLock::new(|| Runtime::new().unwrap());
 
 #[no_mangle]
 pub unsafe extern "C" fn unienc_new_encoding_system(
@@ -426,16 +425,16 @@ trait ApplyCallback<Callback> {
 
 impl ApplyCallback<UniencCallback> for UniencError {
     fn apply_callback(&self, callback: UniencCallback, user_data: SendPtr<c_void>) {
-        self.with_native(|native| unsafe { callback(user_data.into(), native.kind) });
+        self.with_native(|native| unsafe { callback(user_data.into(), *native) });
     }
 }
 
 impl ApplyCallback<UniencCallback> for Result<(), UniencError> {
     fn apply_callback(&self, callback: UniencCallback, user_data: SendPtr<c_void>) {
         match self {
-            Ok(()) => unsafe { callback(user_data.into(), UniencErrorKind::Success) },
+            Ok(()) => unsafe { callback(user_data.into(), UniencErrorNative::SUCCESS) },
             Err(err) => {
-                err.with_native(|native| unsafe { callback(user_data.into(), native.kind) })
+                err.with_native(|native| unsafe { callback(user_data.into(), *native) })
             }
         }
     }
@@ -468,7 +467,7 @@ impl<T: EncodedData> ApplyCallback<UniencDataCallback> for Result<Option<T>, Uni
                     )),
                 }
             }
-            Ok(None) => Err(UniencError::resource_allocation_error("Data is None")),
+            Ok(None) => Ok((vec![], 0.0, false)),
             Err(e) => Err(e.clone()),
         };
 

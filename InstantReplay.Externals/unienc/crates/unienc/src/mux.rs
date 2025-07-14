@@ -39,21 +39,19 @@ pub unsafe extern "C" fn unienc_muxer_push_video(
                 }
             };
 
-        RUNTIME.with(|rt| {
-            rt.spawn(async move {
-                let mut video_input = video_input.lock().await;
-                let result = match video_input
-                    .as_mut()
-                    .ok_or(UniencError::resource_allocation_error("Resource is None"))
-                {
-                    Ok(video_input) => video_input
-                        .push(decoded_data)
-                        .await
-                        .map_err(|_e| UniencError::ERROR),
-                    Err(err) => Err(err),
-                };
-                result.apply_callback(callback, user_data);
-            });
+        RUNTIME.spawn(async move {
+            let mut video_input = video_input.lock().await;
+            let result = match video_input
+                .as_mut()
+                .ok_or(UniencError::resource_allocation_error("Resource is None"))
+            {
+                Ok(video_input) => video_input
+                    .push(decoded_data)
+                    .await
+                    .map_err(|_e| UniencError::ERROR),
+                Err(err) => Err(err),
+            };
+            result.apply_callback(callback, user_data);
         });
     }
 }
@@ -87,21 +85,19 @@ pub unsafe extern "C" fn unienc_muxer_push_audio(
                 }
             };
 
-        RUNTIME.with(|rt| {
-            rt.spawn(async move {
-                let mut audio_input = audio_input.lock().await;
-                let result = match audio_input
-                    .as_mut()
-                    .ok_or(UniencError::resource_allocation_error("Resource is None"))
-                {
-                    Ok(audio_input) => audio_input
-                        .push(decoded_data)
-                        .await
-                        .map_err(|_e| UniencError::ERROR),
-                    Err(err) => Err(err),
-                };
-                result.apply_callback(callback, user_data);
-            });
+        RUNTIME.spawn(async move {
+            let mut audio_input = audio_input.lock().await;
+            let result = match audio_input
+                .as_mut()
+                .ok_or(UniencError::resource_allocation_error("Resource is None"))
+            {
+                Ok(audio_input) => audio_input
+                    .push(decoded_data)
+                    .await
+                    .map_err(|_e| UniencError::ERROR),
+                Err(err) => Err(err),
+            };
+            result.apply_callback(callback, user_data);
         });
     }
 }
@@ -120,21 +116,19 @@ pub unsafe extern "C" fn unienc_muxer_finish_video(
 
     let video_input = arc_from_raw_retained(*video_input);
 
-    RUNTIME.with(|rt| {
-        rt.spawn(async move {
-            let mut video_input = video_input.lock().await;
-            let result = match video_input
-                .take()
-                .ok_or(UniencError::resource_allocation_error("Resource is None"))
-            {
-                Ok(video_input) => video_input
-                    .finish()
-                    .await
-                    .map_err(|e| UniencError::from_anyhow(e)),
-                Err(err) => Err(err),
-            };
-            result.apply_callback(callback, user_data);
-        });
+    RUNTIME.spawn(async move {
+        let mut video_input = video_input.lock().await;
+        let result = match video_input
+            .take()
+            .ok_or(UniencError::resource_allocation_error("Resource is None"))
+        {
+            Ok(video_input) => video_input
+                .finish()
+                .await
+                .map_err(UniencError::from_anyhow),
+            Err(err) => Err(err),
+        };
+        result.apply_callback(callback, user_data);
     });
 }
 
@@ -152,18 +146,16 @@ pub unsafe extern "C" fn unienc_muxer_finish_audio(
 
     let audio_input = arc_from_raw_retained(*audio_input);
 
-    RUNTIME.with(|rt| {
-        rt.spawn(async move {
-            let mut audio_input = audio_input.lock().await;
-            let result = match audio_input
-                .take()
-                .ok_or(UniencError::resource_allocation_error("Resource is None"))
-            {
-                Ok(audio_input) => audio_input.finish().await.map_err(UniencError::from_anyhow),
-                Err(err) => Err(err),
-            };
-            result.apply_callback(callback, user_data);
-        });
+    RUNTIME.spawn(async move {
+        let mut audio_input = audio_input.lock().await;
+        let result = match audio_input
+            .take()
+            .ok_or(UniencError::resource_allocation_error("Resource is None"))
+        {
+            Ok(audio_input) => audio_input.finish().await.map_err(UniencError::from_anyhow),
+            Err(err) => Err(err),
+        };
+        result.apply_callback(callback, user_data);
     });
 }
 
@@ -181,19 +173,17 @@ pub unsafe extern "C" fn unienc_muxer_complete(
 
     let handle = arc_from_raw_retained(*completion_handle);
 
-    RUNTIME.with(|rt| {
-        rt.spawn(async move {
-            let mut handle = handle.lock().await;
+    RUNTIME.spawn(async move {
+        let mut handle = handle.lock().await;
 
-            let result = match handle
-                .take()
-                .ok_or(UniencError::resource_allocation_error("Resource is None"))
-            {
-                Ok(handle) => handle.finish().await.map_err(UniencError::from_anyhow),
-                Err(err) => Err(err),
-            };
-            result.apply_callback(callback, user_data);
-        });
+        let result = match handle
+            .take()
+            .ok_or(UniencError::resource_allocation_error("Resource is None"))
+        {
+            Ok(handle) => handle.finish().await.map_err(UniencError::from_anyhow),
+            Err(err) => Err(err),
+        };
+        result.apply_callback(callback, user_data);
     });
 }
 

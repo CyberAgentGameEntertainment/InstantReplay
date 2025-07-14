@@ -28,17 +28,6 @@ namespace UniEnc
         public uint Bitrate { get; set; }
 
         /// <summary>
-        ///     Creates a new VideoEncoderOptions with default values.
-        /// </summary>
-        public static VideoEncoderOptions Default => new()
-        {
-            Width = 1920,
-            Height = 1080,
-            FpsHint = 30,
-            Bitrate = 10_000_000 // 10 Mbps
-        };
-
-        /// <summary>
         ///     Validates the options and throws if invalid.
         /// </summary>
         internal void Validate()

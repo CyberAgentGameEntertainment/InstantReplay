@@ -12,34 +12,35 @@ namespace UniEnc.Internal
     /// </summary>
     internal static class CallbackHelper
     {
-        private static readonly unsafe SimpleCallbackDelegate s_simpleCallbackDelegate = SimpleCallback;
-        private static readonly unsafe DataCallbackDelegate s_dataCallbackDelegate = DataCallback;
+        private static readonly unsafe SimpleCallbackDelegate SSimpleCallbackDelegate = SimpleCallback;
+        private static readonly unsafe DataCallbackDelegate SDataCallbackDelegate = DataCallback;
 
         private static readonly IntPtr SimpleCallbackPtr =
-            Marshal.GetFunctionPointerForDelegate(s_simpleCallbackDelegate);
+            Marshal.GetFunctionPointerForDelegate(SSimpleCallbackDelegate);
 
-        private static readonly IntPtr DataCallbackPtr = Marshal.GetFunctionPointerForDelegate(s_dataCallbackDelegate);
+        private static readonly IntPtr DataCallbackPtr = Marshal.GetFunctionPointerForDelegate(SDataCallbackDelegate);
 
         /// <summary>
         ///     Native callback for simple operations.
         /// </summary>
         [MonoPInvokeCallback(typeof(SimpleCallbackDelegate))]
-        private static unsafe void SimpleCallback(void* userData, UniencErrorKind errorKind)
+        private static unsafe void SimpleCallback(void* userData, UniencErrorNative error)
         {
             var handle = GCHandle.FromIntPtr((IntPtr)userData);
             var context = (SimpleCallbackContext)handle.Target;
             handle.Free();
 
-            try
+            if (error.kind == UniencErrorKind.Success)
             {
-                if (errorKind == UniencErrorKind.Success)
-                    context.SetResult();
-                else
-                    context.SetException(new UniEncException(errorKind, "Operation failed"));
+                context.SetResult();
             }
-            finally
+            else
             {
-                context.Return();
+                string errorMessage = null;
+                if (error.message != null)
+                    errorMessage = Marshal.PtrToStringUTF8((IntPtr)error.message);
+
+                context.SetException(new UniEncException(error.kind, errorMessage ?? "Operation failed"));
             }
         }
 
@@ -54,34 +55,27 @@ namespace UniEnc.Internal
             var context = (DataCallbackContext)handle.Target;
             handle.Free();
 
-            try
+            if (error.kind == UniencErrorKind.Success)
             {
-                if (error.kind == UniencErrorKind.Success)
+                if (size > 0 && data != null)
                 {
-                    if (size > 0 && data != null)
-                    {
-                        var sourceSpan = new ReadOnlySpan<byte>(data, (int)size);
-                        var frame = EncodedFrame.CreateWithCopy(sourceSpan, timestamp, isKeyFrame);
-                        context.SetResult(frame);
-                    }
-                    else
-                    {
-                        var frame = EncodedFrame.CreateWithCopy(ReadOnlySpan<byte>.Empty, timestamp, isKeyFrame);
-                        context.SetResult(frame);
-                    }
+                    var sourceSpan = new ReadOnlySpan<byte>(data, (int)size);
+                    var frame = EncodedFrame.CreateWithCopy(sourceSpan, timestamp, isKeyFrame);
+                    context.SetResult(frame);
                 }
                 else
                 {
-                    string errorMessage = null;
-                    if (error.message != null)
-                        errorMessage = Marshal.PtrToStringUTF8((IntPtr)error.message);
-
-                    context.SetException(new UniEncException(error.kind, errorMessage ?? "Operation failed"));
+                    var frame = EncodedFrame.CreateWithCopy(ReadOnlySpan<byte>.Empty, timestamp, isKeyFrame);
+                    context.SetResult(frame);
                 }
             }
-            finally
+            else
             {
-                context.Return();
+                string errorMessage = null;
+                if (error.message != null)
+                    errorMessage = Marshal.PtrToStringUTF8((IntPtr)error.message);
+
+                context.SetException(new UniEncException(error.kind, errorMessage ?? "Operation failed"));
             }
         }
 
@@ -97,9 +91,9 @@ namespace UniEnc.Internal
         /// <summary>
         ///     Gets the function pointer for simple callbacks.
         /// </summary>
-        internal static unsafe delegate* unmanaged[Cdecl]<void*, UniencErrorKind, void> GetSimpleCallbackPtr()
+        internal static unsafe delegate* unmanaged[Cdecl]<void*, UniencErrorNative, void> GetSimpleCallbackPtr()
         {
-            return (delegate* unmanaged[Cdecl]<void*, UniencErrorKind, void>)SimpleCallbackPtr;
+            return (delegate* unmanaged[Cdecl]<void*, UniencErrorNative, void>)SimpleCallbackPtr;
         }
 
         /// <summary>
@@ -120,12 +114,18 @@ namespace UniEnc.Internal
             private static readonly ConcurrentQueue<SimpleCallbackContext> Pool = new();
 
             private ManualResetValueTaskSourceCore<object> _core;
+            private GCHandle? _state;
+
+            private SimpleCallbackContext()
+            {
+            }
 
             public ValueTask Task => new(this, _core.Version);
 
             public void GetResult(short token)
             {
                 _core.GetResult(token);
+                Return();
             }
 
             public ValueTaskSourceStatus GetStatus(short token)
@@ -139,15 +139,19 @@ namespace UniEnc.Internal
                 _core.OnCompleted(continuation, state, token, flags);
             }
 
-            public static SimpleCallbackContext Rent()
+            public static SimpleCallbackContext Rent(GCHandle? state = default)
             {
                 if (Pool.TryDequeue(out var context))
                 {
                     context._core.Reset();
+                    context._state = state;
                     return context;
                 }
 
-                return new SimpleCallbackContext();
+                return new SimpleCallbackContext
+                {
+                    _state = state
+                };
             }
 
             public void Return()
@@ -157,11 +161,23 @@ namespace UniEnc.Internal
 
             public void SetResult()
             {
+                if (_state.HasValue)
+                {
+                    _state.Value.Free();
+                    _state = null;
+                }
+
                 _core.SetResult(null);
             }
 
             public void SetException(Exception exception)
             {
+                if (_state.HasValue)
+                {
+                    _state.Value.Free();
+                    _state = null;
+                }
+
                 _core.SetException(exception);
             }
         }
@@ -179,7 +195,9 @@ namespace UniEnc.Internal
 
             public EncodedFrame GetResult(short token)
             {
-                return _core.GetResult(token);
+                var result = _core.GetResult(token);
+                Return();
+                return result;
             }
 
             public ValueTaskSourceStatus GetStatus(short token)
@@ -220,7 +238,7 @@ namespace UniEnc.Internal
             }
         }
 
-        private unsafe delegate void SimpleCallbackDelegate(void* userData, UniencErrorKind errorKind);
+        private unsafe delegate void SimpleCallbackDelegate(void* userData, UniencErrorNative errorKind);
 
         private unsafe delegate void DataCallbackDelegate(void* userData, byte* data, nuint size, double timestamp,
             bool isKeyFrame, UniencErrorNative error);

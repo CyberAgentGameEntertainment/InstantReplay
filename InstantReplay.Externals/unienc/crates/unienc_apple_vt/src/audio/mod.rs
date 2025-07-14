@@ -270,14 +270,17 @@ impl AudioConverter {
 
         let mut num_output_packets = packet_descs.len() as u32;
 
-        core(
+        let ret = core(
             self.converter,
             &mut input_data_proc,
             NonNull::new(&mut num_output_packets).unwrap(),
             NonNull::new(&mut output_buffer_list).unwrap(),
             &mut packet_descs[0],
-        )
-        .to_result()?;
+        );
+
+        if ret != FillBufferResult::Skip as i32 {
+            ret.to_result()?;
+        }
 
         return Ok(num_output_packets);
 
