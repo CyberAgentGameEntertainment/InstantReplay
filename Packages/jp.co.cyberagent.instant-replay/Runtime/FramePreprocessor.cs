@@ -11,18 +11,24 @@ namespace InstantReplay
 {
     internal class FramePreprocessor : IDisposable
     {
+        private static readonly int MainTexSt = Shader.PropertyToID("_MainTex_ST");
+        private static readonly int Rechannel = Shader.PropertyToID("_Rechannel");
         private readonly int? _fixedHeight;
         private readonly int? _fixedWidth;
         private readonly int? _maxHeight;
         private readonly int? _maxWidth;
+        private Material _material;
         private RenderTexture _output;
 
-        private FramePreprocessor(int? maxWidth, int? maxHeight, int? fixedWidth, int? fixedHeight)
+        private FramePreprocessor(int? maxWidth, int? maxHeight, int? fixedWidth, int? fixedHeight,
+            Matrix4x4 rechannelMatrix)
         {
             _maxWidth = maxWidth;
             _maxHeight = maxHeight;
             _fixedWidth = fixedWidth;
             _fixedHeight = fixedHeight;
+            _material = new Material(Resources.Load<Shader>("InstantReplayRechannel"));
+            _material.SetMatrix(Rechannel, rechannelMatrix);
         }
 
         public void Dispose()
@@ -32,21 +38,27 @@ namespace InstantReplay
                 Object.Destroy(_output);
                 _output = default;
             }
+
+            if (_material)
+            {
+                Object.Destroy(_material);
+                _material = default;
+            }
         }
 
 
-        public static FramePreprocessor WithMaxSize(int? maxWidth, int? maxHeight)
+        public static FramePreprocessor WithMaxSize(int? maxWidth, int? maxHeight, Matrix4x4 rechannelMatrix)
         {
             if (maxWidth is <= 0 || maxHeight is <= 0)
                 throw new ArgumentException("Max width and height must be greater than zero.");
-            return new FramePreprocessor(maxWidth, maxHeight, null, null);
+            return new FramePreprocessor(maxWidth, maxHeight, null, null, rechannelMatrix);
         }
 
-        public static FramePreprocessor WithFixedSize(int fixedWidth, int fixedHeight)
+        public static FramePreprocessor WithFixedSize(int fixedWidth, int fixedHeight, Matrix4x4 rechannelMatrix)
         {
             if (fixedWidth <= 0 || fixedHeight <= 0)
                 throw new ArgumentException("Fixed width and height must be greater than zero.");
-            return new FramePreprocessor(null, null, fixedWidth, fixedHeight);
+            return new FramePreprocessor(null, null, fixedWidth, fixedHeight, rechannelMatrix);
         }
 
         public RenderTexture Process(Texture source, bool needFlipVertically)
@@ -82,9 +94,11 @@ namespace InstantReplay
             var active = RenderTexture.active;
             if (needFlipVertically)
                 // We need to flip the image vertically on some platforms
-                Graphics.Blit(source, _output, renderScale * new Vector2(1f, -1f), new Vector2(0, 1f));
+                _material.SetVector(MainTexSt, new Vector4(renderScale.x, -renderScale.y, 0f, 1f));
             else
-                Graphics.Blit(source, _output, renderScale, Vector2.zero);
+                _material.SetVector(MainTexSt, new Vector4(renderScale.x, renderScale.y, 0f, 0f));
+
+            Graphics.Blit(source, _output, _material);
 
             RenderTexture.active = active;
             return _output;

@@ -132,7 +132,7 @@ namespace InstantReplay
         /// <summary>
         ///     Exports the last N seconds to a file.
         /// </summary>
-        public async Task<string> ExportLastSecondsAsync(double seconds, string outputPath)
+        public async Task<string> ExportLastSecondsAsync(double? seconds, string outputPath)
         {
             ThrowIfDisposed();
 
@@ -174,14 +174,10 @@ namespace InstantReplay
             // Wait for transfer tasks to complete
             // They will exit when encoders return empty frames
             if (_videoTransferTask != null)
-            {
                 await _videoTransferTask.ConfigureAwait(false);
-            }
 
             if (_audioTransferTask != null)
-            {
                 await _audioTransferTask.ConfigureAwait(false);
-            }
         }
 
         private void InitializeEncodingSystem()
@@ -213,7 +209,7 @@ namespace InstantReplay
                         using (frame)
                         {
                             if (exception == null)
-                                await muxer.PushVideoDataAsync(frame.Data);
+                                await muxer.PushVideoDataAsync(frame);
                         }
                     }
                     catch (Exception ex)
@@ -239,7 +235,7 @@ namespace InstantReplay
                         using (frame)
                         {
                             if (exception == null)
-                                await muxer.PushAudioDataAsync(frame.Data);
+                                await muxer.PushAudioDataAsync(frame);
                         }
                     }
                     catch (Exception ex)

@@ -88,13 +88,13 @@ namespace InstantReplay
         /// <summary>
         ///     Gets frames for the specified duration, adjusted to start from a keyframe.
         /// </summary>
-        public void GetFramesForDuration(double durationSeconds, out ReadOnlyMemory<EncodedFrame> videoFrames,
+        public void GetFramesForDuration(double? durationSeconds, out ReadOnlyMemory<EncodedFrame> videoFrames,
             out ReadOnlyMemory<EncodedFrame> audioFrames)
         {
             if (_disposed) throw new ObjectDisposedException(nameof(BoundedEncodedFrameBuffer));
 
-            ReadOnlyMemory<EncodedFrame> unprocessedVideoFrames;
-            ReadOnlyMemory<EncodedFrame> unprocessedAudioFrames;
+            Memory<EncodedFrame> unprocessedVideoFrames;
+            Memory<EncodedFrame> unprocessedAudioFrames;
             lock (_videoQueue)
             lock (_audioQueue)
             {
@@ -114,17 +114,30 @@ namespace InstantReplay
                 }
 
                 // find keyframe
-                var latest = unprocessedVideoFrames.Span[^1];
-                var expectedStartTime = latest.Timestamp - durationSeconds;
-                var minTimespan = double.MaxValue;
                 var argMinTimespan = -1;
-                for (var i = 0; i < unprocessedVideoFrames.Length; i++)
+                var latest = unprocessedVideoFrames.Span[^1];
+                if (durationSeconds is { } durationSecondsValue)
                 {
-                    if (!unprocessedVideoFrames.Span[i].IsKeyFrame) continue;
-                    var timespan = Math.Abs(unprocessedVideoFrames.Span[i].Timestamp - expectedStartTime);
-                    if (timespan >= minTimespan) continue;
-                    minTimespan = timespan;
-                    argMinTimespan = i;
+                    // TODO: binary search
+                    var expectedStartTime = latest.Timestamp - durationSecondsValue;
+                    var minTimespan = double.MaxValue;
+                    for (var i = 0; i < unprocessedVideoFrames.Length; i++)
+                    {
+                        if (!unprocessedVideoFrames.Span[i].IsKeyFrame) continue;
+                        var timespan = Math.Abs(unprocessedVideoFrames.Span[i].Timestamp - expectedStartTime);
+                        if (timespan >= minTimespan) continue;
+                        minTimespan = timespan;
+                        argMinTimespan = i;
+                    }
+                }
+                else
+                {
+                    for (var i = 0; i < unprocessedVideoFrames.Length; i++)
+                    {
+                        if (!unprocessedVideoFrames.Span[i].IsKeyFrame) continue;
+                        argMinTimespan = i;
+                        break;
+                    }
                 }
 
                 if (argMinTimespan == -1)
@@ -159,10 +172,28 @@ namespace InstantReplay
 
                 // split
 
-                videoFrames = unprocessedVideoFrames[argMinTimespan..];
-                audioFrames = unprocessedAudioFrames[argMinAudioTimespan..];
+                var videoFramesSpan = unprocessedVideoFrames[argMinTimespan..];
+                var audioFramesSpan = unprocessedAudioFrames[argMinAudioTimespan..];
                 unprocessedVideoFrames = unprocessedVideoFrames[..argMinTimespan];
                 unprocessedAudioFrames = unprocessedAudioFrames[..argMinAudioTimespan];
+
+                // adjust timestamps
+                var videoStartTime = videoFramesSpan.Span[0].Timestamp;
+                for (var i = 0; i < videoFramesSpan.Length; i++)
+                {
+                    ref var frame = ref videoFramesSpan.Span[i];
+                    frame = frame.WithTimestamp(frame.Timestamp - videoStartTime);
+                }
+
+                var audioStartTime = audioFramesSpan.Span[0].Timestamp;
+                for (var i = 0; i < audioFramesSpan.Length; i++)
+                {
+                    ref var frame = ref audioFramesSpan.Span[i];
+                    frame = frame.WithTimestamp(frame.Timestamp - audioStartTime);
+                }
+
+                videoFrames = videoFramesSpan;
+                audioFrames = audioFramesSpan;
             }
             finally
             {
@@ -193,8 +224,7 @@ namespace InstantReplay
             if (_currentMemoryUsage + requiredBytes <= _maxMemoryBytes)
                 return;
 
-            _tempFrames ??= new List<EncodedFrame>();
-            var framesToDispose = _tempFrames;
+            var framesToDispose = _tempFrames ??= new List<EncodedFrame>();
             framesToDispose.Clear();
 
             lock (_videoQueue)

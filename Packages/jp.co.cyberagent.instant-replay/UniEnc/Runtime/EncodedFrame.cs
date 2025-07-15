@@ -55,5 +55,10 @@ namespace UniEnc
             if (_rentedArray != null)
                 ArrayPool<byte>.Shared.Return(_rentedArray);
         }
+
+        public EncodedFrame WithTimestamp(double timestamp)
+        {
+            return new EncodedFrame(_rentedArray, _length, timestamp, IsKeyFrame);
+        }
     }
 }

@@ -1,11 +1,11 @@
 use std::ffi::c_void;
 
 use tokio::sync::Mutex;
-use unienc_common::{CompletionHandle, MuxerInput};
+use unienc_common::{CompletionHandle, MuxerInput, EncodedData};
 
 use crate::{
     arc_from_raw, arc_from_raw_retained,
-    platform_types::{AudioMuxerInput, MuxerCompletionHandle, VideoMuxerInput},
+    platform_types::{AudioEncodedData, AudioMuxerInput, MuxerCompletionHandle, VideoEncodedData, VideoMuxerInput},
     ApplyCallback, SendPtr, UniencCallback, UniencError, RUNTIME,
 };
 
@@ -15,6 +15,7 @@ pub unsafe extern "C" fn unienc_muxer_push_video(
     video_input: SendPtr<Mutex<Option<VideoMuxerInput>>>,
     data: SendPtr<u8>,
     size: usize,
+    timestamp: f64,
     callback: UniencCallback,
     user_data: SendPtr<c_void>,
 ) {
@@ -29,7 +30,7 @@ pub unsafe extern "C" fn unienc_muxer_push_video(
         let data_slice = std::slice::from_raw_parts(*data, size);
 
         // Deserialize the encoded data
-        let decoded_data =
+        let mut decoded_data: VideoEncodedData =
             match bincode::decode_from_slice::<_, _>(data_slice, bincode::config::standard()) {
                 Ok((data, _)) => data,
                 Err(_) => {
@@ -38,6 +39,8 @@ pub unsafe extern "C" fn unienc_muxer_push_video(
                     return;
                 }
             };
+
+        decoded_data.set_timestamp(timestamp);
 
         RUNTIME.spawn(async move {
             let mut video_input = video_input.lock().await;
@@ -61,6 +64,7 @@ pub unsafe extern "C" fn unienc_muxer_push_audio(
     audio_input: SendPtr<Mutex<Option<AudioMuxerInput>>>,
     data: SendPtr<u8>,
     size: usize,
+    timestamp: f64,
     callback: UniencCallback,
     user_data: SendPtr<c_void>,
 ) {
@@ -75,7 +79,7 @@ pub unsafe extern "C" fn unienc_muxer_push_audio(
         let data_slice = std::slice::from_raw_parts(*data, size);
 
         // Deserialize the encoded data
-        let decoded_data =
+        let mut decoded_data: AudioEncodedData =
             match bincode::decode_from_slice::<_, _>(data_slice, bincode::config::standard()) {
                 Ok((data, _)) => data,
                 Err(_) => {
@@ -84,6 +88,8 @@ pub unsafe extern "C" fn unienc_muxer_push_audio(
                     return;
                 }
             };
+
+        decoded_data.set_timestamp(timestamp);
 
         RUNTIME.spawn(async move {
             let mut audio_input = audio_input.lock().await;

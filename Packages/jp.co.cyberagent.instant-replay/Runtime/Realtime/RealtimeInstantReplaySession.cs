@@ -75,8 +75,8 @@ namespace InstantReplay
                     Channels = 2,
                     Bitrate = 128000 // 128 kbps
                 },
-                MaxMemoryUsageBytes = 128 * 1024 * 1024, // 128 MB
-                TargetFrameRate = 30.0,
+                MaxMemoryUsageBytes = 50 * 1024 * 1024, // 50 MiB
+                FixedFrameRate = 30.0,
                 VideoInputQueueSize = 5,
                 AudioInputQueueSize = 60
             };
@@ -93,7 +93,7 @@ namespace InstantReplay
         /// <returns>Path to the exported video file</returns>
         /// <exception cref="InvalidOperationException">Thrown if called when not in Recording state</exception>
         /// <exception cref="ArgumentException">Thrown if duration is not positive</exception>
-        public async Task<string> StopAndExportAsync(double seconds, string outputPath = null)
+        public async Task<string> StopAndExportAsync(double? seconds = default, string outputPath = default)
         {
             if (State != SessionState.Recording)
                 throw new InvalidOperationException(
@@ -127,7 +127,7 @@ namespace InstantReplay
                     outputPath = Path.Combine(Application.persistentDataPath, fileName);
                 }
 
-                var result = await _recorder.ExportLastSecondsAsync(seconds, outputPath);
+                var result = await _recorder.ExportLastSecondsAsync(outputPath, seconds);
 
                 State = SessionState.Completed;
                 return result;

@@ -81,7 +81,7 @@ namespace InstantReplay
                 directory,
                 frameProvider,
                 disposeFrameProvider,
-                FramePreprocessor.WithMaxSize(maxWidth, maxHeight),
+                FramePreprocessor.WithMaxSize(maxWidth, maxHeight, Matrix4x4.identity),
                 keepSeconds => { _audioRecorder?.DiscardSamples(keepSeconds); },
                 result => { _recorderCompletion.TrySetResult(result); });
         }

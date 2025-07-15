@@ -83,6 +83,7 @@ pub struct AudioSample {
 
 pub trait EncodedData: Encode + Decode<()> {
     fn timestamp(&self) -> f64;
+    fn set_timestamp(&mut self, timestamp: f64);
     fn is_key(&self) -> bool;
 }
 

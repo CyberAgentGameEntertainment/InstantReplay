@@ -1,9 +1,11 @@
 using System;
 using System.Buffers;
+using System.Diagnostics;
 using System.Threading.Channels;
 using System.Threading.Tasks;
 using Unity.Collections;
 using UnityEngine;
+using Debug = UnityEngine.Debug;
 
 namespace InstantReplay
 {
@@ -14,22 +16,23 @@ namespace InstantReplay
     {
         private const double AllowedLag = 0.1;
         private readonly Channel<AudioFrameData> _audioChannel;
-        private readonly Task _audioProcessingTask;
         private readonly IAudioSampleProvider _audioSampleProvider;
         private readonly ChannelWriter<AudioFrameData> _audioWriter;
+        private readonly double? _fixedFrameInterval;
         private readonly FramePreprocessor _framePreprocessor;
         private readonly IFrameProvider _frameProvider;
         private readonly object _lock = new();
         private readonly RealtimeEncodingOptions _options;
-        private readonly double _targetFrameInterval;
         private readonly RealtimeTranscoder _transcoder;
         private readonly Channel<VideoFrameData> _videoChannel;
-        private readonly Task _videoProcessingTask;
         private readonly ChannelWriter<VideoFrameData> _videoWriter;
+        private double? _audioTimeDifference;
         private long? _currentSamplePosition;
         private bool _disposed;
+        private double _frameTimer;
         private bool _isRecording;
-        private double _lastFrameTime;
+        private double _prevFrameTime;
+        private double? _videoTimeDifference;
 
         /// <summary>
         ///     Creates a new RealtimeRecorder with the specified options.
@@ -44,11 +47,17 @@ namespace InstantReplay
             _transcoder = new RealtimeTranscoder(options);
 
             // Initialize frame rate limiting
-            _targetFrameInterval = 1.0 / options.TargetFrameRate;
-            _lastFrameTime = 0;
+            if (options.FixedFrameRate is { } fixedFrameRate)
+                _fixedFrameInterval = 1.0 / options.FixedFrameRate;
 
             _framePreprocessor =
-                FramePreprocessor.WithFixedSize((int)options.VideoOptions.Width, (int)options.VideoOptions.Height);
+                FramePreprocessor.WithFixedSize((int)options.VideoOptions.Width, (int)options.VideoOptions.Height,
+                    // RGBA to BGRA
+                    new Matrix4x4(new Vector4(0, 0, 1, 0),
+                        new Vector4(0, 1, 0, 0),
+                        new Vector4(1, 0, 0, 0),
+                        new Vector4(0, 0, 0, 1)
+                    ));
 
             // Create bounded channels with DropOldest policy for backpressure
             _videoChannel = Channel.CreateBounded<VideoFrameData>(
@@ -70,8 +79,8 @@ namespace InstantReplay
             _audioWriter = _audioChannel.Writer;
 
             // Start background processing tasks
-            _videoProcessingTask = ProcessVideoFramesAsync();
-            _audioProcessingTask = ProcessAudioFramesAsync();
+            _ = ProcessVideoFramesAsync();
+            _ = ProcessAudioFramesAsync();
 
             _frameProvider.OnFrameProvided += OnFrameProvided;
             _audioSampleProvider.OnProvideAudioSamples += OnProvideAudioSamples;
@@ -99,16 +108,6 @@ namespace InstantReplay
                     _frameProvider.OnFrameProvided -= OnFrameProvided;
                     _audioSampleProvider.OnProvideAudioSamples -= OnProvideAudioSamples;
 
-                    // Wait for background tasks to complete
-                    try
-                    {
-                        Task.WhenAll(_videoProcessingTask, _audioProcessingTask).Wait(TimeSpan.FromSeconds(5));
-                    }
-                    catch (Exception ex)
-                    {
-                        Debug.LogException(ex);
-                    }
-
                     // Dispose resources
                     _transcoder?.Dispose();
 
@@ -119,6 +118,8 @@ namespace InstantReplay
 
         private void OnFrameProvided(IFrameProvider.Frame frame)
         {
+            var realTime = (double)Stopwatch.GetTimestamp() / Stopwatch.Frequency;
+
             if (_disposed || !_isRecording)
                 return;
 
@@ -126,8 +127,41 @@ namespace InstantReplay
             var time = frame.Timestamp;
             var needFlipVertically = frame.NeedFlipVertically;
 
-            if (ShouldLimitFrameRate(time))
-                return;
+            var deltaTime = time - _prevFrameTime;
+
+            if (deltaTime <= 0) return;
+
+            _frameTimer += deltaTime;
+            _prevFrameTime = time;
+
+            if (_fixedFrameInterval is { } fixedFrameInterval)
+            {
+                if (_frameTimer < _fixedFrameInterval) return;
+                _frameTimer %= fixedFrameInterval;
+            }
+
+            // adjust timestamp
+            if (!_videoTimeDifference.HasValue)
+            {
+                _videoTimeDifference = time - realTime;
+                time = realTime;
+            }
+            else
+            {
+                var expectedTime = realTime + _videoTimeDifference.Value;
+                var diff = time - expectedTime;
+                if (Math.Abs(diff) >= AllowedLag)
+                {
+                    Debug.LogWarning(
+                        "Video timestamp adjusted. The timestamp IFrameProvider provided may not be realtime.");
+                    _videoTimeDifference = time - realTime;
+                    time = realTime;
+                }
+                else
+                {
+                    time -= _videoTimeDifference.Value;
+                }
+            }
 
             var renderTexture = _framePreprocessor.Process(texture, needFlipVertically);
             var nativeArrayData = RealtimeFrameReadback.ReadbackFrameAsync(renderTexture);
@@ -136,8 +170,11 @@ namespace InstantReplay
 
             // Try to write to channel (non-blocking)
             if (!_videoWriter.TryWrite(frameData))
+            {
                 // Channel is full, frame will be dropped
                 _ = DisposeFrame(frameData);
+                Debug.LogWarning("Video frame dropped due to full channel.");
+            }
 
             return;
 
@@ -150,8 +187,33 @@ namespace InstantReplay
         private void OnProvideAudioSamples(ReadOnlySpan<float> samples, int channels, int sampleRate,
             double timestamp)
         {
+            var realTime = (double)Stopwatch.GetTimestamp() / Stopwatch.Frequency;
+
             if (_disposed || !_isRecording || samples == null || samples.Length == 0)
                 return;
+
+            // adjust timestamp
+            if (!_audioTimeDifference.HasValue)
+            {
+                _audioTimeDifference = timestamp - realTime;
+                timestamp = realTime;
+            }
+            else
+            {
+                var expectedTime = realTime + _audioTimeDifference.Value;
+                var diff = timestamp - expectedTime;
+                if (Math.Abs(diff) >= AllowedLag)
+                {
+                    Debug.LogWarning(
+                        "Audio timestamp adjusted. The timestamp IAudioSampleProvider provided may not be realtime.");
+                    _audioTimeDifference = timestamp - realTime;
+                    timestamp = realTime;
+                }
+                else
+                {
+                    timestamp -= _audioTimeDifference.Value;
+                }
+            }
 
             var numSamples = samples.Length / channels;
             var sampleRateInOption = _options.AudioOptions.SampleRate;
@@ -201,10 +263,13 @@ namespace InstantReplay
             var frameData = new AudioFrameData(writeBufferArray, writeBufferArray.AsMemory(0, writeLength), timestamp);
 
             if (!_audioWriter.TryWrite(frameData))
+            {
                 // Channel is full, frame will be dropped
                 frameData.Dispose();
-            else
-                _currentSamplePosition = currentSamplePosition + numScaledSamples + blankOrSkip;
+                Debug.LogWarning("Audio frame dropped due to full channel.");
+            }
+
+            _currentSamplePosition = currentSamplePosition + numScaledSamples + blankOrSkip;
         }
 
 
@@ -242,30 +307,12 @@ namespace InstantReplay
         /// <summary>
         ///     Exports the last N seconds to a file.
         /// </summary>
-        public async Task<string> ExportLastSecondsAsync(double seconds, string outputPath)
+        public async Task<string> ExportLastSecondsAsync(string outputPath, double? maxSeconds = null)
         {
             if (_disposed)
                 throw new ObjectDisposedException(nameof(RealtimeRecorder));
 
-            return await _transcoder.ExportLastSecondsAsync(seconds, outputPath);
-        }
-
-        /// <summary>
-        ///     Determines if the frame rate should be limited at the given time.
-        /// </summary>
-        /// <param name="currentTime">Current timestamp in seconds</param>
-        /// <returns>True if the frame should be dropped to maintain target frame rate</returns>
-        private bool ShouldLimitFrameRate(double currentTime)
-        {
-            var timeSinceLastFrame = currentTime - _lastFrameTime;
-
-            // Drop frame if we're running faster than target frame rate
-            // Use 90% of target interval to provide some buffer
-            if (timeSinceLastFrame < _targetFrameInterval * 0.9)
-                return true; // Drop this frame
-
-            _lastFrameTime = currentTime;
-            return false; // Process this frame
+            return await _transcoder.ExportLastSecondsAsync(maxSeconds, outputPath);
         }
 
         private async Task ProcessVideoFramesAsync()

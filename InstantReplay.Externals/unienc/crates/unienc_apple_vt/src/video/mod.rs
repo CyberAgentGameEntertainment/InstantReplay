@@ -9,7 +9,7 @@ use objc2_core_foundation::{
 use objc2_core_media::{
     CMSampleBuffer, CMTime, kCMSampleAttachmentKey_NotSync, kCMTimeInvalid, kCMVideoCodecType_H264,
 };
-use objc2_core_video::{kCVPixelFormatType_32ARGB, CVPixelBuffer, CVPixelBufferCreateWithBytes};
+use objc2_core_video::{kCVPixelFormatType_32ARGB, kCVPixelFormatType_32BGRA, CVPixelBuffer, CVPixelBufferCreateWithBytes};
 use objc2_video_toolbox::{
     VTCompressionSession, VTEncodeInfoFlags, VTSessionSetProperty,
     kVTCompressionPropertyKey_AllowFrameReordering, kVTCompressionPropertyKey_RealTime,
@@ -69,11 +69,15 @@ impl VideoEncodedData {
 
 impl EncodedData for VideoEncodedData {
     fn timestamp(&self) -> f64 {
-        unsafe { self.sample_buffer.presentation_time_stamp().seconds() }
+        unsafe { self.sample_buffer.output_presentation_time_stamp().seconds() }
     }
 
     fn is_key(&self) -> bool {
         !self.not_sync
+    }
+    
+    fn set_timestamp(&mut self, timestamp: f64) {
+        unsafe { self.sample_buffer.set_output_presentation_time_stamp(CMTime::with_seconds(timestamp, 240)) };
     }
 }
 
@@ -116,7 +120,7 @@ impl EncoderInput for VideoToolboxEncoderInput {
                 kCFAllocatorDefault,
                 data.width as usize,
                 data.height as usize,
-                kCVPixelFormatType_32ARGB,
+                kCVPixelFormatType_32BGRA,
                 NonNull::new(pixel_data_ptr as *mut c_void)
                     .context("Failed to create NonNull from pixel data pointer")?,
                 (data.width * 4) as usize,

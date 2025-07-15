@@ -12,7 +12,7 @@ namespace InstantReplay
         public VideoEncoderOptions VideoOptions { get; set; }
         public AudioEncoderOptions AudioOptions { get; set; }
 
-        public double TargetFrameRate { get; set; }
+        public double? FixedFrameRate { get; set; }
 
         public int VideoInputQueueSize { get; set; }
         public int AudioInputQueueSize { get; set; }

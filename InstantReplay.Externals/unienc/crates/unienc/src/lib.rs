@@ -277,6 +277,8 @@ compile_error!(
 );
 
 mod platform_types {
+    use unienc_common::EncoderOutput;
+
     type VideoEncoder =
         <crate::PlatformEncodingSystem as unienc_common::EncodingSystem>::VideoEncoderType;
     pub type VideoEncoderInput = <VideoEncoder as unienc_common::Encoder>::InputType;
@@ -289,6 +291,9 @@ mod platform_types {
     pub type VideoMuxerInput = <Muxer as unienc_common::Muxer>::VideoInputType;
     pub type AudioMuxerInput = <Muxer as unienc_common::Muxer>::AudioInputType;
     pub type MuxerCompletionHandle = <Muxer as unienc_common::Muxer>::CompletionHandleType;
+
+    pub type VideoEncodedData = <VideoEncoderOutput as EncoderOutput>::Data;
+    pub type AudioEncodedData = <AudioEncoderOutput as EncoderOutput>::Data;
 }
 
 use platform_types::*;

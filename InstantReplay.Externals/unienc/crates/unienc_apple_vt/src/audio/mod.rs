@@ -153,6 +153,10 @@ impl EncodedData for AudioPacket {
     fn is_key(&self) -> bool {
         true
     }
+
+    fn set_timestamp(&mut self, timestamp: f64) {
+        self.timestamp_in_samples = (timestamp * self.sample_rate as f64) as u64;
+    }
 }
 
 struct AudioConverter {

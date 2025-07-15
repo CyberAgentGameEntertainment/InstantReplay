@@ -34,31 +34,24 @@ namespace UniEnc
         /// <summary>
         ///     Pushes encoded video data to the muxer.
         /// </summary>
-        /// <param name="encodedData">Encoded video data from the video encoder</param>
-        public ValueTask PushVideoDataAsync(byte[] encodedData)
-        {
-            return PushVideoDataAsync(encodedData.AsSpan());
-        }
-
-        /// <summary>
-        ///     Pushes encoded video data to the muxer.
-        /// </summary>
-        /// <param name="encodedData">Encoded video data from the video encoder</param>
-        public ValueTask PushVideoDataAsync(ReadOnlySpan<byte> encodedData)
+        /// <param name="frame">Encoded video data from the video encoder</param>
+        public ValueTask PushVideoDataAsync(in EncodedFrame frame)
         {
             ThrowIfDisposed();
 
             var context = CallbackHelper.SimpleCallbackContext.Rent();
             var contextHandle = CallbackHelper.CreateSendPtr(context);
+            var data = frame.Data;
 
             unsafe
             {
-                fixed (byte* dataPtr = encodedData)
+                fixed (byte* dataPtr = data)
                 {
                     NativeMethods.unienc_muxer_push_video(
                         _videoInputHandle,
                         (nint)dataPtr,
-                        (nuint)encodedData.Length,
+                        (nuint)data.Length,
+                        frame.Timestamp,
                         CallbackHelper.GetSimpleCallbackPtr(),
                         contextHandle);
                 }
@@ -70,31 +63,24 @@ namespace UniEnc
         /// <summary>
         ///     Pushes encoded audio data to the muxer.
         /// </summary>
-        /// <param name="encodedData">Encoded audio data from the audio encoder</param>
-        public ValueTask PushAudioDataAsync(byte[] encodedData)
-        {
-            return PushAudioDataAsync(encodedData.AsSpan());
-        }
-
-        /// <summary>
-        ///     Pushes encoded audio data to the muxer.
-        /// </summary>
-        /// <param name="encodedData">Encoded audio data from the audio encoder</param>
-        public ValueTask PushAudioDataAsync(ReadOnlySpan<byte> encodedData)
+        /// <param name="frame">Encoded audio data from the audio encoder</param>
+        public ValueTask PushAudioDataAsync(EncodedFrame frame)
         {
             ThrowIfDisposed();
 
             var context = CallbackHelper.SimpleCallbackContext.Rent();
             var contextHandle = CallbackHelper.CreateSendPtr(context);
+            var data = frame.Data;
 
             unsafe
             {
-                fixed (byte* dataPtr = encodedData)
+                fixed (byte* dataPtr = data)
                 {
                     NativeMethods.unienc_muxer_push_audio(
                         _audioInputHandle,
                         (nint)dataPtr,
-                        (nuint)encodedData.Length,
+                        (nuint)data.Length,
+                        frame.Timestamp,
                         CallbackHelper.GetSimpleCallbackPtr(),
                         contextHandle);
                 }
