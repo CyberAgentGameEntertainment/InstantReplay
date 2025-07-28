@@ -3,12 +3,14 @@ use std::{ffi::c_void, ptr::NonNull};
 use anyhow::Result;
 use bincode::{Decode, Encode};
 use objc2_audio_toolbox::{
-    kAudioConverterPropertyMaximumOutputPacketSize, AudioConverterDispose, AudioConverterFillComplexBuffer, AudioConverterGetProperty, AudioConverterGetPropertyInfo, AudioConverterNew, AudioConverterPropertyID, AudioConverterRef
+    kAudioConverterCompressionMagicCookie, kAudioConverterPropertyMaximumOutputPacketSize,
+    AudioConverterDispose, AudioConverterFillComplexBuffer, AudioConverterGetProperty,
+    AudioConverterGetPropertyInfo, AudioConverterNew, AudioConverterPropertyID, AudioConverterRef,
 };
 use objc2_core_audio_types::{
-    AudioBuffer, AudioBufferList, AudioStreamBasicDescription, AudioStreamPacketDescription,
     kAudioFormatFlagIsPacked, kAudioFormatFlagIsSignedInteger, kAudioFormatLinearPCM,
-    kAudioFormatMPEG4AAC,
+    kAudioFormatMPEG4AAC, AudioBuffer, AudioBufferList, AudioStreamBasicDescription,
+    AudioStreamPacketDescription, MPEG4ObjectID,
 };
 use tokio::sync::mpsc;
 use unienc_common::{AudioSample, EncodedData, Encoder, EncoderInput, EncoderOutput};
@@ -25,6 +27,7 @@ pub struct AudioToolboxEncoderInput {
     converter: AudioConverter,
     max_output_packet_size: u32,
     sample_rate: u32,
+    last_data: Option<AudioSample>,
 }
 
 unsafe impl Send for AudioToolboxEncoderInput {}
@@ -33,11 +36,12 @@ pub struct AudioToolboxEncoderOutput {
     rx: mpsc::Receiver<AudioPacket>,
 }
 
-#[derive(Encode, Decode)]
+#[derive(Encode, Decode, Clone)]
 pub struct AudioPacket {
     pub data: Vec<u8>,
     pub timestamp_in_samples: u64,
     pub sample_rate: u32,
+    pub magic_cookie: Vec<u8>,
 }
 
 impl Encoder for AudioToolboxEncoder {
@@ -61,7 +65,9 @@ impl EncoderInput for AudioToolboxEncoderInput {
         let mut packet_descs =
             vec![unsafe { std::mem::zeroed::<AudioStreamPacketDescription>() }; max_output_packets];
 
-        let mut sample = Some(data);
+        let data_cloned = data.clone();
+
+        let mut sample = Some(&data_cloned);
 
         while {
             let num_output_packets = self.converter.fill_complex_buffer(
@@ -69,6 +75,10 @@ impl EncoderInput for AudioToolboxEncoderInput {
                 &mut output_buffer_data,
                 &mut packet_descs,
             )?;
+
+            let magic_cookie = self
+                .converter
+                .get_property_raw(kAudioConverterCompressionMagicCookie)?;
 
             let packet_descs = &packet_descs[..num_output_packets as usize];
 
@@ -79,12 +89,16 @@ impl EncoderInput for AudioToolboxEncoderInput {
                         .to_vec(),
                     timestamp_in_samples: data.timestamp_in_samples,
                     sample_rate: self.sample_rate,
+                    magic_cookie: magic_cookie.clone(),
                 };
                 self.tx.send(packet).await?;
             }
 
             sample.is_some()
         } {}
+
+        // we need to keep the data until next fill_complex_buffer call
+        self.last_data = Some(data_cloned);
         Ok(())
     }
 }
@@ -106,7 +120,7 @@ impl AudioToolboxEncoder {
         let mut to = AudioStreamBasicDescription {
             mSampleRate: options.sample_rate() as f64,
             mFormatID: kAudioFormatMPEG4AAC,
-            mFormatFlags: 0,
+            mFormatFlags: MPEG4ObjectID::AAC_LC.0 as u32,
             mBytesPerPacket: 0,
             mFramesPerPacket: 1024,
             mBytesPerFrame: 0,
@@ -131,6 +145,7 @@ impl AudioToolboxEncoder {
                 converter,
                 max_output_packet_size,
                 sample_rate: options.sample_rate(),
+                last_data: None,
             },
             output: AudioToolboxEncoderOutput { rx },
         })
@@ -149,7 +164,7 @@ impl EncodedData for AudioPacket {
     fn timestamp(&self) -> f64 {
         self.timestamp_in_samples as f64 / self.sample_rate as f64
     }
-    
+
     fn is_key(&self) -> bool {
         true
     }
@@ -208,16 +223,16 @@ impl AudioConverter {
     }
 
     #[allow(dead_code)]
-    fn get_property_raw(
-        &self,
-        property_id: AudioConverterPropertyID,
-    ) -> Result<Vec<u8>> {
+    fn get_property_raw(&self, property_id: AudioConverterPropertyID) -> Result<Vec<u8>> {
         let mut size = 0_u32;
         let mut writable: u8 = 0;
-        unsafe { AudioConverterGetPropertyInfo(self.converter, property_id, &mut size, &mut writable).to_result() }?;
-        
+        unsafe {
+            AudioConverterGetPropertyInfo(self.converter, property_id, &mut size, &mut writable)
+                .to_result()
+        }?;
+
         let mut data = vec![0_u8; size as usize];
-        
+
         unsafe {
             AudioConverterGetProperty(
                 self.converter,
@@ -261,7 +276,7 @@ impl AudioConverter {
                     return FillBufferResult::Skip as i32;
                 };
 
-                let num_input_packets = sample.data.len() / self.from.mBytesPerPacket as usize;
+                let num_input_packets = sample.data.len() * 2 / self.from.mBytesPerPacket as usize;
 
                 data.mNumberBuffers = 1;
                 data.mBuffers[0].mNumberChannels = self.from.mChannelsPerFrame;

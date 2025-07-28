@@ -16,9 +16,10 @@ pub unsafe extern "C" fn unienc_audio_encoder_push(
     data: SendPtr<i16>,
     sample_count: usize,
     timestamp_in_samples: u64,
-    callback: UniencCallback,
+    callback: usize, /*UniencCallback*/
     user_data: SendPtr<c_void>,
 ) {
+    let callback: UniencCallback = std::mem::transmute(callback);
     if input.is_null() || data.is_null() {
         UniencError::invalid_input_error("Invalid input parameters")
             .apply_callback(callback, user_data);
@@ -49,9 +50,10 @@ pub unsafe extern "C" fn unienc_audio_encoder_push(
 #[no_mangle]
 pub unsafe extern "C" fn unienc_audio_encoder_pull(
     output: SendPtr<Mutex<Option<AudioEncoderOutput>>>,
-    callback: UniencDataCallback,
+    callback: usize, /*UniencDataCallback*/
     user_data: SendPtr<c_void>,
 ) {
+    let callback: UniencDataCallback = std::mem::transmute(callback);
     if output.is_null() {
         UniencError::invalid_input_error("Invalid input parameters")
             .apply_callback(callback, user_data);

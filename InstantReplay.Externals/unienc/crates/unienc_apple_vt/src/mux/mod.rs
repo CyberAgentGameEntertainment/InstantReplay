@@ -1,5 +1,5 @@
 use std::cell::RefCell;
-use std::ffi::c_char;
+use std::ffi::{c_char, c_void};
 use std::fs;
 use std::{path::Path, ptr::NonNull};
 
@@ -12,20 +12,20 @@ use objc2_av_foundation::{
     AVMediaTypeVideo,
 };
 use objc2_core_audio_types::{
-    AudioStreamBasicDescription, AudioStreamPacketDescription, kAudioFormatMPEG4AAC,
+    kAudioFormatMPEG4AAC, AudioStreamBasicDescription, AudioStreamPacketDescription, MPEG4ObjectID,
 };
 use objc2_core_foundation::kCFAllocatorDefault;
 use objc2_core_media::{
+    kCMBlockBufferAssureMemoryNowFlag, kCMTimeZero, kCMVideoCodecType_H264,
     CMAudioFormatDescriptionCreate, CMAudioSampleBufferCreateReadyWithPacketDescriptions,
     CMBlockBuffer, CMFormatDescription, CMSampleBuffer, CMTime, CMVideoFormatDescriptionCreate,
-    kCMBlockBufferAssureMemoryNowFlag, kCMTimeZero, kCMVideoCodecType_H264,
 };
 use objc2_foundation::{NSString, NSURL};
 use tokio::sync::{mpsc, oneshot};
-use unienc_common::{Muxer, CompletionHandle, MuxerInput};
+use unienc_common::{CompletionHandle, Muxer, MuxerInput};
 
-use crate::OsStatus;
 use crate::common::UnsafeSendRetained;
+use crate::OsStatus;
 use crate::{audio::AudioPacket, video::VideoEncodedData};
 
 pub struct AVFMuxer {
@@ -43,6 +43,7 @@ pub struct AVFMuxerAudioInput {
     asbd: AudioStreamBasicDescription,
     tx: mpsc::Sender<UnsafeSendRetained<CMSampleBuffer>>,
     finish_rx: oneshot::Receiver<Result<()>>,
+    magic_cookie_applied: bool,
 }
 
 impl MuxerInput for AVFMuxerVideoInput {
@@ -67,7 +68,9 @@ impl MuxerInput for AVFMuxerAudioInput {
     type Data = AudioPacket;
 
     async fn push(&mut self, data: Self::Data) -> Result<()> {
-        let sample_buffer = create_audio_sample_buffer(&data, &mut self.asbd)?;
+        let sample_buffer =
+            create_audio_sample_buffer(&data, &mut self.asbd, !self.magic_cookie_applied)?;
+        self.magic_cookie_applied = true;
         self.tx.send(sample_buffer.into()).await?;
 
         Ok(())
@@ -130,7 +133,11 @@ impl Muxer for AVFMuxer {
 }
 
 impl AVFMuxer {
-    pub fn new<P: AsRef<Path>>(output_path: P, video_options: &impl unienc_common::VideoEncoderOptions, audio_options: &impl unienc_common::AudioEncoderOptions) -> Result<Self> {
+    pub fn new<P: AsRef<Path>>(
+        output_path: P,
+        video_options: &impl unienc_common::VideoEncoderOptions,
+        audio_options: &impl unienc_common::AudioEncoderOptions,
+    ) -> Result<Self> {
         let path = output_path.as_ref();
         _ = fs::remove_file(path);
         let url =
@@ -165,11 +172,11 @@ impl AVFMuxer {
         let mut asbd = AudioStreamBasicDescription {
             mSampleRate: audio_options.sample_rate() as f64,
             mFormatID: kAudioFormatMPEG4AAC,
-            mFormatFlags: 0,
+            mFormatFlags: MPEG4ObjectID::AAC_LC.0 as u32,
             mBytesPerPacket: 0,
             mFramesPerPacket: 1024,
             mBytesPerFrame: 0,
-            mChannelsPerFrame: 2,
+            mChannelsPerFrame: audio_options.channels(),
             mBitsPerChannel: 0,
             mReserved: 0,
         };
@@ -282,13 +289,16 @@ impl AVFMuxer {
                 asbd,
                 tx: audio_tx,
                 finish_rx: audio_finish_rx,
+                magic_cookie_applied: false,
             },
         })
     }
 }
+
 fn create_audio_sample_buffer(
     audio: &AudioPacket,
     asbd: &mut AudioStreamBasicDescription,
+    apply_magic_cookie: bool,
 ) -> Result<Retained<CMSampleBuffer>> {
     let format_desc = unsafe {
         let mut format_desc: *const CMFormatDescription = std::ptr::null();
@@ -297,13 +307,21 @@ fn create_audio_sample_buffer(
             NonNull::new(asbd).unwrap(),
             0,
             std::ptr::null(),
-            0,
-            std::ptr::null(),
+            if apply_magic_cookie {
+                audio.magic_cookie.len()
+            } else {
+                0
+            },
+            if apply_magic_cookie {
+                audio.magic_cookie.as_ptr() as *const c_void
+            } else {
+                std::ptr::null()
+            },
             None,
             NonNull::new(&mut format_desc).unwrap(),
         )
         .to_result()?;
-        format_desc
+        Retained::from_raw(format_desc as _).unwrap()
     };
 
     let block_buffer = unsafe {
@@ -321,7 +339,7 @@ fn create_audio_sample_buffer(
             NonNull::new(&mut block_buffer).unwrap(),
         )
         .to_result()?;
-        block_buffer
+        Retained::from_raw(block_buffer).unwrap()
     };
 
     let mut length_at_offset_out = 0_usize;
@@ -330,7 +348,7 @@ fn create_audio_sample_buffer(
     let mut data_t = audio.data.as_slice();
     while !data_t.is_empty() {
         unsafe {
-            (*block_buffer).data_pointer(
+            block_buffer.data_pointer(
                 0,
                 &mut length_at_offset_out,
                 &mut total_length_out,
@@ -338,7 +356,7 @@ fn create_audio_sample_buffer(
             );
         }
 
-        assert!(total_length_out == data_t.len());
+        assert_eq!(total_length_out, data_t.len());
 
         let buffer = unsafe {
             std::slice::from_raw_parts_mut::<u8>(data_pointer_out as *mut u8, length_at_offset_out)
@@ -361,8 +379,8 @@ fn create_audio_sample_buffer(
         let mut sample_buffer: *mut CMSampleBuffer = std::ptr::null_mut();
         CMAudioSampleBufferCreateReadyWithPacketDescriptions(
             kCFAllocatorDefault,
-            &*block_buffer,
-            &*format_desc,
+            &block_buffer,
+            &format_desc,
             1_isize,
             timestamp,
             &packet_desc as *const _,

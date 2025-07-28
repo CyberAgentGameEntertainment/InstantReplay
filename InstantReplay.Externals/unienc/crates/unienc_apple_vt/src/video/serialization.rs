@@ -6,17 +6,16 @@ use std::{
 use bincode::{Decode, Encode};
 use objc2::rc::Retained;
 use objc2_core_foundation::{
-    CFMutableDictionary, CFString, CFType, kCFAllocatorDefault,
-    kCFBooleanTrue,
+    kCFAllocatorDefault, kCFBooleanTrue, CFMutableDictionary, CFString, CFType,
 };
 use objc2_core_media::{
+    kCMBlockBufferAssureMemoryNowFlag, kCMSampleAttachmentKey_NotSync, kCMVideoCodecType_H264,
     CMBlockBuffer, CMFormatDescription, CMSampleBuffer, CMSampleTimingInfo, CMTime, CMTimeFlags,
     CMVideoFormatDescription, CMVideoFormatDescriptionCreateFromH264ParameterSets,
-    CMVideoFormatDescriptionGetH264ParameterSetAtIndex, kCMBlockBufferAssureMemoryNowFlag,
-    kCMSampleAttachmentKey_NotSync, kCMVideoCodecType_H264,
+    CMVideoFormatDescriptionGetH264ParameterSetAtIndex,
 };
 
-use crate::{OsStatus, video::VideoEncodedData};
+use crate::{video::VideoEncodedData, OsStatus};
 
 #[derive(Encode, Decode, Clone, Copy, Debug, PartialEq)]
 struct CMTimeForSerialization {
@@ -96,7 +95,9 @@ impl Encode for VideoEncodedData {
         encoder: &mut E,
     ) -> std::result::Result<(), bincode::error::EncodeError> {
         if unsafe { self.sample_buffer.num_samples() } != 1 {
-            return Err(bincode::error::EncodeError::OtherString("not supported".to_string()));
+            return Err(bincode::error::EncodeError::OtherString(
+                "not supported".to_string(),
+            ));
         }
 
         let data_buffer = unsafe { self.sample_buffer.data_buffer() };
@@ -255,7 +256,7 @@ impl Decode<()> for VideoEncodedData {
                             err
                         ))
                     })?;
-                    block_buffer
+                    Retained::from_raw(block_buffer).unwrap()
                 };
 
                 let mut length_at_offset_out = 0_usize;
@@ -286,7 +287,7 @@ impl Decode<()> for VideoEncodedData {
                     data_t = &data_t[buffer.len()..];
                 }
 
-                unsafe { Some(&*block_buffer) }
+                Some(block_buffer)
             }
             None => None,
         };
@@ -333,10 +334,17 @@ impl Decode<()> for VideoEncodedData {
         };
         let sample_buffer = unsafe {
             let mut sample_buffer_out = std::ptr::null_mut();
+            let (data_buffer_ptr, _data_buffer) = match data_buffer {
+                Some(data_buffer) => {
+                    let ptr = Retained::into_raw(data_buffer);
+                    (Some(&*ptr), Retained::from_raw(ptr))
+                }
+                None => (None, None),
+            };
 
             CMSampleBuffer::create_ready(
                 kCFAllocatorDefault,
-                data_buffer,
+                data_buffer_ptr,
                 Some(&format_description),
                 1,
                 1,

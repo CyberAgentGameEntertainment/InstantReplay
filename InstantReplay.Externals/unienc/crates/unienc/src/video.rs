@@ -18,9 +18,10 @@ pub unsafe extern "C" fn unienc_video_encoder_push(
     width: u32,
     height: u32,
     timestamp: f64,
-    callback: UniencCallback,
+    callback: usize, /*UniencCallback*/
     user_data: SendPtr<c_void>,
 ) {
+    let callback: UniencCallback = std::mem::transmute(callback);
     if input.is_null() || data.is_null() {
         UniencError::invalid_input_error("Invalid input parameters")
             .apply_callback(callback, user_data);
@@ -31,21 +32,21 @@ pub unsafe extern "C" fn unienc_video_encoder_push(
         RUNTIME.spawn(async move {
             let input = arc_from_raw_retained(*input);
             let mut input = input.lock().await;
-                let data_slice = std::slice::from_raw_parts(*data, data_size);
-                let sample = VideoSample {
-                    data: data_slice.to_vec(),
-                    width,
-                    height,
-                    timestamp,
-                };
+            let data_slice = std::slice::from_raw_parts(*data, data_size);
+            let sample = VideoSample {
+                data: data_slice.to_vec(),
+                width,
+                height,
+                timestamp,
+            };
 
-                let result = match input
-                    .as_mut()
-                    .ok_or(UniencError::resource_allocation_error("Resource is None"))
-                {
-                    Ok(input) => input.push(&sample).await.map_err(UniencError::from_anyhow),
-                    Err(err) => Err(err),
-                };
+            let result = match input
+                .as_mut()
+                .ok_or(UniencError::resource_allocation_error("Resource is None"))
+            {
+                Ok(input) => input.push(&sample).await.map_err(UniencError::from_anyhow),
+                Err(err) => Err(err),
+            };
 
             result.apply_callback(callback, user_data);
         });
@@ -55,9 +56,10 @@ pub unsafe extern "C" fn unienc_video_encoder_push(
 #[no_mangle]
 pub unsafe extern "C" fn unienc_video_encoder_pull(
     output: SendPtr<Mutex<Option<VideoEncoderOutput>>>,
-    callback: UniencDataCallback,
+    callback: usize, /*UniencDataCallback*/
     user_data: SendPtr<c_void>,
 ) {
+    let callback: UniencDataCallback = std::mem::transmute(callback);
     if output.is_null() {
         UniencError::invalid_input_error("Invalid input parameters")
             .apply_callback(callback, user_data);
@@ -69,14 +71,14 @@ pub unsafe extern "C" fn unienc_video_encoder_pull(
     RUNTIME.spawn(async move {
         let mut output = output.lock().await;
         let result = match output
-                .as_mut()
-                .ok_or(UniencError::resource_allocation_error("Resource is None"))
-            {
-                Ok(output) => {
-                    let result = output.pull().await.map_err(UniencError::from_anyhow);
-                    result
-                },
-                Err(err) => Err(err),
+            .as_mut()
+            .ok_or(UniencError::resource_allocation_error("Resource is None"))
+        {
+            Ok(output) => {
+                let result = output.pull().await.map_err(UniencError::from_anyhow);
+                result
+            }
+            Err(err) => Err(err),
         };
         result.apply_callback(callback, user_data);
     });

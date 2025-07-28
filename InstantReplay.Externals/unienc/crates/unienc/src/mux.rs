@@ -1,11 +1,13 @@
 use std::ffi::c_void;
 
 use tokio::sync::Mutex;
-use unienc_common::{CompletionHandle, MuxerInput, EncodedData};
+use unienc_common::{CompletionHandle, EncodedData, MuxerInput};
 
 use crate::{
     arc_from_raw, arc_from_raw_retained,
-    platform_types::{AudioEncodedData, AudioMuxerInput, MuxerCompletionHandle, VideoEncodedData, VideoMuxerInput},
+    platform_types::{
+        AudioEncodedData, AudioMuxerInput, MuxerCompletionHandle, VideoEncodedData, VideoMuxerInput,
+    },
     ApplyCallback, SendPtr, UniencCallback, UniencError, RUNTIME,
 };
 
@@ -16,9 +18,10 @@ pub unsafe extern "C" fn unienc_muxer_push_video(
     data: SendPtr<u8>,
     size: usize,
     timestamp: f64,
-    callback: UniencCallback,
+    callback: usize, /*UniencCallback*/
     user_data: SendPtr<c_void>,
 ) {
+    let callback: UniencCallback = std::mem::transmute(callback);
     if video_input.is_null() || data.is_null() {
         UniencError::invalid_input_error("Invalid input parameters")
             .apply_callback(callback, user_data);
@@ -65,9 +68,10 @@ pub unsafe extern "C" fn unienc_muxer_push_audio(
     data: SendPtr<u8>,
     size: usize,
     timestamp: f64,
-    callback: UniencCallback,
+    callback: usize, /*UniencCallback*/
     user_data: SendPtr<c_void>,
 ) {
+    let callback: UniencCallback = std::mem::transmute(callback);
     if audio_input.is_null() || data.is_null() {
         UniencError::invalid_input_error("Invalid input parameters")
             .apply_callback(callback, user_data);
@@ -111,9 +115,10 @@ pub unsafe extern "C" fn unienc_muxer_push_audio(
 #[no_mangle]
 pub unsafe extern "C" fn unienc_muxer_finish_video(
     video_input: SendPtr<Mutex<Option<VideoMuxerInput>>>,
-    callback: UniencCallback,
+    callback: usize, /*UniencCallback*/
     user_data: SendPtr<c_void>,
 ) {
+    let callback: UniencCallback = std::mem::transmute(callback);
     if video_input.is_null() {
         UniencError::invalid_input_error("Invalid input parameters")
             .apply_callback(callback, user_data);
@@ -128,10 +133,7 @@ pub unsafe extern "C" fn unienc_muxer_finish_video(
             .take()
             .ok_or(UniencError::resource_allocation_error("Resource is None"))
         {
-            Ok(video_input) => video_input
-                .finish()
-                .await
-                .map_err(UniencError::from_anyhow),
+            Ok(video_input) => video_input.finish().await.map_err(UniencError::from_anyhow),
             Err(err) => Err(err),
         };
         result.apply_callback(callback, user_data);
@@ -141,9 +143,10 @@ pub unsafe extern "C" fn unienc_muxer_finish_video(
 #[no_mangle]
 pub unsafe extern "C" fn unienc_muxer_finish_audio(
     audio_input: SendPtr<Mutex<Option<AudioMuxerInput>>>,
-    callback: UniencCallback,
+    callback: usize, /*UniencCallback*/
     user_data: SendPtr<c_void>,
 ) {
+    let callback: UniencCallback = std::mem::transmute(callback);
     if audio_input.is_null() {
         UniencError::invalid_input_error("Invalid input parameters")
             .apply_callback(callback, user_data);
@@ -168,9 +171,10 @@ pub unsafe extern "C" fn unienc_muxer_finish_audio(
 #[no_mangle]
 pub unsafe extern "C" fn unienc_muxer_complete(
     completion_handle: SendPtr<Mutex<Option<MuxerCompletionHandle>>>,
-    callback: UniencCallback,
+    callback: usize, /*UniencCallback*/
     user_data: SendPtr<c_void>,
 ) {
+    let callback: UniencCallback = std::mem::transmute(callback);
     if completion_handle.is_null() {
         UniencError::invalid_input_error("Invalid input parameters")
             .apply_callback(callback, user_data);

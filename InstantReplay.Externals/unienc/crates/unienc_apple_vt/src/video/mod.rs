@@ -4,20 +4,20 @@ use std::{ffi::c_void, ptr::NonNull};
 use anyhow::{Context, Result};
 use objc2::rc::Retained;
 use objc2_core_foundation::{
-    kCFAllocatorDefault, kCFBooleanFalse, kCFBooleanTrue, CFBoolean, CFDictionary, CFString, CFType
+    kCFAllocatorDefault, kCFBooleanFalse, kCFBooleanTrue, CFBoolean, CFDictionary, CFString, CFType,
 };
 use objc2_core_media::{
-    CMSampleBuffer, CMTime, kCMSampleAttachmentKey_NotSync, kCMTimeInvalid, kCMVideoCodecType_H264,
+    kCMSampleAttachmentKey_NotSync, kCMTimeInvalid, kCMVideoCodecType_H264, CMSampleBuffer, CMTime,
 };
-use objc2_core_video::{kCVPixelFormatType_32ARGB, kCVPixelFormatType_32BGRA, CVPixelBuffer, CVPixelBufferCreateWithBytes};
+use objc2_core_video::{kCVPixelFormatType_32BGRA, CVPixelBuffer, CVPixelBufferCreateWithBytes};
 use objc2_video_toolbox::{
-    VTCompressionSession, VTEncodeInfoFlags, VTSessionSetProperty,
     kVTCompressionPropertyKey_AllowFrameReordering, kVTCompressionPropertyKey_RealTime,
+    VTCompressionSession, VTEncodeInfoFlags, VTSessionSetProperty,
 };
 use tokio::sync::mpsc;
 use unienc_common::{EncodedData, Encoder, EncoderInput, EncoderOutput, VideoSample};
 
-use crate::{OsStatus, common::UnsafeSendRetained};
+use crate::{common::UnsafeSendRetained, OsStatus};
 
 pub struct VideoToolboxEncoder {
     input: VideoToolboxEncoderInput,
@@ -69,15 +69,22 @@ impl VideoEncodedData {
 
 impl EncodedData for VideoEncodedData {
     fn timestamp(&self) -> f64 {
-        unsafe { self.sample_buffer.output_presentation_time_stamp().seconds() }
+        unsafe {
+            self.sample_buffer
+                .output_presentation_time_stamp()
+                .seconds()
+        }
     }
 
     fn is_key(&self) -> bool {
         !self.not_sync
     }
-    
+
     fn set_timestamp(&mut self, timestamp: f64) {
-        unsafe { self.sample_buffer.set_output_presentation_time_stamp(CMTime::with_seconds(timestamp, 240)) };
+        unsafe {
+            self.sample_buffer
+                .set_output_presentation_time_stamp(CMTime::with_seconds(timestamp, 240))
+        };
     }
 }
 

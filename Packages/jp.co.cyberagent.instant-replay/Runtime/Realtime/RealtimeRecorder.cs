@@ -240,6 +240,12 @@ namespace InstantReplay
             }
 
             var writeLength = (int)((numScaledSamples + blankOrSkip) * channels);
+
+            if (writeLength == 0)
+            {
+                return;
+            }
+
             var writeBufferArray = ArrayPool<short>.Shared.Rent(writeLength);
             var writeBuffer = writeBufferArray.AsSpan(0, writeLength);
 

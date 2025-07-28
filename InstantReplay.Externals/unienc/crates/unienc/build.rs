@@ -17,4 +17,5 @@ fn common_builder() -> Builder {
         .csharp_dll_name_if("UNITY_IOS && !UNITY_EDITOR", "__Internal")
         .csharp_namespace("UniEnc")
         .csharp_use_nint_types(true)
+        .csharp_use_function_pointer(false)
 }

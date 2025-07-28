@@ -266,7 +266,10 @@ type PlatformEncodingSystem = unienc_apple_vt::VideoToolboxEncodingSystem<
 >;
 
 #[cfg(target_os = "android")]
-type PlatformEncodingSystem = unienc_android_mc::MediaCodecEncodingSystem;
+type PlatformEncodingSystem = unienc_android_mc::MediaCodecEncodingSystem<
+    VideoEncoderOptionsNative,
+    AudioEncoderOptionsNative,
+>;
 
 #[cfg(not(any(target_vendor = "apple", target_os = "android")))]
 type PlatformEncodingSystem = (); // Placeholder - will generate compile error below
@@ -438,9 +441,7 @@ impl ApplyCallback<UniencCallback> for Result<(), UniencError> {
     fn apply_callback(&self, callback: UniencCallback, user_data: SendPtr<c_void>) {
         match self {
             Ok(()) => unsafe { callback(user_data.into(), UniencErrorNative::SUCCESS) },
-            Err(err) => {
-                err.with_native(|native| unsafe { callback(user_data.into(), *native) })
-            }
+            Err(err) => err.with_native(|native| unsafe { callback(user_data.into(), *native) }),
         }
     }
 }

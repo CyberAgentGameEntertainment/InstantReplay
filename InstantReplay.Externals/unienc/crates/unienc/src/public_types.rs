@@ -1,3 +1,5 @@
+use crate::UniencErrorNative;
+
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum UniencErrorKind {
@@ -16,6 +18,10 @@ pub enum UniencErrorKind {
 
 // Audio encoder input/output functions
 #[no_mangle]
-pub unsafe extern "C" fn unienc_error_is_success(error: UniencErrorKind) -> bool {
+pub unsafe extern "C" fn unienc_error_kind_is_success(error: UniencErrorKind) -> bool {
     error == UniencErrorKind::Success
+}
+#[no_mangle]
+pub unsafe extern "C" fn unienc_error_is_success(error: UniencErrorNative) -> bool {
+    error.kind == UniencErrorKind::Success
 }

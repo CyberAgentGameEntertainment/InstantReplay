@@ -91,19 +91,17 @@ namespace UniEnc.Internal
         /// <summary>
         ///     Gets the function pointer for simple callbacks.
         /// </summary>
-        internal static unsafe delegate* unmanaged[Cdecl]<void*, UniencErrorNative, void> GetSimpleCallbackPtr()
+        internal static nuint GetSimpleCallbackPtr()
         {
-            return (delegate* unmanaged[Cdecl]<void*, UniencErrorNative, void>)SimpleCallbackPtr;
+            return (nuint)(nint)SimpleCallbackPtr;
         }
 
         /// <summary>
         ///     Gets the function pointer for data callbacks.
         /// </summary>
-        internal static unsafe delegate* unmanaged[Cdecl]<void*, byte*, nuint, double, bool, UniencErrorNative, void>
-            GetDataCallbackPtr()
+        internal static nuint GetDataCallbackPtr()
         {
-            return (delegate* unmanaged[Cdecl]<void*, byte*, nuint, double, bool, UniencErrorNative, void>)
-                DataCallbackPtr;
+            return (nuint)(nint)DataCallbackPtr;
         }
 
         /// <summary>
