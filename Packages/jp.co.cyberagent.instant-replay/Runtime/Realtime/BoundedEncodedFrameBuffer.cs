@@ -194,18 +194,24 @@ namespace InstantReplay
                 unprocessedAudioFrames = unprocessedAudioFrames[..argMinAudioTimespan];
 
                 // adjust timestamps
-                var videoStartTime = videoFramesSpan.Span[0].Timestamp;
-                for (var i = 0; i < videoFramesSpan.Length; i++)
+                if (!videoFramesSpan.IsEmpty)
                 {
-                    ref var frame = ref videoFramesSpan.Span[i];
-                    frame = frame.WithTimestamp(frame.Timestamp - videoStartTime);
+                    var videoStartTime = videoFramesSpan.Span[0].Timestamp;
+                    for (var i = 0; i < videoFramesSpan.Length; i++)
+                    {
+                        ref var frame = ref videoFramesSpan.Span[i];
+                        frame = frame.WithTimestamp(frame.Timestamp - videoStartTime);
+                    }
                 }
 
-                var audioStartTime = audioFramesSpan.Span[0].Timestamp;
-                for (var i = 0; i < audioFramesSpan.Length; i++)
+                if (!audioFramesSpan.IsEmpty)
                 {
-                    ref var frame = ref audioFramesSpan.Span[i];
-                    frame = frame.WithTimestamp(frame.Timestamp - audioStartTime);
+                    var audioStartTime = audioFramesSpan.Span[0].Timestamp;
+                    for (var i = 0; i < audioFramesSpan.Length; i++)
+                    {
+                        ref var frame = ref audioFramesSpan.Span[i];
+                        frame = frame.WithTimestamp(frame.Timestamp - audioStartTime);
+                    }
                 }
 
                 // concat metadata

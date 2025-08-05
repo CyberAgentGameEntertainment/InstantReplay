@@ -18,6 +18,8 @@ namespace InstantReplay
         private readonly Channel<AudioFrameData> _audioChannel;
         private readonly IAudioSampleProvider _audioSampleProvider;
         private readonly ChannelWriter<AudioFrameData> _audioWriter;
+        private readonly bool _disposeAudioSampleProvider;
+        private readonly bool _disposeFrameProvider;
         private readonly double? _fixedFrameInterval;
         private readonly FramePreprocessor _framePreprocessor;
         private readonly IFrameProvider _frameProvider;
@@ -37,13 +39,33 @@ namespace InstantReplay
         /// <summary>
         ///     Creates a new RealtimeRecorder with the specified options.
         /// </summary>
-        public RealtimeRecorder(RealtimeEncodingOptions options, IFrameProvider frameProvider = null,
-            IAudioSampleProvider
-                audioSampleProvider = null)
+        public RealtimeRecorder(
+            RealtimeEncodingOptions options,
+            IFrameProvider frameProvider = null,
+            bool disposeFrameProvider = true,
+            IAudioSampleProvider audioSampleProvider = null,
+            bool disposeAudioSampleProvider = true)
         {
             _options = options;
-            _frameProvider = frameProvider ?? new ScreenshotFrameProvider();
-            _audioSampleProvider = audioSampleProvider ?? new UnityAudioSampleProvider();
+
+            if (frameProvider == null)
+            {
+                frameProvider = new ScreenshotFrameProvider();
+                disposeFrameProvider = true;
+            }
+
+            if (audioSampleProvider == null)
+            {
+                audioSampleProvider = new UnityAudioSampleProvider();
+                disposeAudioSampleProvider = true;
+            }
+
+            _frameProvider = frameProvider;
+            _audioSampleProvider = audioSampleProvider;
+
+            _disposeFrameProvider = disposeFrameProvider;
+            _disposeAudioSampleProvider = disposeAudioSampleProvider;
+
             _transcoder = new RealtimeTranscoder(options);
 
             // Initialize frame rate limiting
@@ -120,6 +142,13 @@ namespace InstantReplay
 
                     // Dispose resources
                     _transcoder?.Dispose();
+                    _framePreprocessor?.Dispose();
+
+                    if (_disposeFrameProvider)
+                        _frameProvider?.Dispose();
+
+                    if (_disposeAudioSampleProvider)
+                        _audioSampleProvider?.Dispose();
 
                     _disposed = true;
                 }

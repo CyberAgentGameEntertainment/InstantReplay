@@ -21,10 +21,20 @@ namespace InstantReplay
         ///     Creates a new RealtimeInstantReplaySession with the specified options.
         ///     Recording starts automatically upon construction.
         /// </summary>
-        public RealtimeInstantReplaySession(in RealtimeEncodingOptions options)
+        public RealtimeInstantReplaySession(
+            in RealtimeEncodingOptions options,
+            IFrameProvider frameProvider = null,
+            bool disposeFrameProvider = true,
+            IAudioSampleProvider audioSampleProvider = null,
+            bool disposeAudioSampleProvider = true)
         {
             State = SessionState.Recording;
-            _recorder = new RealtimeRecorder(options);
+            _recorder = new RealtimeRecorder(
+                options,
+                frameProvider,
+                disposeFrameProvider,
+                audioSampleProvider,
+                disposeAudioSampleProvider);
 
             // Start recording automatically
             _recorder.StartRecording();

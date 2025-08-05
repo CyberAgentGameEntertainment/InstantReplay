@@ -30,7 +30,6 @@ namespace InstantReplay
             var shader = Resources.Load<Shader>("InstantReplayRechannel");
             if (shader == null)
                 throw new InvalidOperationException("Shader 'InstantReplayRechannel' not found in Resources.");
-            Debug.Log(shader.name);
             _material = new Material(shader);
             _material.SetMatrix(Rechannel, rechannelMatrix);
             _material.SetVector(MainTexSt, new Vector4(1f, 1f, 0f, 0f));
@@ -52,7 +51,6 @@ namespace InstantReplay
                 _material = default;
             }
         }
-
 
         public static FramePreprocessor WithMaxSize(int? maxWidth, int? maxHeight, Matrix4x4 rechannelMatrix)
         {
