@@ -30,4 +30,11 @@ namespace UniEnc
     internal struct Mutex
     {
     }
+
+    public enum DataKind : byte
+    {
+        Interpolated,
+        Key,
+        Metadata
+    }
 }

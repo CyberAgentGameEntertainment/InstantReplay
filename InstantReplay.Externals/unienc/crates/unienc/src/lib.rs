@@ -4,12 +4,15 @@ use std::path::Path;
 use std::sync::{Arc, LazyLock};
 
 use tokio::sync::Mutex;
-use unienc_common::{EncodedData, Encoder, EncodingSystem, Muxer};
+use unienc_common::{EncodedData, Encoder, EncodingSystem, Muxer, UniencDataKind};
 
 mod audio;
 mod mux;
 mod public_types;
 mod video;
+
+#[cfg(target_os = "android")]
+mod android;
 
 pub use public_types::*;
 
@@ -178,7 +181,7 @@ pub type UniencDataCallback = unsafe extern "C" fn(
     data: *const u8,
     size: usize,
     timestamp: f64,
-    is_key: bool,
+    kind: UniencDataKind,
     error: UniencErrorNative,
 );
 
@@ -333,8 +336,14 @@ pub unsafe extern "C" fn unienc_new_video_encoder(
     system: *const PlatformEncodingSystem,
     input_out: *mut *const Mutex<Option<VideoEncoderInput>>,
     output_out: *mut *const Mutex<Option<VideoEncoderOutput>>,
+    on_error: usize /*UniencCallback*/,
+    user_data: SendPtr<c_void>,
 ) -> bool {
+    let on_error: UniencCallback = std::mem::transmute(on_error);
+
     if system.is_null() {
+        UniencError::invalid_input_error("Invalid input parameters")
+            .apply_callback(on_error, user_data);
         return false;
     }
 
@@ -346,9 +355,15 @@ pub unsafe extern "C" fn unienc_new_video_encoder(
                     *output_out = Arc::into_raw(Arc::new(Mutex::new(Some(output))));
                     true
                 }
-                Err(_) => false,
+                Err(err) => {
+                    UniencError::from_anyhow(err).apply_callback(on_error, user_data);
+                    false
+                }
             },
-            Err(_) => false,
+            Err(err) => {
+                UniencError::from_anyhow(err).apply_callback(on_error, user_data);
+                false
+            }
         }
     }
 }
@@ -358,8 +373,14 @@ pub unsafe extern "C" fn unienc_new_audio_encoder(
     system: *const PlatformEncodingSystem,
     input_out: *mut *const Mutex<Option<AudioEncoderInput>>,
     output_out: *mut *const Mutex<Option<AudioEncoderOutput>>,
+    on_error: usize /*UniencCallback*/,
+    user_data: SendPtr<c_void>,
 ) -> bool {
+    let on_error: UniencCallback = std::mem::transmute(on_error);
+
     if system.is_null() {
+        UniencError::invalid_input_error("Invalid input parameters")
+            .apply_callback(on_error, user_data);
         return false;
     }
 
@@ -371,9 +392,15 @@ pub unsafe extern "C" fn unienc_new_audio_encoder(
                     *output_out = Arc::into_raw(Arc::new(Mutex::new(Some(output))));
                     true
                 }
-                Err(_) => false,
+                Err(err) => {
+                    UniencError::from_anyhow(err).apply_callback(on_error, user_data);
+                    false
+                }
             },
-            Err(_) => false,
+            Err(err) => {
+                UniencError::from_anyhow(err).apply_callback(on_error, user_data);
+                false
+            }
         }
     }
 }
@@ -385,15 +412,25 @@ pub unsafe extern "C" fn unienc_new_muxer(
     video_input_out: *mut *const Mutex<Option<VideoMuxerInput>>,
     audio_input_out: *mut *const Mutex<Option<AudioMuxerInput>>,
     completion_handle_out: *mut *const Mutex<Option<MuxerCompletionHandle>>,
+    on_error: usize /*UniencCallback*/,
+    user_data: SendPtr<c_void>,
 ) -> bool {
+    let on_error: UniencCallback = std::mem::transmute(on_error);
+
     if system.is_null() || output_path.is_null() {
+        UniencError::invalid_input_error("Invalid input parameters")
+            .apply_callback(on_error, user_data);
         return false;
     }
 
     unsafe {
         let path_str = match CStr::from_ptr(output_path).to_str() {
             Ok(s) => s,
-            Err(_) => return false,
+            Err(_) => {
+                UniencError::invalid_input_error("Invalid input parameters")
+                    .apply_callback(on_error, user_data);
+                return false;
+            }
         };
         let path = Path::new(path_str);
 
@@ -409,10 +446,16 @@ pub unsafe extern "C" fn unienc_new_muxer(
                             Arc::into_raw(Arc::new(Mutex::new(Some(completion_handle))));
                         true
                     }
-                    Err(_) => false,
+                    Err(err) => {
+                        UniencError::from_anyhow(err).apply_callback(on_error, user_data);
+                        false
+                    }
                 }
             }
-            Err(_) => false,
+            Err(err) => {
+                UniencError::from_anyhow(err).apply_callback(on_error, user_data);
+                false
+            }
         }
     }
 }
@@ -454,7 +497,7 @@ impl ApplyCallback<UniencDataCallback> for UniencError {
                 std::ptr::null_mut(),
                 0,
                 0.0,
-                false,
+                UniencDataKind::Interpolated,
                 *native,
             )
         });
@@ -465,28 +508,28 @@ impl<T: EncodedData> ApplyCallback<UniencDataCallback> for Result<Option<T>, Uni
         let result = match self {
             Ok(Some(data)) => {
                 let timestamp = data.timestamp();
-                let is_key = data.is_key();
+                let kind = data.kind();
                 match bincode::encode_to_vec(data, bincode::config::standard()) {
-                    Ok(serialized) => Ok((serialized, timestamp, is_key)),
+                    Ok(serialized) => Ok((serialized, timestamp, kind)),
                     Err(_) => Err(UniencError::encoding_error(
                         "Failed to serialize encoded data",
                     )),
                 }
             }
-            Ok(None) => Ok((vec![], 0.0, false)),
+            Ok(None) => Ok((vec![], 0.0, UniencDataKind::Interpolated)),
             Err(e) => Err(e.clone()),
         };
 
         match result {
             Ok(data) => unsafe {
-                let (serialized, timestamp, is_key) = data;
+                let (serialized, timestamp, kind) = data;
 
                 callback(
                     user_data.into(),
                     serialized.as_ptr(),
                     serialized.len(),
                     timestamp,
-                    is_key,
+                    kind,
                     UniencErrorNative::SUCCESS,
                 )
             },
@@ -496,7 +539,7 @@ impl<T: EncodedData> ApplyCallback<UniencDataCallback> for Result<Option<T>, Uni
                     std::ptr::null_mut(),
                     0,
                     0.0,
-                    false,
+                    UniencDataKind::Interpolated,
                     *native,
                 )
             }),

@@ -12,13 +12,13 @@ namespace InstantReplay
     internal class FramePreprocessor : IDisposable
     {
         private static readonly int MainTexSt = Shader.PropertyToID("_MainTex_ST");
+        private static readonly int ScaleAndTiling = Shader.PropertyToID("_ScaleAndTiling");
         private static readonly int Rechannel = Shader.PropertyToID("_Rechannel");
         private readonly int? _fixedHeight;
         private readonly int? _fixedWidth;
         private readonly int? _maxHeight;
         private readonly int? _maxWidth;
         private Material _material;
-        private RenderTexture _output;
 
         private FramePreprocessor(int? maxWidth, int? maxHeight, int? fixedWidth, int? fixedHeight,
             Matrix4x4 rechannelMatrix)
@@ -27,16 +27,23 @@ namespace InstantReplay
             _maxHeight = maxHeight;
             _fixedWidth = fixedWidth;
             _fixedHeight = fixedHeight;
-            _material = new Material(Resources.Load<Shader>("InstantReplayRechannel"));
+            var shader = Resources.Load<Shader>("InstantReplayRechannel");
+            if (shader == null)
+                throw new InvalidOperationException("Shader 'InstantReplayRechannel' not found in Resources.");
+            Debug.Log(shader.name);
+            _material = new Material(shader);
             _material.SetMatrix(Rechannel, rechannelMatrix);
+            _material.SetVector(MainTexSt, new Vector4(1f, 1f, 0f, 0f));
         }
+
+        private RenderTexture Output { get; set; }
 
         public void Dispose()
         {
-            if (_output)
+            if (Output)
             {
-                Object.Destroy(_output);
-                _output = default;
+                Object.Destroy(Output);
+                Output = default;
             }
 
             if (_material)
@@ -75,33 +82,36 @@ namespace InstantReplay
             var width = _fixedWidth ?? (int)(source.width * scale);
             var height = _fixedHeight ?? (int)(source.height * scale);
 
-            if (_output == null)
+            if (Output == null)
             {
-                _output = new RenderTexture(width, height, 0, GraphicsFormat.R8G8B8A8_SRGB);
+                Output = new RenderTexture(width, height, 0, GraphicsFormat.R8G8B8A8_SRGB);
+                Output.filterMode = FilterMode.Bilinear;
+                Output.wrapMode = TextureWrapMode.Clamp;
             }
-            else if (_output.width != width || _output.height != height)
+            else if (Output.width != width || Output.height != height)
             {
-                _output.Release();
-                _output.width = width;
-                _output.height = height;
-                _output.Create();
+                Output.Release();
+                Output.width = width;
+                Output.height = height;
+                Output.Create();
             }
 
             // scale to fit
             var pixelScale = Mathf.Min((float)width / source.width, (float)height / source.height);
             var renderScale = new Vector2(pixelScale * source.width / width, pixelScale * source.height / height);
+            // Debug.Log($"source: {source.width}x{source.height}, dest: {width}x{height}, pixelScale: {pixelScale}, renderScale: {renderScale.x}x{renderScale.y}, needFlipVertically: {needFlipVertically}");
 
             var active = RenderTexture.active;
             if (needFlipVertically)
                 // We need to flip the image vertically on some platforms
-                _material.SetVector(MainTexSt, new Vector4(renderScale.x, -renderScale.y, 0f, 1f));
+                _material.SetVector(ScaleAndTiling, new Vector4(1f / renderScale.x, -1f / renderScale.y, 0f, 1f));
             else
-                _material.SetVector(MainTexSt, new Vector4(renderScale.x, renderScale.y, 0f, 0f));
+                _material.SetVector(ScaleAndTiling, new Vector4(1f / renderScale.x, 1f / renderScale.y, 0f, 0f));
 
-            Graphics.Blit(source, _output, _material);
+            Graphics.Blit(source, Output, _material);
 
             RenderTexture.active = active;
-            return _output;
+            return Output;
         }
     }
 }

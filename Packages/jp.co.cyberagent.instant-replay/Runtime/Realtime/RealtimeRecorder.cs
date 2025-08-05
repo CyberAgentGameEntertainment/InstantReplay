@@ -50,8 +50,18 @@ namespace InstantReplay
             if (options.FixedFrameRate is { } fixedFrameRate)
                 _fixedFrameInterval = 1.0 / options.FixedFrameRate;
 
+            // Debug.Log($"Video Size: {options.VideoOptions.Width}x{options.VideoOptions.Height}");
+
             _framePreprocessor =
                 FramePreprocessor.WithFixedSize((int)options.VideoOptions.Width, (int)options.VideoOptions.Height,
+                    //Matrix4x4.identity
+                    // RGBA to ARGB
+                    /*
+                    new Matrix4x4(new Vector4(0, 0, 0, 1),
+                        new Vector4(1, 0, 0, 0),
+                        new Vector4(0, 1, 0, 0),
+                        new Vector4(0, 0, 1, 0)
+                    )*/
                     // RGBA to BGRA
                     new Matrix4x4(new Vector4(0, 0, 1, 0),
                         new Vector4(0, 1, 0, 0),
@@ -242,9 +252,7 @@ namespace InstantReplay
             var writeLength = (int)((numScaledSamples + blankOrSkip) * channels);
 
             if (writeLength == 0)
-            {
                 return;
-            }
 
             var writeBufferArray = ArrayPool<short>.Shared.Rent(writeLength);
             var writeBuffer = writeBufferArray.AsSpan(0, writeLength);

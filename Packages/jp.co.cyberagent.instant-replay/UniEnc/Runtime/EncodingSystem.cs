@@ -1,5 +1,6 @@
 using System;
 using System.Text;
+using UniEnc.Internal;
 
 namespace UniEnc
 {
@@ -63,7 +64,19 @@ namespace UniEnc
                 Mutex* input = null;
                 Mutex* output = null;
 
-                var success = NativeMethods.unienc_new_video_encoder((void*)_handle, &input, &output);
+                var context = CallbackHelper.SimpleCallbackContext.Rent();
+                var contextHandle = CallbackHelper.CreateSendPtr(context);
+                var task = context.Task;
+
+                var success = NativeMethods.unienc_new_video_encoder(
+                    (void*)_handle,
+                    &input,
+                    &output,
+                    CallbackHelper.GetSimpleCallbackPtr(),
+                    contextHandle);
+
+                if (task.IsCompleted)
+                    task.GetAwaiter().GetResult(); // throws if there was an error
 
                 if (!success || input == null || output == null)
                     throw new UniEncException(UniencErrorKind.InitializationError, "Failed to create video encoder");
@@ -84,7 +97,19 @@ namespace UniEnc
                 Mutex* input = null;
                 Mutex* output = null;
 
-                var success = NativeMethods.unienc_new_audio_encoder((void*)_handle, &input, &output);
+                var context = CallbackHelper.SimpleCallbackContext.Rent();
+                var contextHandle = CallbackHelper.CreateSendPtr(context);
+                var task = context.Task;
+
+                var success = NativeMethods.unienc_new_audio_encoder(
+                    (void*)_handle,
+                    &input,
+                    &output,
+                    CallbackHelper.GetSimpleCallbackPtr(),
+                    contextHandle);
+
+                if (task.IsCompleted)
+                    task.GetAwaiter().GetResult(); // throws if there was an error
 
                 if (!success || input == null || output == null)
                     throw new UniEncException(UniencErrorKind.InitializationError, "Failed to create audio encoder");
@@ -109,6 +134,10 @@ namespace UniEnc
                 Mutex* audioInput = null;
                 Mutex* completionHandle = null;
 
+                var context = CallbackHelper.SimpleCallbackContext.Rent();
+                var contextHandle = CallbackHelper.CreateSendPtr(context);
+                var task = context.Task;
+
                 var pathBytes = Encoding.UTF8.GetBytes(outputPath + '\0');
                 fixed (byte* pathPtr = pathBytes)
                 {
@@ -117,7 +146,12 @@ namespace UniEnc
                         pathPtr,
                         &videoInput,
                         &audioInput,
-                        &completionHandle);
+                        &completionHandle,
+                        CallbackHelper.GetSimpleCallbackPtr(),
+                        contextHandle);
+
+                    if (task.IsCompleted)
+                        task.GetAwaiter().GetResult(); // throws if there was an error
 
                     if (!success || videoInput == null || audioInput == null || completionHandle == null)
                         throw new UniEncException(UniencErrorKind.InitializationError, "Failed to create muxer");

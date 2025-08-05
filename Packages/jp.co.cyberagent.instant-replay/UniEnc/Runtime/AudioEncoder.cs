@@ -2,7 +2,6 @@ using System;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using UniEnc.Internal;
-using UnityEngine;
 
 namespace UniEnc
 {
@@ -54,16 +53,13 @@ namespace UniEnc
             {
                 var contextHandle = CallbackHelper.CreateSendPtr(context);
 
-                unsafe
-                {
-                    NativeMethods.unienc_audio_encoder_push(
-                        _inputHandle,
-                        (nint)addr,
-                        (nuint)segment.Count,
-                        timestampInSamples,
-                        CallbackHelper.GetSimpleCallbackPtr(),
-                        contextHandle);
-                }
+                NativeMethods.unienc_audio_encoder_push(
+                    _inputHandle,
+                    (nint)addr,
+                    (nuint)segment.Count,
+                    timestampInSamples,
+                    CallbackHelper.GetSimpleCallbackPtr(),
+                    contextHandle);
             }
             catch
             {
@@ -85,13 +81,10 @@ namespace UniEnc
             var context = CallbackHelper.DataCallbackContext.Rent();
             var contextHandle = CallbackHelper.CreateSendPtr(context);
 
-            unsafe
-            {
-                NativeMethods.unienc_audio_encoder_pull(
-                    _outputHandle,
-                    CallbackHelper.GetDataCallbackPtr(),
-                    contextHandle);
-            }
+            NativeMethods.unienc_audio_encoder_pull(
+                _outputHandle,
+                CallbackHelper.GetDataCallbackPtr(),
+                contextHandle);
 
             return context.Task;
         }

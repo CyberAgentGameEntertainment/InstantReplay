@@ -49,7 +49,7 @@ namespace UniEnc.Internal
         /// </summary>
         [MonoPInvokeCallback(typeof(DataCallbackDelegate))]
         private static unsafe void DataCallback(void* userData, byte* data, nuint size, double timestamp,
-            bool isKeyFrame, UniencErrorNative error)
+            DataKind kind, UniencErrorNative error)
         {
             var handle = GCHandle.FromIntPtr((IntPtr)userData);
             var context = (DataCallbackContext)handle.Target;
@@ -60,12 +60,12 @@ namespace UniEnc.Internal
                 if (size > 0 && data != null)
                 {
                     var sourceSpan = new ReadOnlySpan<byte>(data, (int)size);
-                    var frame = EncodedFrame.CreateWithCopy(sourceSpan, timestamp, isKeyFrame);
+                    var frame = EncodedFrame.CreateWithCopy(sourceSpan, timestamp, kind);
                     context.SetResult(frame);
                 }
                 else
                 {
-                    var frame = EncodedFrame.CreateWithCopy(ReadOnlySpan<byte>.Empty, timestamp, isKeyFrame);
+                    var frame = EncodedFrame.CreateWithCopy(ReadOnlySpan<byte>.Empty, timestamp, kind);
                     context.SetResult(frame);
                 }
             }
@@ -239,6 +239,6 @@ namespace UniEnc.Internal
         private unsafe delegate void SimpleCallbackDelegate(void* userData, UniencErrorNative errorKind);
 
         private unsafe delegate void DataCallbackDelegate(void* userData, byte* data, nuint size, double timestamp,
-            bool isKeyFrame, UniencErrorNative error);
+            DataKind kind, UniencErrorNative error);
     }
 }

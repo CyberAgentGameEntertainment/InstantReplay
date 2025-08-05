@@ -39,7 +39,7 @@ namespace UniEnc
         /// <summary>
         ///     Pushes a raw video frame to the encoder.
         /// </summary>
-        /// <param name="frameData">Raw frame data (e.g., RGBA or YUV)</param>
+        /// <param name="frameData">Raw frame data (BGRA)</param>
         /// <param name="width">Frame width in pixels</param>
         /// <param name="height">Frame height in pixels</param>
         /// <param name="timestamp">Frame timestamp in seconds</param>
@@ -88,13 +88,10 @@ namespace UniEnc
             var context = CallbackHelper.DataCallbackContext.Rent();
             var contextHandle = CallbackHelper.CreateSendPtr(context);
 
-            unsafe
-            {
-                NativeMethods.unienc_video_encoder_pull(
-                    _outputHandle,
-                    CallbackHelper.GetDataCallbackPtr(),
-                    contextHandle);
-            }
+            NativeMethods.unienc_video_encoder_pull(
+                _outputHandle,
+                CallbackHelper.GetDataCallbackPtr(),
+                contextHandle);
 
             return context.Task;
         }

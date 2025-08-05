@@ -99,13 +99,10 @@ namespace UniEnc
             var context = CallbackHelper.SimpleCallbackContext.Rent();
             var contextHandle = CallbackHelper.CreateSendPtr(context);
 
-            unsafe
-            {
-                NativeMethods.unienc_muxer_finish_video(
-                    _videoInputHandle,
-                    CallbackHelper.GetSimpleCallbackPtr(),
-                    contextHandle);
-            }
+            NativeMethods.unienc_muxer_finish_video(
+                _videoInputHandle,
+                CallbackHelper.GetSimpleCallbackPtr(),
+                contextHandle);
 
             return context.Task;
         }
@@ -120,13 +117,10 @@ namespace UniEnc
             var context = CallbackHelper.SimpleCallbackContext.Rent();
             var contextHandle = CallbackHelper.CreateSendPtr(context);
 
-            unsafe
-            {
-                NativeMethods.unienc_muxer_finish_audio(
-                    _audioInputHandle,
-                    CallbackHelper.GetSimpleCallbackPtr(),
-                    contextHandle);
-            }
+            NativeMethods.unienc_muxer_finish_audio(
+                _audioInputHandle,
+                CallbackHelper.GetSimpleCallbackPtr(),
+                contextHandle);
 
             return context.Task;
         }
@@ -141,13 +135,10 @@ namespace UniEnc
             var context = CallbackHelper.SimpleCallbackContext.Rent();
             var contextHandle = CallbackHelper.CreateSendPtr(context);
 
-            unsafe
-            {
-                NativeMethods.unienc_muxer_complete(
-                    _completionHandle,
-                    CallbackHelper.GetSimpleCallbackPtr(),
-                    contextHandle);
-            }
+            NativeMethods.unienc_muxer_complete(
+                _completionHandle,
+                CallbackHelper.GetSimpleCallbackPtr(),
+                contextHandle);
 
             return context.Task;
         }

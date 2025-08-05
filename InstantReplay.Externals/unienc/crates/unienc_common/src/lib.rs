@@ -84,7 +84,15 @@ pub struct AudioSample {
 pub trait EncodedData: Encode + Decode<()> {
     fn timestamp(&self) -> f64;
     fn set_timestamp(&mut self, timestamp: f64);
-    fn is_key(&self) -> bool;
+    fn kind(&self) -> UniencDataKind;
+}
+
+#[repr(i8)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum UniencDataKind {
+    Interpolated = 0,
+    Key = 1,
+    Metadata = 2,
 }
 
 pub trait EncoderInput: Send + 'static {

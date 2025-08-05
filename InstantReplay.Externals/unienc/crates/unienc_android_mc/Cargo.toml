@@ -11,3 +11,4 @@ unienc_common = { workspace = true }
 bincode = { workspace = true }
 ndk-sys = { version = "0.6.0", features = ["media"] }
 bitflags = "2.9.1"
+libc = "0.2.174"

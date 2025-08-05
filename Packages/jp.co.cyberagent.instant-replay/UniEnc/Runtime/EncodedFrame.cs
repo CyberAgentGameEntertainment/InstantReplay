@@ -24,27 +24,27 @@ namespace UniEnc
         /// <summary>
         ///     Whether this is a key frame (for video).
         /// </summary>
-        public bool IsKeyFrame { get; }
+        public DataKind Kind { get; }
 
         /// <summary>
         ///     Creates a new EncodedFrame with data copied from the source.
         /// </summary>
-        internal static EncodedFrame CreateWithCopy(ReadOnlySpan<byte> sourceData, double timestamp, bool isKeyFrame)
+        internal static EncodedFrame CreateWithCopy(ReadOnlySpan<byte> sourceData, double timestamp, DataKind kind)
         {
             var rentedArray = ArrayPool<byte>.Shared.Rent(sourceData.Length);
             sourceData.CopyTo(rentedArray.AsSpan());
-            return new EncodedFrame(rentedArray, sourceData.Length, timestamp, isKeyFrame);
+            return new EncodedFrame(rentedArray, sourceData.Length, timestamp, kind);
         }
 
         /// <summary>
         ///     Creates a new EncodedFrame with pre-rented array (internal use only).
         /// </summary>
-        private EncodedFrame(byte[] rentedArray, int length, double timestamp, bool isKeyFrame)
+        private EncodedFrame(byte[] rentedArray, int length, double timestamp, DataKind kind)
         {
             _rentedArray = rentedArray;
             _length = length;
             Timestamp = timestamp;
-            IsKeyFrame = isKeyFrame;
+            Kind = kind;
         }
 
         /// <summary>
@@ -58,7 +58,7 @@ namespace UniEnc
 
         public EncodedFrame WithTimestamp(double timestamp)
         {
-            return new EncodedFrame(_rentedArray, _length, timestamp, IsKeyFrame);
+            return new EncodedFrame(_rentedArray, _length, timestamp, Kind);
         }
     }
 }

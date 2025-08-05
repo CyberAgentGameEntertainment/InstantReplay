@@ -13,7 +13,7 @@ use objc2_core_audio_types::{
     AudioStreamPacketDescription, MPEG4ObjectID,
 };
 use tokio::sync::mpsc;
-use unienc_common::{AudioSample, EncodedData, Encoder, EncoderInput, EncoderOutput};
+use unienc_common::{AudioSample, EncodedData, Encoder, EncoderInput, EncoderOutput, UniencDataKind};
 
 use crate::OsStatus;
 
@@ -165,8 +165,8 @@ impl EncodedData for AudioPacket {
         self.timestamp_in_samples as f64 / self.sample_rate as f64
     }
 
-    fn is_key(&self) -> bool {
-        true
+    fn kind(&self) -> UniencDataKind {
+        UniencDataKind::Key
     }
 
     fn set_timestamp(&mut self, timestamp: f64) {

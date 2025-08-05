@@ -12,8 +12,11 @@ namespace InstantReplay
     public class BoundedEncodedFrameBuffer : IDisposable
     {
         [ThreadStatic] private static List<EncodedFrame> _tempFrames;
+        private readonly List<EncodedFrame> _audioMetadata = new();
         private readonly Queue<EncodedFrame> _audioQueue;
         private readonly long _maxMemoryBytes;
+
+        private readonly List<EncodedFrame> _videoMetadata = new();
         private readonly Queue<EncodedFrame> _videoQueue;
         private long _currentMemoryUsage;
         private bool _disposed;
@@ -59,7 +62,10 @@ namespace InstantReplay
 
             lock (_videoQueue)
             {
-                _videoQueue.Enqueue(frame);
+                if (frame.Kind == DataKind.Metadata)
+                    _videoMetadata.Add(frame);
+                else
+                    _videoQueue.Enqueue(frame);
             }
 
             Interlocked.Add(ref _currentMemoryUsage, frameSize);
@@ -78,7 +84,10 @@ namespace InstantReplay
 
             lock (_audioQueue)
             {
-                _audioQueue.Enqueue(frame);
+                if (frame.Kind == DataKind.Metadata)
+                    _audioMetadata.Add(frame);
+                else
+                    _audioQueue.Enqueue(frame);
             }
 
             Interlocked.Add(ref _currentMemoryUsage, frameSize);
@@ -95,6 +104,8 @@ namespace InstantReplay
 
             Memory<EncodedFrame> unprocessedVideoFrames;
             Memory<EncodedFrame> unprocessedAudioFrames;
+            Memory<EncodedFrame> videoMetadata;
+            Memory<EncodedFrame> audioMetadata;
             lock (_videoQueue)
             lock (_audioQueue)
             {
@@ -102,6 +113,11 @@ namespace InstantReplay
                 unprocessedAudioFrames = _audioQueue.ToArray();
                 _videoQueue.Clear();
                 _audioQueue.Clear();
+
+                videoMetadata = _videoMetadata.ToArray();
+                audioMetadata = _audioMetadata.ToArray();
+                _videoMetadata.Clear();
+                _audioMetadata.Clear();
             }
 
             try
@@ -123,7 +139,7 @@ namespace InstantReplay
                     var minTimespan = double.MaxValue;
                     for (var i = 0; i < unprocessedVideoFrames.Length; i++)
                     {
-                        if (!unprocessedVideoFrames.Span[i].IsKeyFrame) continue;
+                        if (unprocessedVideoFrames.Span[i].Kind != DataKind.Key) continue;
                         var timespan = Math.Abs(unprocessedVideoFrames.Span[i].Timestamp - expectedStartTime);
                         if (timespan >= minTimespan) continue;
                         minTimespan = timespan;
@@ -134,7 +150,7 @@ namespace InstantReplay
                 {
                     for (var i = 0; i < unprocessedVideoFrames.Length; i++)
                     {
-                        if (!unprocessedVideoFrames.Span[i].IsKeyFrame) continue;
+                        if (unprocessedVideoFrames.Span[i].Kind != DataKind.Key) continue;
                         argMinTimespan = i;
                         break;
                     }
@@ -190,6 +206,23 @@ namespace InstantReplay
                 {
                     ref var frame = ref audioFramesSpan.Span[i];
                     frame = frame.WithTimestamp(frame.Timestamp - audioStartTime);
+                }
+
+                // concat metadata
+                if (videoMetadata.Length > 0)
+                {
+                    var newVideoFrames = new EncodedFrame[videoFramesSpan.Length + videoMetadata.Length];
+                    videoMetadata.Span.CopyTo(newVideoFrames);
+                    videoFramesSpan.Span.CopyTo(newVideoFrames.AsSpan(videoMetadata.Length));
+                    videoFramesSpan = newVideoFrames.AsMemory();
+                }
+
+                if (audioMetadata.Length > 0)
+                {
+                    var newAudioFrames = new EncodedFrame[audioFramesSpan.Length + audioMetadata.Length];
+                    audioMetadata.Span.CopyTo(newAudioFrames);
+                    audioFramesSpan.Span.CopyTo(newAudioFrames.AsSpan(audioMetadata.Length));
+                    audioFramesSpan = newAudioFrames.AsMemory();
                 }
 
                 videoFrames = videoFramesSpan;

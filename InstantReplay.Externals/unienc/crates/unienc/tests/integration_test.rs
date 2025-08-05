@@ -1,6 +1,4 @@
 use rand::RngCore;
-#[cfg(target_os = "android")]
-use unienc_android_mc::MediaCodecEncodingSystem;
 #[cfg(target_vendor = "apple")]
 use unienc_apple_vt::VideoToolboxEncodingSystem;
 use unienc_common::{

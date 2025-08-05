@@ -75,9 +75,13 @@ impl EncodedData for VideoEncodedData {
                 .seconds()
         }
     }
-
-    fn is_key(&self) -> bool {
-        !self.not_sync
+    
+    fn kind(&self) -> unienc_common::UniencDataKind {
+        if self.not_sync {
+            unienc_common::UniencDataKind::Interpolated
+        } else {
+            unienc_common::UniencDataKind::Key
+        }
     }
 
     fn set_timestamp(&mut self, timestamp: f64) {
