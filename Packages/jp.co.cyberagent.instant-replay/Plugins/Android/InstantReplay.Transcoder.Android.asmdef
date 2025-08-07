@@ -1,7 +1,9 @@
 {
     "name": "InstantReplay.Transcoder.Android",
     "rootNamespace": "",
-    "references": [],
+    "references": [
+        "GUID:279c2e19bba7d40e584c2fd198c61765"
+    ],
     "includePlatforms": [],
     "excludePlatforms": [],
     "allowUnsafeCode": true,

@@ -1,0 +1,176 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ba441647ef3f04491916759918a4522e, type: 3}
+  m_Name: InstantReplay.Transcoder.Android
+  m_EditorClassIdentifier: 
+  enableJavaSourceAnalysis: 0
+  targetLibraries: []
+  javaSourceLibraries: []
+  customHeader: '// --------------------------------------------------------------
+
+    //
+    Copyright 2025 CyberAgent, Inc.
+
+    // --------------------------------------------------------------
+
+'
+  generatedItemKeys:
+  - serializedVersion: 2
+    Hash: f47b429715bcf738af4004ed7acf82e0
+  - serializedVersion: 2
+    Hash: deddedde526af17f280669c8c627f9df
+  - serializedVersion: 2
+    Hash: 625267010008a2cd2bccc02b4a934333
+  - serializedVersion: 2
+    Hash: fc21a65d242522566e9d3c0f01cf4936
+  - serializedVersion: 2
+    Hash: c0677c2187d13c24d100704f04697f9f
+  - serializedVersion: 2
+    Hash: 227a0426e6985e8a370a2392be458eb3
+  - serializedVersion: 2
+    Hash: 2ade4316cceb9b1684c9bd4826f0e229
+  - serializedVersion: 2
+    Hash: 6cd21e716faafa07a0c79ab18bd24f18
+  - serializedVersion: 2
+    Hash: b503227b9473c852ba955528e8238d7c
+  - serializedVersion: 2
+    Hash: 87b0b53c9fa8ef615dfc28b1f6f25efc
+  - serializedVersion: 2
+    Hash: 28cf25cab89cf22d1bb7867d56456774
+  - serializedVersion: 2
+    Hash: 6f492a75573ddadaba84e252bc2636d9
+  - serializedVersion: 2
+    Hash: 3b52b68a0d12053f637595e137f95ad7
+  - serializedVersion: 2
+    Hash: 59bed6db5cc64f7b42c678eb30a5a830
+  - serializedVersion: 2
+    Hash: 1f4785d526fcac1a1c25e32496a31b74
+  - serializedVersion: 2
+    Hash: fb587bce8c8d3eb9a704c44337253345
+  - serializedVersion: 2
+    Hash: 7291b91c67f025381baae79a7109a870
+  - serializedVersion: 2
+    Hash: 02c8223c4ad5fc4d421d61f9c6947e8d
+  - serializedVersion: 2
+    Hash: 85362bdfe237e077bf597dce287bf671
+  - serializedVersion: 2
+    Hash: cddcbc8c2f53c7c7242350353e8e09e4
+  - serializedVersion: 2
+    Hash: f387a353c24f7ed320973c1a5f97a838
+  - serializedVersion: 2
+    Hash: 8abc27d4bc4691b0ec2665654ec29d45
+  - serializedVersion: 2
+    Hash: eacc3aafc5de156ea0a48acf54826d2a
+  - serializedVersion: 2
+    Hash: 6c6de941c4e6353d2a9cd6bcaeb7a7f1
+  - serializedVersion: 2
+    Hash: 17cb4f62fd944d613e47f371949752a0
+  - serializedVersion: 2
+    Hash: 5d71370191e8a84003db318df02567b7
+  - serializedVersion: 2
+    Hash: 4a28608e45d4fe35e6d2c0d2b71e5db5
+  - serializedVersion: 2
+    Hash: b46a809899df19529e7e9e08c860f9ed
+  - serializedVersion: 2
+    Hash: 08db6b61606e68f1c4f3cc2fc86393df
+  - serializedVersion: 2
+    Hash: b17354c09085920b80014d47581300fc
+  - serializedVersion: 2
+    Hash: 93b6ec0c8e75280de655005660050d35
+  - serializedVersion: 2
+    Hash: bc4638f2b8636438a2dada81b06c8eeb
+  - serializedVersion: 2
+    Hash: d567ae68a1dcce1d336fa34da9a071d9
+  - serializedVersion: 2
+    Hash: 830779a25af4d79eceb751ad3ec238b7
+  - serializedVersion: 2
+    Hash: 4de6bbbdb13148cb364cf269cf056cfb
+  - serializedVersion: 2
+    Hash: 74ca0414761315914970890ce210ed5b
+  - serializedVersion: 2
+    Hash: 761d6f0e7e615e944bb71b48a8a3d8e4
+  - serializedVersion: 2
+    Hash: a463b95450f6813b760604b33432e4a0
+  - serializedVersion: 2
+    Hash: cd909e8376f20047e79370ebcf548707
+  - serializedVersion: 2
+    Hash: f980c8c6d2220e95e042f047cc6526ac
+  - serializedVersion: 2
+    Hash: d7918effa66f2551cb602f9495182283
+  - serializedVersion: 2
+    Hash: 81fad7f24ebaf23e7e8b895016699980
+  - serializedVersion: 2
+    Hash: 0448fb83718f99b2e00006f56038b52e
+  - serializedVersion: 2
+    Hash: b5dfc27a41c8df3827b4ea423d5d0342
+  - serializedVersion: 2
+    Hash: d69766af8961cfb423319f48875cce5d
+  - serializedVersion: 2
+    Hash: 0fafa0722a231129f83b9858fc995fe4
+  - serializedVersion: 2
+    Hash: 7a59191ec16943b6229874302b680c55
+  - serializedVersion: 2
+    Hash: a5bb81af86de3a246849f09dcf7eef63
+  - serializedVersion: 2
+    Hash: d0323380cfbbce2997aa4e1b08259229
+  - serializedVersion: 2
+    Hash: 000dd9808665acbe465bece79eff58e9
+  - serializedVersion: 2
+    Hash: 3e7b427d9d7cff54c15dd81c46d782f2
+  - serializedVersion: 2
+    Hash: a338a4510efc31e4b6e18bebb3dd5b8c
+  - serializedVersion: 2
+    Hash: b0d1d14bc5c02bf1575a288d45a5bd27
+  - serializedVersion: 2
+    Hash: 274f8ab373f111f7655a28127fc8c4f4
+  - serializedVersion: 2
+    Hash: 22bb0498ee8905c8c07c69a0d9f3038e
+  - serializedVersion: 2
+    Hash: 78c74915d8a5cd56b82602a33aea01cc
+  - serializedVersion: 2
+    Hash: eba19aeb2e24e124d173e799162d7556
+  - serializedVersion: 2
+    Hash: 5e6346c8db73f80e1da601686fc35c41
+  - serializedVersion: 2
+    Hash: 45b744cbac39e107652875519f7225b4
+  - serializedVersion: 2
+    Hash: d5ee03f2751785f16c2f459c84149f8e
+  - serializedVersion: 2
+    Hash: 8ace57552a68395827252eff498968b8
+  - serializedVersion: 2
+    Hash: 6095a9850452e63965438b6a31589bc8
+  - serializedVersion: 2
+    Hash: 86159acdda212e7aa4162edee11594da
+  - serializedVersion: 2
+    Hash: 6817f2b6786e1d4b3a045872b4e96d47
+  - serializedVersion: 2
+    Hash: 573bf7bcef235510a7c7b30025e69015
+  - serializedVersion: 2
+    Hash: f0b73af0da10cacc66b78dca93f3ceaf
+  - serializedVersion: 2
+    Hash: 0477ef55f26c3e2ba460642336cd33db
+  - serializedVersion: 2
+    Hash: 14288db7fab8d68e5d0701a432c0fc35
+  - serializedVersion: 2
+    Hash: 08c1f1b36cd043f0f7c970675e00a84b
+  - serializedVersion: 2
+    Hash: 3a8d5ab6ebd3176a8fe6bf17f1658d39
+  - serializedVersion: 2
+    Hash: c62877d14ca5fe003b9cc884f02df38b
+  - serializedVersion: 2
+    Hash: 259746575624b80a85012486586527af
+  - serializedVersion: 2
+    Hash: 2a1e05a8f0dede342c32c422c03915fa
+  - serializedVersion: 2
+    Hash: 8384f56d697b01a9f6e655532ce4aa10
+  - serializedVersion: 2
+    Hash: a6ad304b3cb30ee1a82179fb00eef66c
