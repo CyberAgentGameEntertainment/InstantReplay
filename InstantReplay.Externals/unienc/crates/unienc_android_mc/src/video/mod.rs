@@ -141,7 +141,6 @@ impl EncoderInput for MediaCodecVideoEncoderInput {
             }
         }
 
-        // Try to use getInputImage first (API Level 21+)
         let buffer = self.codec.get_input_buffer(buffer_index)?;
         let env = &mut attach_current_thread()?;
         let (_base_ptr, capacity, position) = get_direct_buffer_info(env, buffer.as_obj())?;

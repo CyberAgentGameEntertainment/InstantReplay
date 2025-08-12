@@ -17,8 +17,8 @@ pub struct MediaMuxer {
 
 enum MuxerSharedState {
     None,
-    Partial(oneshot::Sender<Result<()>>),
-    Started,
+    Partial(oneshot::Sender<Result<()>>), // either video or audio has started (sender is used to signal the other side to start)
+    Started, // both video and audio have started
 }
 
 pub struct MediaMuxerVideoInput {

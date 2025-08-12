@@ -4,7 +4,7 @@ use crate::UniencErrorNative;
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum UniencErrorKind {
     Success = 0,
-    Error = 1, // Keep for backward compatibility
+    Error = 1,
     InitializationError = 2,
     ConfigurationError = 3,
     ResourceAllocationError = 4,
@@ -16,7 +16,7 @@ pub enum UniencErrorKind {
     PlatformError = 10,
 }
 
-// Audio encoder input/output functions
+// These are unused but required to let csbindgen generate the binding for specific types.
 #[no_mangle]
 pub unsafe extern "C" fn unienc_error_kind_is_success(error: UniencErrorKind) -> bool {
     error == UniencErrorKind::Success

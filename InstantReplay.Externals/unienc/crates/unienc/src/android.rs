@@ -1,5 +1,3 @@
-
-#[cfg(target_os = "android")]
 use std::ffi::c_void;
 use std::ffi::{c_int, CString};
 use std::io::{BufRead, BufReader, PipeReader};
@@ -27,6 +25,7 @@ pub fn log_to_logcat(tag: &str, message: &str) {
     }
 }
 
+// redirect stdout to logcat
 pub unsafe fn set_stdout_redirect(log_tag: &'static str) -> Result<()> {
     let mut pipe_fds = [0; 2];
     if libc::pipe(pipe_fds.as_mut_ptr()) == -1 {

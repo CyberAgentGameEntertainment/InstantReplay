@@ -116,7 +116,7 @@ impl EncoderInput for MediaCodecAudioEncoderInput {
             if buffer_index >= 0 {
                 let input_buffer = self.codec.get_input_buffer(buffer_index)?;
                 {
-                    let env: &mut jni::AttachGuard<'static> = &mut attach_current_thread()?;
+                    let env = &mut attach_current_thread()?;
                     let (_base_ptr, capacity, position) =
                         get_direct_buffer_info(env, input_buffer.as_obj())?;
 
