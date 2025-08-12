@@ -190,7 +190,7 @@ fn create_audio_format<A: unienc_common::AudioEncoderOptions>(
         env,
         &format_obj,
         KEY_AAC_PROFILE,
-        aac_profiles::AAC_OBJECT_TYPE_AAC_LC,
+        crate::config::AAC_OBJECT_TYPE_AAC_LC,
     )?;
 
     SafeGlobalRef::new(env, format_obj)

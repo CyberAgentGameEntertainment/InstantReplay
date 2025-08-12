@@ -757,8 +757,8 @@ pub fn write_bgra_to_yuv_planes_with_padding(
     // Convert ARGB to YUV for the original image area only
     for y in 0..original_height {
         for x in 0..original_width {
-            let src_y = original_height - y - 1; // flip
-            let bgra_idx = ((src_y * original_width + x) * 4) as usize;
+            // let src_y = original_height - y - 1; // flip
+            let bgra_idx = ((y * original_width + x) * 4) as usize;
             let r = bgra_data[bgra_idx + 2] as i32;
             let g = bgra_data[bgra_idx + 1] as i32;
             let b = bgra_data[bgra_idx] as i32;

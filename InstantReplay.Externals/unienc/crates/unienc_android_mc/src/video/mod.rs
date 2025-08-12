@@ -7,7 +7,7 @@ use crate::java::*;
 
 use crate::{
     common::{media_codec_buffer_flag::BUFFER_FLAG_END_OF_STREAM, *},
-    config::{color_formats::*, defaults::*, format_keys::*, *},
+    config::{format_keys::*, *},
 };
 
 pub struct MediaCodecVideoEncoder {
@@ -233,7 +233,7 @@ fn create_video_format<V: unienc_common::VideoEncoderOptions>(
         env,
         &format_obj,
         KEY_I_FRAME_INTERVAL,
-        VIDEO_I_FRAME_INTERVAL,
+        1,
     )?;
 
     SafeGlobalRef::new(env, format_obj)

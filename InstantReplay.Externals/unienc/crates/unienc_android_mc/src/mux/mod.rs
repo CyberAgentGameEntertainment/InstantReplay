@@ -4,7 +4,8 @@ use std::{path::Path, sync::Arc};
 use tokio::sync::{oneshot, RwLock};
 use unienc_common::{CompletionHandle, Muxer, MuxerInput};
 
-use crate::{common::*, config::muxer_formats::*};
+use crate::config::{MUXER_OUTPUT_FORMAT_MPEG_4};
+use crate::{common::*};
 
 use crate::java::*;
 
@@ -257,7 +258,7 @@ fn create_media_muxer(env: &mut JNIEnv, output_path: &Path) -> Result<SafeGlobal
         "(Ljava/lang/String;I)V",
         &[
             JValue::Object(&path_java),
-            JValue::Int(OUTPUT_FORMAT_MPEG_4),
+            JValue::Int(MUXER_OUTPUT_FORMAT_MPEG_4),
         ],
     )?;
 

@@ -76,20 +76,13 @@ namespace InstantReplay
 
             _framePreprocessor =
                 FramePreprocessor.WithFixedSize((int)options.VideoOptions.Width, (int)options.VideoOptions.Height,
-                    //Matrix4x4.identity
-                    // RGBA to ARGB
-                    /*
-                    new Matrix4x4(new Vector4(0, 0, 0, 1),
-                        new Vector4(1, 0, 0, 0),
-                        new Vector4(0, 1, 0, 0),
-                        new Vector4(0, 0, 1, 0)
-                    )*/
                     // RGBA to BGRA
                     new Matrix4x4(new Vector4(0, 0, 1, 0),
                         new Vector4(0, 1, 0, 0),
                         new Vector4(1, 0, 0, 0),
                         new Vector4(0, 0, 0, 1)
-                    ));
+                    ),
+                    true);
 
             // Create bounded channels with DropOldest policy for backpressure
             _videoChannel = Channel.CreateBounded<VideoFrameData>(
