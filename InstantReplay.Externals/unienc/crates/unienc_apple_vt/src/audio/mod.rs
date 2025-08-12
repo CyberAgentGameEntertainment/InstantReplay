@@ -3,9 +3,10 @@ use std::{ffi::c_void, ptr::NonNull};
 use anyhow::Result;
 use bincode::{Decode, Encode};
 use objc2_audio_toolbox::{
-    kAudioConverterCompressionMagicCookie, kAudioConverterPropertyMaximumOutputPacketSize,
-    AudioConverterDispose, AudioConverterFillComplexBuffer, AudioConverterGetProperty,
-    AudioConverterGetPropertyInfo, AudioConverterNew, AudioConverterPropertyID, AudioConverterRef,
+    kAudioConverterCompressionMagicCookie, kAudioConverterEncodeBitRate,
+    kAudioConverterPropertyMaximumOutputPacketSize, AudioConverterDispose,
+    AudioConverterFillComplexBuffer, AudioConverterGetProperty, AudioConverterGetPropertyInfo,
+    AudioConverterNew, AudioConverterPropertyID, AudioConverterRef, AudioConverterSetProperty,
 };
 use objc2_core_audio_types::{
     kAudioFormatFlagIsPacked, kAudioFormatFlagIsSignedInteger, kAudioFormatLinearPCM,
@@ -13,7 +14,9 @@ use objc2_core_audio_types::{
     AudioStreamPacketDescription, MPEG4ObjectID,
 };
 use tokio::sync::mpsc;
-use unienc_common::{AudioSample, EncodedData, Encoder, EncoderInput, EncoderOutput, UniencDataKind};
+use unienc_common::{
+    AudioSample, EncodedData, Encoder, EncoderInput, EncoderOutput, UniencDataKind,
+};
 
 use crate::OsStatus;
 
@@ -131,6 +134,8 @@ impl AudioToolboxEncoder {
 
         let converter = AudioConverter::new(&mut from, &mut to)?;
 
+        converter.set_property::<u32>(kAudioConverterEncodeBitRate, &options.bitrate())?;
+
         let mut max_output_packet_size = 0_u32;
         converter.get_property(
             kAudioConverterPropertyMaximumOutputPacketSize,
@@ -244,6 +249,26 @@ impl AudioConverter {
         };
 
         Ok(data)
+    }
+
+    fn set_property<T: Sized>(
+        &self,
+        property_id: AudioConverterPropertyID,
+        data: &T,
+    ) -> Result<()> {
+        let size = size_of::<T>() as u32;
+
+        unsafe {
+            AudioConverterSetProperty(
+                self.converter,
+                property_id,
+                size,
+                NonNull::new(data as *const _ as *mut c_void).unwrap(),
+            )
+        }
+        .to_result()?;
+
+        Ok(())
     }
 
     fn fill_complex_buffer(

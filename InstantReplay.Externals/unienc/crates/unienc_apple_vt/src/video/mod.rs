@@ -4,15 +4,17 @@ use std::{ffi::c_void, ptr::NonNull};
 use anyhow::{Context, Result};
 use objc2::rc::Retained;
 use objc2_core_foundation::{
-    kCFAllocatorDefault, kCFBooleanFalse, kCFBooleanTrue, CFBoolean, CFDictionary, CFString, CFType,
+    kCFAllocatorDefault, kCFBooleanFalse, kCFBooleanTrue, CFBoolean, CFDictionary, CFNumber,
+    CFString, CFType,
 };
 use objc2_core_media::{
     kCMSampleAttachmentKey_NotSync, kCMTimeInvalid, kCMVideoCodecType_H264, CMSampleBuffer, CMTime,
 };
 use objc2_core_video::{kCVPixelFormatType_32BGRA, CVPixelBuffer, CVPixelBufferCreateWithBytes};
 use objc2_video_toolbox::{
-    kVTCompressionPropertyKey_AllowFrameReordering, kVTCompressionPropertyKey_RealTime,
-    VTCompressionSession, VTEncodeInfoFlags, VTSessionSetProperty,
+    kVTCompressionPropertyKey_AllowFrameReordering, kVTCompressionPropertyKey_AverageBitRate,
+    kVTCompressionPropertyKey_RealTime, VTCompressionSession, VTEncodeInfoFlags,
+    VTSessionSetProperty,
 };
 use tokio::sync::mpsc;
 use unienc_common::{EncodedData, Encoder, EncoderInput, EncoderOutput, VideoSample};
@@ -75,7 +77,7 @@ impl EncodedData for VideoEncodedData {
                 .seconds()
         }
     }
-    
+
     fn kind(&self) -> unienc_common::UniencDataKind {
         if self.not_sync {
             unienc_common::UniencDataKind::Interpolated
@@ -222,6 +224,14 @@ impl VideoToolboxEncoder {
                 &session,
                 kVTCompressionPropertyKey_AllowFrameReordering,
                 kCFBooleanFalse.map(|b| b as &CFType),
+            )
+        }
+        .to_result()?;
+        unsafe {
+            VTSessionSetProperty(
+                &session,
+                kVTCompressionPropertyKey_AverageBitRate,
+                Some(&CFNumber::new_i32(options.bitrate() as i32)),
             )
         }
         .to_result()?;

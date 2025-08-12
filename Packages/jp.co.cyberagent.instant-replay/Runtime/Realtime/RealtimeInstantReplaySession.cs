@@ -74,10 +74,10 @@ namespace InstantReplay
             {
                 VideoOptions = new VideoEncoderOptions
                 {
-                    Width = 1920,
-                    Height = 1080,
+                    Width = 1280,
+                    Height = 720,
                     FpsHint = 30,
-                    Bitrate = 5000000 // 5 Mbps
+                    Bitrate = 2500000 // 2.5 Mbps
                 },
                 AudioOptions = new AudioEncoderOptions
                 {
@@ -85,7 +85,7 @@ namespace InstantReplay
                     Channels = 2,
                     Bitrate = 128000 // 128 kbps
                 },
-                MaxMemoryUsageBytes = 50 * 1024 * 1024, // 50 MiB
+                MaxMemoryUsageBytes = 20 * 1024 * 1024, // 20 MiB
                 FixedFrameRate = 30.0,
                 VideoInputQueueSize = 5,
                 AudioInputQueueSize = 60
