@@ -37,6 +37,8 @@ Instant Replay は Unity で直近のゲームプレイ動画をいつでも保�
     * [音声ソースの設定](#音声ソースの設定)
     * [録画状態を取得する](#録画状態を取得する)
     * [書き出しの進捗状況を取得する](#書き出しの進捗状況を取得する)
+  * [リアルタイムモード (experimental)](#リアルタイムモード-experimental)
+    * [設定](#設定)
 <!-- TOC -->
 
 ## 要件
@@ -195,3 +197,64 @@ new InstantReplaySession(900, audioSampleProvider: new CustomAudioSampleProvider
 ### 書き出しの進捗状況を取得する
 
 `InstantReplaySession.StopAndTranscodeAsync()` の引数に `IProgress<float>` を渡すことで書き出しの進捗状況を 0.0〜1.0 で取得できます。
+
+## リアルタイムモード (experimental)
+
+Instant Replay は、通常は録画中のフレームを JPEG 画像としてディスクに一時保存し、書き出し時に改めて圧縮を行います。このモードは計算負荷が小さく、より多くのプラットフォームで使用できますが、録画中のディスク書き込みが大きいという欠点があります。
+
+これに対し、**リアルタイムモード**では、録画中にリアルタイムでフレームや音声サンプルの圧縮を行い、書き出し時にはそれらの圧縮済みデータを直接多重化します。このモードはオンメモリで完結しディスク負荷を回避できますが、計算負荷が大きく、現在のところプラットフォームサポートが限られています。
+
+プラットフォーム|デフォルトモード|リアルタイムモード
+-|-|-
+iOS|✅|✅
+Android|✅|✅
+macOS|✅|✅
+Windows|✅|planned
+Linux|⚠️ (using ffmpeg)|planned
+Other Platforms|⚠️ (using ffmpeg)|not planned
+
+リアルタイムモードを使用するには、`InstantReplaySession` の代わりに `RealtimeInstantReplaySession` を使用してください。
+
+```csharp
+// 録画開始
+using var session = RealtimeInstantReplaySession().CreateDefault();
+
+// 〜 ゲームプレイ 〜
+await Task.Delay(10000, ct);
+
+// 録画停止と書き出し
+var outputPath = await session.StopAndExportAsync();
+File.Move(outputPath, Path.Combine(Application.persistentDataPath, Path.GetFileName(outputPath)));
+```
+
+### 設定
+
+リアルタイムモードでは、録画できる時間はメモリ使用量によって決定されます。デフォルト設定では 20MiB に設定されており、圧縮されたフレームや音声サンプルの合計サイズがこの上限に達すると古いデータから順に破棄されます。より長時間の録画を可能にするには、メモリ使用量 `MaxMemoryUsageBytes` を上げたり、フレームレートや解像度、ビットレートを下げてください。
+
+実行時に使用されるメモリとしては、上記のエンコード済みのデータを保持するバッファに加え、エンコード前の生のフレームや音声サンプルがいくつか保持されます。これはエンコーダーが非同期的に動作する関係で、あるフレームをエンコードしている間に次のフレームを受け取るためです。`VideoInputQueueSize` と `AudioInputQueueSize` でそれぞれのキューのサイズを指定でき、この値を小さくすることでメモリ使用量を削減できる場合がありますが、フレームドロップの可能性が高まります。
+
+```csharp
+// デフォルト設定
+var options = new RealtimeEncodingOptions
+{
+    VideoOptions = new VideoEncoderOptions
+    {
+        Width = 1280,
+        Height = 720,
+        FpsHint = 30,
+        Bitrate = 2500000 // 2.5 Mbps
+    },
+    AudioOptions = new AudioEncoderOptions
+    {
+        SampleRate = 44100,
+        Channels = 2,
+        Bitrate = 128000 // 128 kbps
+    },
+    MaxMemoryUsageBytes = 20 * 1024 * 1024, // 20 MiB
+    FixedFrameRate = 30.0, // 固定フレームレートを使用しない場合はnull
+    VideoInputQueueSize = 5, // エンコード前の生のフレームを保持する数の上限
+    AudioInputQueueSize = 60, // エンコード前の生の音声サンプルフレームを保持する数の上限
+};
+
+using var session = new RealtimeInstantReplaySession(options)
+```
