@@ -70,7 +70,11 @@ namespace InstantReplay
 
             // Initialize frame rate limiting
             if (options.FixedFrameRate is { } fixedFrameRate)
-                _fixedFrameInterval = 1.0 / options.FixedFrameRate;
+            {
+                if (fixedFrameRate <= 0)
+                    throw new ArgumentOutOfRangeException(nameof(fixedFrameRate), "Fixed frame rate must be greater than zero.");
+                _fixedFrameInterval = 1.0 / fixedFrameRate;
+            }
 
             // Debug.Log($"Video Size: {options.VideoOptions.Width}x{options.VideoOptions.Height}");
 
