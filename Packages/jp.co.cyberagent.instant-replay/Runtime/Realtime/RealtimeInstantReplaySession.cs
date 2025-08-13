@@ -134,7 +134,7 @@ namespace InstantReplay
                 {
                     var timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
                     var fileName = $"InstantReplay_{timestamp}.mp4";
-                    outputPath = Path.Combine(Application.persistentDataPath, fileName);
+                    outputPath = Path.Combine(Application.temporaryCachePath, fileName); // save to temporary cache path by default
                 }
 
                 var result = await _recorder.ExportLastSecondsAsync(outputPath, seconds);
