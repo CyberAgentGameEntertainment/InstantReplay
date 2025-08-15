@@ -263,23 +263,29 @@ impl unienc_common::AudioEncoderOptions for AudioEncoderOptionsNative {
 }
 
 #[cfg(target_vendor = "apple")]
-type PlatformEncodingSystem = unienc_apple_vt::VideoToolboxEncodingSystem<
+ type PlatformEncodingSystem = unienc_apple_vt::VideoToolboxEncodingSystem<
     VideoEncoderOptionsNative,
     AudioEncoderOptionsNative,
 >;
 
 #[cfg(target_os = "android")]
-type PlatformEncodingSystem = unienc_android_mc::MediaCodecEncodingSystem<
+pub type PlatformEncodingSystem = unienc_android_mc::MediaCodecEncodingSystem<
     VideoEncoderOptionsNative,
     AudioEncoderOptionsNative,
 >;
 
-#[cfg(not(any(target_vendor = "apple", target_os = "android")))]
-type PlatformEncodingSystem = (); // Placeholder - will generate compile error below
+#[cfg(windows)]
+pub type PlatformEncodingSystem = unienc_windows_mf::MediaFoundationEncodingSystem<
+    VideoEncoderOptionsNative,
+    AudioEncoderOptionsNative,
+>;
 
-#[cfg(not(any(target_vendor = "apple", target_os = "android")))]
+#[cfg(not(any(target_vendor = "apple", target_os = "android", windows)))]
+pub type PlatformEncodingSystem = (); // Placeholder - will generate compile error below
+
+#[cfg(not(any(target_vendor = "apple", target_os = "android", windows)))]
 compile_error!(
-    "Platform not supported. Only Apple and Android platforms are currently implemented."
+    "Platform not supported. Only Apple, Android, and Windows platforms are currently implemented."
 );
 
 mod platform_types {
@@ -316,6 +322,7 @@ pub unsafe extern "C" fn unienc_new_encoding_system(
     video_options: *const VideoEncoderOptionsNative,
     audio_options: *const AudioEncoderOptionsNative,
 ) -> *mut PlatformEncodingSystem {
+    let _guard = RUNTIME.enter();
     unsafe {
         let system = PlatformEncodingSystem::new(&*video_options, &*audio_options);
         Box::into_raw(Box::new(system))
@@ -324,6 +331,7 @@ pub unsafe extern "C" fn unienc_new_encoding_system(
 
 #[no_mangle]
 pub unsafe extern "C" fn unienc_free_encoding_system(system: *mut PlatformEncodingSystem) {
+    let _guard = RUNTIME.enter();
     if !system.is_null() {
         unsafe {
             let _ = Box::from_raw(system);
@@ -339,6 +347,7 @@ pub unsafe extern "C" fn unienc_new_video_encoder(
     on_error: usize /*UniencCallback*/,
     user_data: SendPtr<c_void>,
 ) -> bool {
+    let _guard = RUNTIME.enter();
     let on_error: UniencCallback = std::mem::transmute(on_error);
 
     if system.is_null() {
@@ -376,6 +385,7 @@ pub unsafe extern "C" fn unienc_new_audio_encoder(
     on_error: usize /*UniencCallback*/,
     user_data: SendPtr<c_void>,
 ) -> bool {
+    let _guard = RUNTIME.enter();
     let on_error: UniencCallback = std::mem::transmute(on_error);
 
     if system.is_null() {
@@ -415,6 +425,7 @@ pub unsafe extern "C" fn unienc_new_muxer(
     on_error: usize /*UniencCallback*/,
     user_data: SendPtr<c_void>,
 ) -> bool {
+    let _guard = RUNTIME.enter();
     let on_error: UniencCallback = std::mem::transmute(on_error);
 
     if system.is_null() || output_path.is_null() {

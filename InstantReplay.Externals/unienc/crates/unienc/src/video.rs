@@ -21,6 +21,7 @@ pub unsafe extern "C" fn unienc_video_encoder_push(
     callback: usize, /*UniencCallback*/
     user_data: SendPtr<c_void>,
 ) {
+    let _guard = RUNTIME.enter();
     let callback: UniencCallback = std::mem::transmute(callback);
     if input.is_null() || data.is_null() {
         UniencError::invalid_input_error("Invalid input parameters")
@@ -29,7 +30,7 @@ pub unsafe extern "C" fn unienc_video_encoder_push(
     }
 
     unsafe {
-        RUNTIME.spawn(async move {
+        tokio::spawn(async move {
             let input = arc_from_raw_retained(*input);
             let mut input = input.lock().await;
             let data_slice = std::slice::from_raw_parts(*data, data_size);
@@ -59,6 +60,7 @@ pub unsafe extern "C" fn unienc_video_encoder_pull(
     callback: usize, /*UniencDataCallback*/
     user_data: SendPtr<c_void>,
 ) {
+    let _guard = RUNTIME.enter();
     let callback: UniencDataCallback = std::mem::transmute(callback);
     if output.is_null() {
         UniencError::invalid_input_error("Invalid input parameters")
@@ -88,6 +90,7 @@ pub unsafe extern "C" fn unienc_video_encoder_pull(
 pub unsafe extern "C" fn unienc_free_video_encoder_input(
     video_input: SendPtr<Mutex<Option<VideoEncoderInput>>>,
 ) {
+    let _guard = RUNTIME.enter();
     if !video_input.is_null() {
         arc_from_raw(*video_input);
     }
@@ -97,6 +100,7 @@ pub unsafe extern "C" fn unienc_free_video_encoder_input(
 pub unsafe extern "C" fn unienc_free_video_encoder_output(
     video_output: SendPtr<Mutex<Option<VideoEncoderOutput>>>,
 ) {
+    let _guard = RUNTIME.enter();
     if !video_output.is_null() {
         arc_from_raw(*video_output);
     }
