@@ -37,6 +37,8 @@ When a bug occurs, you can export the operations performed up to that point as a
     * [Setting the Audio Source](#setting-the-audio-source)
     * [Getting the Recording State](#getting-the-recording-state)
     * [Getting the Progress of Writing](#getting-the-progress-of-writing)
+  * [Real-time Mode (experimental)](#real-time-mode-experimental)
+    * [Settings](#settings)
 <!-- TOC -->
 
 ## Requirements
@@ -197,3 +199,64 @@ You can get the recording state with the `InstantReplaySession.State` property.
 ### Getting the Progress of Writing
 
 You can get the progress in the range of 0.0 to 1.0 by passing `IProgress<float>` to `InstantReplaySession.StopAndTranscodeAsync`.
+
+## Real-time Mode (experimental)
+
+Instant Replay usually saves the recorded frames as JPEG images to disk and compresses them again during writing. This mode has low computational load and can be used on more platforms, but it has a large disk write during recording.
+
+In contrast, **real-time mode** compresses frames and audio samples in real-time during recording, and during writing, it multiplexes the already compressed data directly. This mode avoids disk writes by operating entirely in memory, but it has a high computational load and currently has limited platform support.
+
+Platform|Default Mode|Real-time Mode
+-|-|-
+iOS|✅|✅
+Android|✅|✅
+macOS|✅|✅
+Windows|✅|planned
+Linux|⚠️ (using ffmpeg)|planned
+Other Platforms|⚠️ (using ffmpeg)|not planned
+
+To use real-time mode, create `RealtimeInstantReplaySession` instead of `InstantReplaySession`.
+
+```csharp
+// Start recording
+using var session = RealtimeInstantReplaySession().CreateDefault();
+
+// 〜 Gameplay 〜
+await Task.Delay(10000, ct);
+
+// Stop recording and export
+var outputPath = await session.StopAndExportAsync();
+File.Move(outputPath, Path.Combine(Application.persistentDataPath, Path.GetFileName(outputPath)));
+```
+
+### Settings
+
+In real-time mode, the recording duration is determined by the memory usage. The default setting is set to 20 MiB, and when the total size of compressed frames and audio samples reaches this limit, older data is discarded. To enable longer recordings, increase the memory usage `MaxMemoryUsageBytes` or reduce the frame rate, resolution, or bitrate.
+
+It consumes some memory for the buffers that hold the compressed data, as well as for the raw frames and audio samples to be encoded. This is necessary because the encoder operates asynchronously, allowing it to receive the next frame while encoding the current one. You can specify the size of these queues with `VideoInputQueueSize` and `AudioInputQueueSize`. Reducing these values can decrease memory usage, but it may increase the likelihood of frame drops.
+
+```csharp
+// Default settings
+var options = new RealtimeEncodingOptions
+{
+    VideoOptions = new VideoEncoderOptions
+    {
+        Width = 1280,
+        Height = 720,
+        FpsHint = 30,
+        Bitrate = 2500000 // 2.5 Mbps
+    },
+    AudioOptions = new AudioEncoderOptions
+    {
+        SampleRate = 44100,
+        Channels = 2,
+        Bitrate = 128000 // 128 kbps
+    },
+    MaxMemoryUsageBytes = 20 * 1024 * 1024, // 20 MiB
+    FixedFrameRate = 30.0, // null if not using fixed frame rate
+    VideoInputQueueSize = 5, // Maximum number of raw frames to keep before encoding
+    AudioInputQueueSize = 60, // Maximum number of raw audio sample frames to keep before encoding
+};
+
+using var session = new RealtimeInstantReplaySession(options)
+```
