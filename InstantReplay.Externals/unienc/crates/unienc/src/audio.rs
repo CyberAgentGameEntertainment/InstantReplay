@@ -19,6 +19,7 @@ pub unsafe extern "C" fn unienc_audio_encoder_push(
     callback: usize, /*UniencCallback*/
     user_data: SendPtr<c_void>,
 ) {
+    let _guard = RUNTIME.enter();
     let callback: UniencCallback = std::mem::transmute(callback);
     if input.is_null() || data.is_null() {
         UniencError::invalid_input_error("Invalid input parameters")
@@ -28,7 +29,7 @@ pub unsafe extern "C" fn unienc_audio_encoder_push(
     let input = arc_from_raw_retained(*input);
 
     unsafe {
-        RUNTIME.spawn(async move {
+        tokio::spawn(async move {
             let data_slice = std::slice::from_raw_parts(*data, sample_count);
             let sample = AudioSample {
                 data: data_slice.to_vec(),
@@ -53,6 +54,7 @@ pub unsafe extern "C" fn unienc_audio_encoder_pull(
     callback: usize, /*UniencDataCallback*/
     user_data: SendPtr<c_void>,
 ) {
+    let _guard = RUNTIME.enter();
     let callback: UniencDataCallback = std::mem::transmute(callback);
     if output.is_null() {
         UniencError::invalid_input_error("Invalid input parameters")
@@ -61,7 +63,7 @@ pub unsafe extern "C" fn unienc_audio_encoder_pull(
     }
     let output = arc_from_raw_retained(*output);
 
-    RUNTIME.spawn(async move {
+    tokio::spawn(async move {
         let mut output = output.lock().await;
         let result = match output
             .as_mut()
@@ -78,6 +80,7 @@ pub unsafe extern "C" fn unienc_audio_encoder_pull(
 pub unsafe extern "C" fn unienc_free_audio_encoder_input(
     audio_input: SendPtr<Mutex<Option<AudioEncoderInput>>>,
 ) {
+    let _guard = RUNTIME.enter();
     if !audio_input.is_null() {
         arc_from_raw(*audio_input);
     }
@@ -87,6 +90,7 @@ pub unsafe extern "C" fn unienc_free_audio_encoder_input(
 pub unsafe extern "C" fn unienc_free_audio_encoder_output(
     audio_output: SendPtr<Mutex<Option<AudioEncoderOutput>>>,
 ) {
+    let _guard = RUNTIME.enter();
     if !audio_output.is_null() {
         arc_from_raw(*audio_output);
     }
