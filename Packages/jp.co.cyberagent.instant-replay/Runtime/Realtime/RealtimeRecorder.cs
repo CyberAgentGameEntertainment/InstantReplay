@@ -88,7 +88,6 @@ namespace InstantReplay
                     ),
                     true);
 
-            // Create bounded channels with DropOldest policy for backpressure
             _videoChannel = Channel.CreateBounded<VideoFrameData>(
                 new BoundedChannelOptions(options.VideoInputQueueSize)
                 {
