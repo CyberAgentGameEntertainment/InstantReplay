@@ -37,13 +37,11 @@ namespace InstantReplay
             lock (_videoQueue)
             lock (_audioQueue)
             {
-                if (_videoQueue != null)
-                    foreach (var frame in _videoQueue)
-                        frame.Dispose();
+                foreach (var frame in _videoQueue)
+                    frame.Dispose();
 
-                if (_audioQueue != null)
-                    foreach (var frame in _audioQueue)
-                        frame.Dispose();
+                foreach (var frame in _audioQueue)
+                    frame.Dispose();
 
                 _videoQueue.Clear();
                 _audioQueue.Clear();
