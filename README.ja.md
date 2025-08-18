@@ -37,15 +37,16 @@ Instant Replay は Unity で直近のゲームプレイ動画をいつでも保�
     * [音声ソースの設定](#音声ソースの設定)
     * [録画状態を取得する](#録画状態を取得する)
     * [書き出しの進捗状況を取得する](#書き出しの進捗状況を取得する)
-  * [リアルタイムモード (experimental)](#リアルタイムモード-experimental)
+  * [リアルタイムモード](#リアルタイムモード)
     * [設定](#設定)
+  * [プラットフォーム対応](#プラットフォーム対応)
 <!-- TOC -->
 
 ## 要件
 
 - Unity 2022.3 以降
 
-### 対応プラットフォーム
+### 対応プラットフォーム (デフォルトモード)
 
 - iOS
   - **13.0以降**
@@ -54,6 +55,8 @@ Instant Replay は Unity で直近のゲームプレイ動画をいつでも保�
   - **10.15 (Catalina) 以降**
 - Windows (Editor and Standalone)
 - その他 `ffmpeg` コマンドラインツールが PATH にインストールされたシステム
+
+詳しくは [プラットフォーム対応](#プラットフォーム対応) を参照してください。
 
 ## インストール
 
@@ -198,20 +201,13 @@ new InstantReplaySession(900, audioSampleProvider: new CustomAudioSampleProvider
 
 `InstantReplaySession.StopAndTranscodeAsync()` の引数に `IProgress<float>` を渡すことで書き出しの進捗状況を 0.0〜1.0 で取得できます。
 
-## リアルタイムモード (experimental)
+## リアルタイムモード
 
 Instant Replay は、通常は録画中のフレームを JPEG 画像としてディスクに一時保存し、書き出し時に改めて圧縮を行います。このモードは計算負荷が小さく、より多くのプラットフォームで使用できますが、録画中のディスク書き込みが大きいという欠点があります。
 
 これに対し、**リアルタイムモード**では、録画中にリアルタイムでフレームや音声サンプルの圧縮を行い、書き出し時にはそれらの圧縮済みデータを直接多重化します。このモードはオンメモリで完結しディスク負荷を回避できますが、計算負荷が大きく、現在のところプラットフォームサポートが限られています。
 
-プラットフォーム|デフォルトモード|リアルタイムモード
--|-|-
-iOS|✅|✅
-Android|✅|✅
-macOS|✅|✅
-Windows|✅|planned
-Linux|⚠️ (using ffmpeg)|planned
-Other Platforms|⚠️ (using ffmpeg)|not planned
+詳しくは [プラットフォーム対応](#プラットフォーム対応) を参照してください。
 
 リアルタイムモードを使用するには、`InstantReplaySession` の代わりに `RealtimeInstantReplaySession` を使用してください。
 
@@ -258,3 +254,37 @@ var options = new RealtimeEncodingOptions
 
 using var session = new RealtimeInstantReplaySession(options)
 ```
+
+## プラットフォーム対応
+
+> [!NOTE]
+> 以下の情報は使用している API やプラットフォームツール等から推定したもので、実際には動作が検証されていない場合があります。
+
+### デフォルトモード
+
+プラットフォーム|OS バージョン|ISA
+-|-|-
+iOS|13.0 and later|aarch64
+Android|5.0 and later|Any
+macOS|10.15 and later|aarch64, x86_64
+Windows|Windows 7 (SP1) and later|x86_64
+Linux and others (requires FFmpeg)|Any|Any
+
+### リアルタイムモード
+
+プラットフォーム|OS バージョン|ISA
+-|-|-
+iOS|10.0 and later|aarch64
+Android|5.0 and later|aarch64, armv7a
+macOS|11.0 and later|aarch64
+Windows|Windows 7 (SP1) and later|x86_64
+Linux and others|(Unsupported)|(Unsupported)
+
+### 使用しているエンコーダー API
+
+プラットフォーム|デフォルトモード|リアルタイムモード
+-|-|-
+iOS / macOS|Video Toolbox (H.264), AVFoundation (AAC)|Video Toolbox (H.264), Audio Toolbox (AAC)
+Android|MediaCodec (H.264 / AAC)|MediaCodec (H.264 / AAC)
+Windows|Media Foundation (H.264 / AAC)|Media Foundation (H.264 / AAC)
+Linux and others|FFmpeg installed on the system (H.264 / AAC)|-
