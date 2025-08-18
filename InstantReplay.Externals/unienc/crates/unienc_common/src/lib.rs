@@ -1,4 +1,5 @@
-use std::future::Future;
+use std::fmt::Debug;
+use std::{future::Future};
 use std::path::Path;
 
 use anyhow::Result;

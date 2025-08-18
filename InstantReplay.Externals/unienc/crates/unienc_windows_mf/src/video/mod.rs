@@ -169,11 +169,19 @@ impl EncodedData for VideoEncodedData {
 
     fn set_timestamp(&mut self, timestamp: f64) {
         match &self.payload {
-            Payload::Sample(sample) => unsafe {
-                sample
-                    .SetSampleTime((timestamp * 10_000_000_f64) as i64)
-                    .unwrap()
-            },
+            Payload::Sample(sample) => {
+                let sample_time = (timestamp * 10_000_000_f64) as i64;
+                unsafe { sample.SetSampleTime(sample_time) }.unwrap();
+                // set the DTS
+                // it assumes there is no B frame
+                if unsafe { sample.GetItemType(&MFSampleExtension_DecodeTimestamp) }.is_ok() {
+                    unsafe {
+                        sample
+                            .SetUINT64(&MFSampleExtension_DecodeTimestamp, sample_time as u64)
+                            .unwrap()
+                    };
+                }
+            }
             Payload::Format(_media_type) => {}
         };
     }

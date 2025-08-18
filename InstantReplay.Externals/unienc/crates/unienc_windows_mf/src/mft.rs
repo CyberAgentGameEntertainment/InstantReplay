@@ -175,7 +175,7 @@ fn enum_mft(
     };
 
     if num_activate == 0 {
-        return Ok(None); // Err(anyhow!("No suitable video encoder found"));
+        return Ok(None);
     }
 
     Ok(unsafe { (*activate).take() })
@@ -236,6 +236,11 @@ impl Transform {
         };
 
         let transform = unsafe { activate.ActivateObject::<IMFTransform>()? };
+
+        if is_async {
+            let attributes = unsafe { transform.GetAttributes()? };
+            unsafe { attributes.SetUINT32(&MF_TRANSFORM_ASYNC_UNLOCK, 1)? };
+        }
 
         let mut input_streams = 0;
         let mut output_streams = 0;

@@ -14,6 +14,7 @@ pub struct MediaFoundationAudioEncoder {
     transform: Transform,
     output_rx: mpsc::Receiver<UnsafeSend<IMFSample>>,
     sample_rate: u32,
+    channels: u32,
 }
 
 impl MediaFoundationAudioEncoder {
@@ -54,6 +55,7 @@ impl MediaFoundationAudioEncoder {
             transform,
             output_rx,
             sample_rate: options.sample_rate(),
+            channels: options.channels(),
         })
     }
 }
@@ -68,6 +70,7 @@ impl Encoder for MediaFoundationAudioEncoder {
             AudioEncoderInputImpl {
                 transform: self.transform,
                 sample_rate: self.sample_rate,
+                channels: self.channels
             },
             AudioEncoderOutputImpl {
                 receiver: self.output_rx,
@@ -80,6 +83,7 @@ impl Encoder for MediaFoundationAudioEncoder {
 pub struct AudioEncoderInputImpl {
     transform: Transform,
     sample_rate: u32,
+    channels: u32,
 }
 
 pub struct AudioEncoderOutputImpl {
@@ -124,7 +128,7 @@ impl EncoderInput for AudioEncoderInputImpl {
         };
         unsafe {
             sample.SetSampleDuration(
-                (data.data.len() as f64 / self.sample_rate as f64 * 10_000_000_f64) as i64,
+                ((data.data.len() / self.channels as usize) as f64 / self.sample_rate  as f64 * 10_000_000_f64) as i64,
             )?
         };
         self.transform.push(sample).await
@@ -174,7 +178,7 @@ impl EncodedData for AudioEncodedData {
 
     fn kind(&self) -> UniencDataKind {
         match &self.payload {
-            Payload::Sample(sample) => UniencDataKind::Interpolated,
+            Payload::Sample(_sample) => UniencDataKind::Interpolated,
             Payload::Format(_media_type) => UniencDataKind::Metadata,
         }
     }

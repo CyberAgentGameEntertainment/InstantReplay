@@ -46,10 +46,19 @@ where
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub enum Payload {
     Sample(UnsafeSend<IMFSample>),
     Format(UnsafeSend<IMFMediaType>),
+}
+
+impl std::fmt::Debug for Payload {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let serializable: SerializablePayload = self
+            .try_into()
+            .map_err(|e: anyhow::Error| bincode::error::EncodeError::OtherString(e.to_string())).unwrap();
+        serializable.fmt(f)
+    }
 }
 
 impl Encode for Payload {
@@ -86,7 +95,7 @@ impl<'de, Context> BorrowDecode<'de, Context> for Payload {
     }
 }
 
-#[derive(Encode, Decode)]
+#[derive(Encode, Decode, Debug)]
 enum SerializablePayload {
     Sample(SerializableMFSample),
     Format(SerializableMFAttributes),
@@ -123,7 +132,7 @@ impl TryFrom<&SerializablePayload> for Payload {
     }
 }
 
-#[derive(Encode, Decode)]
+#[derive(Encode, Decode, Debug)]
 struct SerializableMFSample {
     attributes: SerializableMFAttributes,
     buffers: Vec<Vec<u8>>,
@@ -132,12 +141,34 @@ struct SerializableMFSample {
     flags: u32,
 }
 
-#[derive(Encode, Decode)]
+#[derive(Encode, Decode, Debug)]
 struct SerializableMFAttributes {
-    attributes: HashMap<u128, AttributeValue>,
+    attributes: HashMap<Guid, AttributeValue>,
 }
 
-#[derive(Encode, Decode)]
+#[repr(transparent)]
+#[derive(Encode, Decode, PartialEq, Eq, PartialOrd, Ord, Hash)]
+struct Guid(u128);
+
+impl From<u128> for Guid {
+    fn from(value: u128) -> Self {
+        Guid(value)
+    }
+}
+
+impl From<Guid> for u128 {
+    fn from(value: Guid) -> Self {
+        value.0
+    }
+}
+
+impl std::fmt::Debug for Guid {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Guid({:x})", self.0)
+    }
+}
+
+#[derive(Encode, Decode, Debug)]
 enum AttributeValue {
     UInt32(u32),
     UInt64(u64),
@@ -184,7 +215,7 @@ impl TryInto<IMFSample> for &SerializableMFSample {
     fn try_into(self) -> std::result::Result<IMFSample, Self::Error> {
         let sample = unsafe { MFCreateSample()? };
         self.attributes
-            .apply(&mut sample.cast::<IMFAttributes>()?)?;
+            .apply(&sample.cast::<IMFAttributes>()?)?;
         unsafe { sample.SetSampleTime(self.time)? };
         unsafe { sample.SetSampleDuration(self.duration)? };
         unsafe { sample.SetSampleFlags(self.flags)? };
@@ -209,7 +240,7 @@ impl TryFrom<&IMFAttributes> for SerializableMFAttributes {
 
     fn try_from(from: &IMFAttributes) -> Result<Self, Self::Error> {
         let count = unsafe { from.GetCount()? };
-        let mut map = HashMap::<u128, AttributeValue>::new();
+        let mut map = HashMap::<Guid, AttributeValue>::new();
         for i in 0..count {
             let mut guid: GUID = GUID::default();
 
@@ -243,7 +274,7 @@ impl TryFrom<&IMFAttributes> for SerializableMFAttributes {
                 }
             };
 
-            map.insert(guid.to_u128(), value);
+            map.insert(guid.to_u128().into(), value);
         }
 
         Ok(Self { attributes: map })
@@ -253,7 +284,7 @@ impl TryFrom<&IMFAttributes> for SerializableMFAttributes {
 impl SerializableMFAttributes {
     pub fn apply(&self, target: &IMFAttributes) -> Result<()> {
         for (guid, value) in &self.attributes {
-            let guid = GUID::from_u128(*guid);
+            let guid = GUID::from_u128(guid.0);
             match value {
                 AttributeValue::UInt32(v) => unsafe { target.SetUINT32(&guid, *v)? },
                 AttributeValue::UInt64(v) => unsafe { target.SetUINT64(&guid, *v)? },
