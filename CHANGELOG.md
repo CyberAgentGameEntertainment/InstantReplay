@@ -1,3 +1,9 @@
+## [0.4.0] - 2025/08/22
+
+### Added
+
+- Added realtime encoding support for iOS, Android, macOS and Windows.
+
 ## [0.3.0] - 2025/06/17
 
 ### Added

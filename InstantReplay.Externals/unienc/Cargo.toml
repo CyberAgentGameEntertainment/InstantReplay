@@ -1,0 +1,15 @@
+[workspace]
+members = [ "./crates/*"]
+resolver = "2"
+
+[workspace.dependencies]
+objc2 = { version = "0.6.1", features = ["catch-all"] }
+bincode = { version = "2.0.1", features = ["derive"] }
+anyhow = { version = "1.0.98", features = ["backtrace", "std"] }
+unienc_common = { path = "./crates/unienc_common" }
+unienc_android_mc = { path = "./crates/unienc_android_mc" }
+unienc_windows_mf = { path = "./crates/unienc_windows_mf" }
+unienc_apple_vt = { path = "./crates/unienc_apple_vt" }
+
+[workspace.package]
+edition = "2021"

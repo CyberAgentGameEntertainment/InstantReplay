@@ -1,0 +1,23 @@
+[package]
+name = "unienc_apple_vt"
+version = "0.1.0"
+edition.workspace = true
+
+[dependencies]
+anyhow = "1.0.98"
+bincode = { workspace = true }
+bitflags = "2.9.1"
+block2 = "0.6.1"
+dispatch2 = "0.3.0"
+objc2 = { workspace = true }
+objc2-audio-toolbox = "0.3.1"
+objc2-av-foundation = { version = "0.3.1", features = ["AVMediaFormat", "objc2-core-media"] }
+objc2-avf-audio = "0.3.1"
+objc2-core-audio-types = "0.3.1"
+objc2-core-foundation = "0.3.1"
+objc2-core-media = "0.3.1"
+objc2-core-video = "0.3.1"
+objc2-foundation = "0.3.1"
+objc2-video-toolbox = "0.3.1"
+tokio = { version = "1.45.1", features = ["sync"] }
+unienc_common = { workspace = true }

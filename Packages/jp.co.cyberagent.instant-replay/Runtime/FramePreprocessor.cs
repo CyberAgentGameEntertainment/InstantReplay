@@ -11,23 +11,61 @@ namespace InstantReplay
 {
     internal class FramePreprocessor : IDisposable
     {
+        private static readonly int MainTexSt = Shader.PropertyToID("_MainTex_ST");
+        private static readonly int ScaleAndTiling = Shader.PropertyToID("_ScaleAndTiling");
+        private static readonly int Rechannel = Shader.PropertyToID("_Rechannel");
+        private readonly int? _fixedHeight;
+        private readonly bool _defaultFlip;
+        private readonly int? _fixedWidth;
         private readonly int? _maxHeight;
         private readonly int? _maxWidth;
-        private RenderTexture _output;
+        private Material _material;
 
-        public FramePreprocessor(int? maxWidth, int? maxHeight)
+        private FramePreprocessor(int? maxWidth, int? maxHeight, int? fixedWidth, int? fixedHeight,
+            Matrix4x4 rechannelMatrix, bool defaultFlip)
         {
             _maxWidth = maxWidth;
             _maxHeight = maxHeight;
+            _fixedWidth = fixedWidth;
+            _fixedHeight = fixedHeight;
+            _defaultFlip = defaultFlip;
+            var shader = Resources.Load<Shader>("InstantReplayPreprocess");
+            if (shader == null)
+                throw new InvalidOperationException("Shader 'InstantReplayPreprocess' not found in Resources.");
+            _material = new Material(shader);
+            _material.SetMatrix(Rechannel, rechannelMatrix);
+            _material.SetVector(MainTexSt, new Vector4(1f, 1f, 0f, 0f));
         }
+
+        private RenderTexture Output { get; set; }
 
         public void Dispose()
         {
-            if (_output)
+            if (Output)
             {
-                Object.Destroy(_output);
-                _output = default;
+                Object.Destroy(Output);
+                Output = default;
             }
+
+            if (_material)
+            {
+                Object.Destroy(_material);
+                _material = default;
+            }
+        }
+
+        public static FramePreprocessor WithMaxSize(int? maxWidth, int? maxHeight, Matrix4x4 rechannelMatrix, bool defaultFlip = false)
+        {
+            if (maxWidth is <= 0 || maxHeight is <= 0)
+                throw new ArgumentException("Max width and height must be greater than zero.");
+            return new FramePreprocessor(maxWidth, maxHeight, null, null, rechannelMatrix, defaultFlip);
+        }
+
+        public static FramePreprocessor WithFixedSize(int fixedWidth, int fixedHeight, Matrix4x4 rechannelMatrix, bool defaultFlip = false)
+        {
+            if (fixedWidth <= 0 || fixedHeight <= 0)
+                throw new ArgumentException("Fixed width and height must be greater than zero.");
+            return new FramePreprocessor(null, null, fixedWidth, fixedHeight, rechannelMatrix, defaultFlip);
         }
 
         public RenderTexture Process(Texture source, bool needFlipVertically)
@@ -41,34 +79,38 @@ namespace InstantReplay
             if (_maxHeight is { } maxHeight)
                 scale = Mathf.Min(scale, maxHeight / (float)source.height);
 
-            var width = (int)(source.width * scale);
-            var height = (int)(source.height * scale);
+            var width = _fixedWidth ?? (int)(source.width * scale);
+            var height = _fixedHeight ?? (int)(source.height * scale);
 
-            if (_output == null)
+            if (Output == null)
             {
-                var format = SystemInfo.IsFormatSupported(source.graphicsFormat, FormatUsage.ReadPixels)
-                    ? source.graphicsFormat
-                    : GraphicsFormat.R8G8B8A8_SRGB;
+                Output = new RenderTexture(width, height, 0, GraphicsFormat.R8G8B8A8_SRGB);
+                Output.filterMode = FilterMode.Bilinear;
+                Output.wrapMode = TextureWrapMode.Clamp;
+            }
+            else if (Output.width != width || Output.height != height)
+            {
+                Output.Release();
+                Output.width = width;
+                Output.height = height;
+                Output.Create();
+            }
 
-                _output = new RenderTexture(width, height, 0, format);
-            }
-            else if (_output.width != width || _output.height != height)
-            {
-                _output.Release();
-                _output.width = width;
-                _output.height = height;
-                _output.Create();
-            }
+            // scale to fit
+            var pixelScale = Mathf.Min((float)width / source.width, (float)height / source.height);
+            var renderScale = new Vector2(pixelScale * source.width / width, pixelScale * source.height / height);
+            // Debug.Log($"source: {source.width}x{source.height}, dest: {width}x{height}, pixelScale: {pixelScale}, renderScale: {renderScale.x}x{renderScale.y}, needFlipVertically: {needFlipVertically}");
 
             var active = RenderTexture.active;
-            if (needFlipVertically)
-                // We need to flip the image vertically on some platforms
-                Graphics.Blit(source, _output, new Vector2(1f, -1f), new Vector2(0, 1f));
+            if (needFlipVertically ^ _defaultFlip)
+                _material.SetVector(ScaleAndTiling, new Vector4(1f / renderScale.x, -1f / renderScale.y, 0f, 1f));
             else
-                Graphics.Blit(source, _output);
+                _material.SetVector(ScaleAndTiling, new Vector4(1f / renderScale.x, 1f / renderScale.y, 0f, 0f));
+
+            Graphics.Blit(source, Output, _material);
 
             RenderTexture.active = active;
-            return _output;
+            return Output;
         }
     }
 }
