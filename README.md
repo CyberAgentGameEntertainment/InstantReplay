@@ -23,7 +23,7 @@ When a bug occurs, you can export the operations performed up to that point as a
 * [Instant Replay for Unity](#instant-replay-for-unity)
   * [Table of Contents](#table-of-contents)
   * [Requirements](#requirements)
-    * [Supported Platforms](#supported-platforms)
+    * [Supported Platforms (Default Mode)](#supported-platforms-default-mode)
   * [Installation](#installation)
     * [Install Dependencies](#install-dependencies)
       * [Method 1: Install via UnityNuGet and dependency package](#method-1-install-via-unitynuget-and-dependency-package)
@@ -46,7 +46,7 @@ When a bug occurs, you can export the operations performed up to that point as a
 
 - Unity 2022.3 or later
 
-### Supported Platforms
+### Supported Platforms (Default Mode)
 
 - iOS
   - **13.0 or later**

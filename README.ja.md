@@ -23,7 +23,7 @@ Instant Replay は Unity で直近のゲームプレイ動画をいつでも保�
 * [Instant Replay for Unity](#instant-replay-for-unity)
   * [Table of Contents](#table-of-contents)
   * [要件](#要件)
-    * [対応プラットフォーム](#対応プラットフォーム)
+    * [対応プラットフォーム (デフォルトモード)](#対応プラットフォーム-デフォルトモード)
   * [インストール](#インストール)
     * [依存関係のインストール](#依存関係のインストール)
       * [方法1: UnityNuGet と依存パッケージを使用したインストール](#方法1-unitynuget-と依存パッケージを使用したインストール)
