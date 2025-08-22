@@ -37,8 +37,9 @@ When a bug occurs, you can export the operations performed up to that point as a
     * [Setting the Audio Source](#setting-the-audio-source)
     * [Getting the Recording State](#getting-the-recording-state)
     * [Getting the Progress of Writing](#getting-the-progress-of-writing)
-  * [Real-time Mode (experimental)](#real-time-mode-experimental)
+  * [Real-time Mode](#real-time-mode)
     * [Settings](#settings)
+  * [Platform Support](#platform-support)
 <!-- TOC -->
 
 ## Requirements
@@ -54,6 +55,8 @@ When a bug occurs, you can export the operations performed up to that point as a
   - **10.15 (Catalina) or later**
 - Windows (Editor and Standalone)
 - Any other systems with `ffmpeg` command line tool installed in PATH
+
+See [Platform Support](#platform-support) for details.
 
 ## Installation
 
@@ -200,20 +203,13 @@ You can get the recording state with the `InstantReplaySession.State` property.
 
 You can get the progress in the range of 0.0 to 1.0 by passing `IProgress<float>` to `InstantReplaySession.StopAndTranscodeAsync`.
 
-## Real-time Mode (experimental)
+## Real-time Mode
 
 Instant Replay usually saves the recorded frames as JPEG images to disk and compresses them again during writing. This mode has low computational load and can be used on more platforms, but it has a large disk write during recording.
 
 In contrast, **real-time mode** compresses frames and audio samples in real-time during recording, and during writing, it multiplexes the already compressed data directly. This mode avoids disk writes by operating entirely in memory, but it has a high computational load and currently has limited platform support.
 
-Platform|Default Mode|Real-time Mode
--|-|-
-iOS|✅|✅
-Android|✅|✅
-macOS|✅|✅
-Windows|✅|planned
-Linux|⚠️ (using ffmpeg)|planned
-Other Platforms|⚠️ (using ffmpeg)|not planned
+See [Platform Support](#platform-support) for details.
 
 To use real-time mode, create `RealtimeInstantReplaySession` instead of `InstantReplaySession`.
 
@@ -260,3 +256,37 @@ var options = new RealtimeEncodingOptions
 
 using var session = new RealtimeInstantReplaySession(options)
 ```
+
+## Platform Support
+
+> [!NOTE]
+> The following information is based on the APIs and platform tools being used, and actual functionality may not have been verified.
+
+### Default Mode
+
+Platform|OS version|ISA
+-|-|-
+iOS|13.0 and later|aarch64
+Android|5.0 and later|Any
+macOS|10.15 and later|aarch64, x86_64
+Windows|Windows 7 (SP1) and later|x86_64
+Linux and others (requires FFmpeg)|Any|Any
+
+### Real-time Mode
+
+Platform|OS version|ISA
+-|-|-
+iOS|10.0 and later|aarch64
+Android|5.0 and later|aarch64, armv7a
+macOS|11.0 and later|aarch64
+Windows|Windows 7 (SP1) and later|x86_64
+Linux and others|(Unsupported)|(Unsupported)
+
+### Encoder APIs in use
+
+Platform|Default Mode|Real-time Mode
+-|-|-
+iOS / macOS|Video Toolbox (H.264), AVFoundation (AAC)|Video Toolbox (H.264), Audio Toolbox (AAC)
+Android|MediaCodec (H.264 / AAC)|MediaCodec (H.264 / AAC)
+Windows|Media Foundation (H.264 / AAC)|Media Foundation (H.264 / AAC)
+Linux and others|FFmpeg installed on the system (H.264 / AAC)|-

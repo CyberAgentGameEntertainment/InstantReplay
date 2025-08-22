@@ -21,6 +21,7 @@ pub unsafe extern "C" fn unienc_muxer_push_video(
     callback: usize, /*UniencCallback*/
     user_data: SendPtr<c_void>,
 ) {
+    let _guard = RUNTIME.enter();
     let callback: UniencCallback = std::mem::transmute(callback);
     if video_input.is_null() || data.is_null() {
         UniencError::invalid_input_error("Invalid input parameters")
@@ -45,7 +46,7 @@ pub unsafe extern "C" fn unienc_muxer_push_video(
 
         decoded_data.set_timestamp(timestamp);
 
-        RUNTIME.spawn(async move {
+        tokio::spawn(async move {
             let mut video_input = video_input.lock().await;
             let result = match video_input
                 .as_mut()
@@ -71,6 +72,7 @@ pub unsafe extern "C" fn unienc_muxer_push_audio(
     callback: usize, /*UniencCallback*/
     user_data: SendPtr<c_void>,
 ) {
+    let _guard = RUNTIME.enter();
     let callback: UniencCallback = std::mem::transmute(callback);
     if audio_input.is_null() || data.is_null() {
         UniencError::invalid_input_error("Invalid input parameters")
@@ -95,7 +97,7 @@ pub unsafe extern "C" fn unienc_muxer_push_audio(
 
         decoded_data.set_timestamp(timestamp);
 
-        RUNTIME.spawn(async move {
+        tokio::spawn(async move {
             let mut audio_input = audio_input.lock().await;
             let result = match audio_input
                 .as_mut()
@@ -118,6 +120,7 @@ pub unsafe extern "C" fn unienc_muxer_finish_video(
     callback: usize, /*UniencCallback*/
     user_data: SendPtr<c_void>,
 ) {
+    let _guard = RUNTIME.enter();
     let callback: UniencCallback = std::mem::transmute(callback);
     if video_input.is_null() {
         UniencError::invalid_input_error("Invalid input parameters")
@@ -127,7 +130,7 @@ pub unsafe extern "C" fn unienc_muxer_finish_video(
 
     let video_input = arc_from_raw_retained(*video_input);
 
-    RUNTIME.spawn(async move {
+    tokio::spawn(async move {
         let mut video_input = video_input.lock().await;
         let result = match video_input
             .take()
@@ -146,6 +149,7 @@ pub unsafe extern "C" fn unienc_muxer_finish_audio(
     callback: usize, /*UniencCallback*/
     user_data: SendPtr<c_void>,
 ) {
+    let _guard = RUNTIME.enter();
     let callback: UniencCallback = std::mem::transmute(callback);
     if audio_input.is_null() {
         UniencError::invalid_input_error("Invalid input parameters")
@@ -155,7 +159,7 @@ pub unsafe extern "C" fn unienc_muxer_finish_audio(
 
     let audio_input = arc_from_raw_retained(*audio_input);
 
-    RUNTIME.spawn(async move {
+    tokio::spawn(async move {
         let mut audio_input = audio_input.lock().await;
         let result = match audio_input
             .take()
@@ -174,6 +178,7 @@ pub unsafe extern "C" fn unienc_muxer_complete(
     callback: usize, /*UniencCallback*/
     user_data: SendPtr<c_void>,
 ) {
+    let _guard = RUNTIME.enter();
     let callback: UniencCallback = std::mem::transmute(callback);
     if completion_handle.is_null() {
         UniencError::invalid_input_error("Invalid input parameters")
@@ -183,7 +188,7 @@ pub unsafe extern "C" fn unienc_muxer_complete(
 
     let handle = arc_from_raw_retained(*completion_handle);
 
-    RUNTIME.spawn(async move {
+    tokio::spawn(async move {
         let mut handle = handle.lock().await;
 
         let result = match handle
@@ -202,6 +207,7 @@ pub unsafe extern "C" fn unienc_muxer_complete(
 pub unsafe extern "C" fn unienc_free_muxer_video_input(
     video_input: SendPtr<Mutex<Option<VideoMuxerInput>>>,
 ) {
+    let _guard = RUNTIME.enter();
     if !video_input.is_null() {
         arc_from_raw(*video_input);
     }
@@ -211,6 +217,7 @@ pub unsafe extern "C" fn unienc_free_muxer_video_input(
 pub unsafe extern "C" fn unienc_free_muxer_audio_input(
     audio_input: SendPtr<Mutex<Option<AudioMuxerInput>>>,
 ) {
+    let _guard = RUNTIME.enter();
     if !audio_input.is_null() {
         arc_from_raw(*audio_input);
     }
@@ -220,6 +227,7 @@ pub unsafe extern "C" fn unienc_free_muxer_audio_input(
 pub unsafe extern "C" fn unienc_free_muxer_completion_handle(
     completion_handle: SendPtr<Mutex<Option<MuxerCompletionHandle>>>,
 ) {
+    let _guard = RUNTIME.enter();
     if !completion_handle.is_null() {
         arc_from_raw(*completion_handle);
     }

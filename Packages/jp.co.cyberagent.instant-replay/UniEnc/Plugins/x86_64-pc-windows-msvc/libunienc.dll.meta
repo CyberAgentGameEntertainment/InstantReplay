@@ -1,5 +1,5 @@
 fileFormatVersion: 2
-guid: e7c2534217c91a24494a09c18780e58c
+guid: 37015020eba93bd4e9e78b6a6cf5bb90
 PluginImporter:
   externalObjects: {}
   serializedVersion: 2
@@ -11,6 +11,11 @@ PluginImporter:
   isExplicitlyReferenced: 0
   validateReferences: 1
   platformData:
+  - first:
+      : 
+    second:
+      enabled: 0
+      settings: {}
   - first:
       : Any
     second:
@@ -32,11 +37,6 @@ PluginImporter:
         AndroidSharedLibraryType: Executable
         CPU: ARMv7
   - first:
-      Any: 
-    second:
-      enabled: 0
-      settings: {}
-  - first:
       Editor: Editor
     second:
       enabled: 1
@@ -55,19 +55,19 @@ PluginImporter:
     second:
       enabled: 1
       settings:
-        CPU: AnyCPU
+        CPU: x86_64
   - first:
       Standalone: Win
     second:
       enabled: 0
       settings:
-        CPU: AnyCPU
+        CPU: None
   - first:
       Standalone: Win64
     second:
       enabled: 1
       settings:
-        CPU: AnyCPU
+        CPU: x86_64
   - first:
       iPhone: iOS
     second:

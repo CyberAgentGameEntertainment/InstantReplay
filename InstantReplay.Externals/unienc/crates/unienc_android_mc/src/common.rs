@@ -732,9 +732,7 @@ pub(crate) fn format_to_map(
 
 /// Write ARGB data to YUV image planes with padding for 16-byte alignment
 pub fn write_bgra_to_yuv_planes_with_padding(
-    bgra_data: &[u8],
-    original_width: u32,
-    original_height: u32,
+    sample: &VideoSample,
     padded_width: u32,
     padded_height: u32,
     planes: &[ImagePlane],
@@ -746,40 +744,7 @@ pub fn write_bgra_to_yuv_planes_with_padding(
         ));
     }
 
-    let padded_y_size = (padded_width * padded_height) as usize;
-    let padded_uv_size = (padded_width * padded_height / 4) as usize;
-
-    // Create padded YUV data arrays
-    let mut y_data = vec![16u8; padded_y_size]; // Black level for Y
-    let mut u_data = vec![128u8; padded_uv_size]; // Neutral for U
-    let mut v_data = vec![128u8; padded_uv_size]; // Neutral for V
-
-    // Convert ARGB to YUV for the original image area only
-    for y in 0..original_height {
-        for x in 0..original_width {
-            // let src_y = original_height - y - 1; // flip
-            let bgra_idx = ((y * original_width + x) * 4) as usize;
-            let r = bgra_data[bgra_idx + 2] as i32;
-            let g = bgra_data[bgra_idx + 1] as i32;
-            let b = bgra_data[bgra_idx] as i32;
-
-            let y_val = (((66 * r + 129 * g + 25 * b + 128) >> 8) + 16) as u8;
-
-            let y_idx = (y * padded_width + x) as usize;
-            y_data[y_idx] = y_val;
-
-            // Sample U and V for every 2x2 block (4:2:0 subsampling)
-            if x % 2 == 0 && y % 2 == 0 {
-                let u_val = (((-38 * r - 74 * g + 112 * b + 128) >> 8) + 128) as u8;
-                let v_val = (((112 * r - 94 * g - 18 * b + 128) >> 8) + 128) as u8;
-
-                let uv_idx = ((y / 2) * (padded_width / 2) + (x / 2)) as usize;
-                u_data[uv_idx] = u_val;
-                v_data[uv_idx] = v_val;
-            }
-        }
-    }
-
+    let (y_data, u_data, v_data) = sample.to_yuv420_planes(Some((padded_width, padded_height)))?;
     /*
     println!("padded: {}x{}", padded_width, padded_height);
     println!("Y: {}", planes[0]);
