@@ -1,0 +1,121 @@
+name: Build unienc native binaries
+on:
+  workflow_dispatch:
+    inputs:
+      build-config:
+        required: true
+        default: 'release'
+        type: choice
+        options:
+          - debug
+          - release
+
+env:
+  _RUST_BUILD_CONFIG: ${{ inputs.build-config == 'debug' && 'debug' || 'release' }}
+
+jobs:
+  build-windows:
+    name: Build uneinc native binaries (Windows)
+    runs-on: windows-2022
+    strategy:
+      matrix:
+        arch: [i686, x86_64]
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: InstantReplay.Externals/unienc/crates/unienc
+    steps:
+      - uses: actions/checkout@v4
+      - run: rustup default stable
+      - run: rustup target add ${{ matrix.arch }}-pc-windows-msvc
+      - run: cargo build --target ${{ matrix.arch }}-pc-windows-msvc --profile ${{ env._RUST_BUILD_CONFIG == 'debug' && 'dev' || env._RUST_BUILD_CONFIG }}
+      - run: Move-Item -Path unienc.dll -Destination libunienc.dll -Force
+        working-directory: InstantReplay.Externals/unienc/target/${{ matrix.arch }}-pc-windows-msvc/${{ env._RUST_BUILD_CONFIG }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.arch }}-pc-windows
+          path: InstantReplay.Externals/unienc/target/${{ matrix.arch }}-pc-windows-msvc/${{ env._RUST_BUILD_CONFIG }}/libunienc.dll
+          retention-days: 1
+  build-android:
+    name: Build uneinc native binaries (Android)
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        arch: [i686, x86_64]
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: InstantReplay.Externals/unienc/crates/unienc
+    steps:
+      - uses: actions/checkout@v4
+      - run: rustup default stable
+      - run: rustup target add ${{ matrix.arch }}-linux-android
+      - run: sudo apt update && sudo apt install gcc-multilib
+      - run: echo "ANDROID_NDK_HOME=$(echo $ANDROID_NDK_LATEST_HOME)" >> $GITHUB_ENV
+      - run: cargo install cargo-ndk
+      - run: cargo ndk -t ${{ matrix.arch }}-linux-android build --profile ${{ env._RUST_BUILD_CONFIG == 'debug' && 'dev' || env._RUST_BUILD_CONFIG }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.arch }}-linux-android
+          path: InstantReplay.Externals/unienc/target/${{ matrix.arch }}-linux-android/${{ env._RUST_BUILD_CONFIG }}/libunienc.so
+          retention-days: 1
+  build-macos:
+    name: Build uneinc native binaries (macOS)
+    runs-on: macos-15
+    strategy:
+      matrix:
+        arch: [aarch64, x86_64]
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: InstantReplay.Externals/unienc/crates/unienc
+    steps:
+      - uses: actions/checkout@v4
+      - run: rustup default stable
+      - run: rustup target add ${{ matrix.arch }}-apple-darwin
+      - run: cargo build --target ${{ matrix.arch }}-apple-darwin --profile ${{ env._RUST_BUILD_CONFIG == 'debug' && 'dev' || env._RUST_BUILD_CONFIG }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.arch }}-apple-darwin
+          path: InstantReplay.Externals/unienc/target/${{ matrix.arch }}-apple-darwin/${{ env._RUST_BUILD_CONFIG }}/libunienc.dylib
+          retention-days: 1
+  build-ios:
+    name: Build uneinc native binaries (iOS)
+    runs-on: macos-15
+    strategy:
+      matrix:
+        arch: [aarch64]
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: InstantReplay.Externals/unienc/crates/unienc
+    steps:
+      - uses: actions/checkout@v4
+      - run: rustup default stable
+      - run: rustup target add ${{ matrix.arch }}-apple-ios
+      - run: cargo build --target ${{ matrix.arch }}-apple-ios --profile ${{ env._RUST_BUILD_CONFIG == 'debug' && 'dev' || env._RUST_BUILD_CONFIG }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.arch }}-apple-ios
+          path: InstantReplay.Externals/unienc/target/${{ matrix.arch }}-apple-ios/${{ env._RUST_BUILD_CONFIG }}/libunienc.a
+          retention-days: 1
+
+  update-unity-native:
+    name: Push unienc native libraries
+    needs: [build-windows, build-android, build-ios, build-macos]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: ./Packages/jp.co.cyberagent.instant-replay/UniEnc/Plugins/
+      - run: |
+          git add ./Packages/jp.co.cyberagent.instant-replay/UniEnc/Plugins
+          git config --local user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git commit -m "Update unienc native binaries" Packages/jp.co.cyberagent.instant-replay/UniEnc/Plugins/**/*
+          git push origin ${{ github.ref_name }}
+
+permissions:
+  contents: write
