@@ -41,7 +41,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        arch: [i686, x86_64]
+        triple: [aarch64-linux-android, armv7-linux-androideabi, x86_64-linux-android]
     timeout-minutes: 30
     defaults:
       run:
@@ -49,15 +49,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: rustup default stable
-      - run: rustup target add ${{ matrix.arch }}-linux-android
+      - run: rustup target add ${{ matrix.triple }}
       - run: sudo apt update && sudo apt install gcc-multilib
       - run: echo "ANDROID_NDK_HOME=$(echo $ANDROID_NDK_LATEST_HOME)" >> $GITHUB_ENV
       - run: cargo install cargo-ndk
-      - run: cargo ndk -t ${{ matrix.arch }}-linux-android build --profile ${{ env._RUST_BUILD_CONFIG == 'debug' && 'dev' || env._RUST_BUILD_CONFIG }}
+      - run: cargo ndk -t ${{ matrix.triple }} build --profile ${{ env._RUST_BUILD_CONFIG == 'debug' && 'dev' || env._RUST_BUILD_CONFIG }}
       - uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.arch }}-linux-android
-          path: InstantReplay.Externals/unienc/target/${{ matrix.arch }}-linux-android/${{ env._RUST_BUILD_CONFIG }}/libunienc.so
+          name: ${{ matrix.triple }}
+          path: InstantReplay.Externals/unienc/target/${{ matrix.triple }}/${{ env._RUST_BUILD_CONFIG }}/libunienc.so
           retention-days: 1
   build-macos:
     name: Build uneinc native binaries (macOS)
