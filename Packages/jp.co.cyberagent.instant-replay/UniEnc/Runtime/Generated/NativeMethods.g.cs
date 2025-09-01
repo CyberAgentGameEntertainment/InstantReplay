@@ -95,6 +95,9 @@ namespace UniEnc
         [return: MarshalAs(UnmanagedType.U1)]
         internal static extern bool unienc_error_is_success(UniencErrorNative error);
 
+        [DllImport(__DllName, EntryPoint = "unienc_jpeg_decode", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        internal static extern void unienc_jpeg_decode(byte* data, nuint size, nuint callback, void* user_data);
+
 
     }
 

@@ -10,6 +10,7 @@ mod audio;
 mod mux;
 mod public_types;
 mod video;
+mod jpeg;
 
 #[cfg(target_os = "android")]
 mod android;
@@ -263,7 +264,7 @@ impl unienc_common::AudioEncoderOptions for AudioEncoderOptionsNative {
 }
 
 #[cfg(target_vendor = "apple")]
- type PlatformEncodingSystem = unienc_apple_vt::VideoToolboxEncodingSystem<
+pub type PlatformEncodingSystem = unienc_apple_vt::VideoToolboxEncodingSystem<
     VideoEncoderOptionsNative,
     AudioEncoderOptionsNative,
 >;

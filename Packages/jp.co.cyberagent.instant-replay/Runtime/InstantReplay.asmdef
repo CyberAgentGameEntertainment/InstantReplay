@@ -2,10 +2,8 @@
     "name": "InstantReplay",
     "rootNamespace": "InstantReplay",
     "references": [
-        "GUID:f7fefbbe3d6964c9d95deb1620ccc797",
         "GUID:2665a8d13d1b3f18800f46e256720795",
         "GUID:d8b63aba1907145bea998dd612889d6b",
-        "GUID:279c2e19bba7d40e584c2fd198c61765",
         "GUID:cbc5f87df9298458d9b3f2ed13ca9ba4"
     ],
     "includePlatforms": [],

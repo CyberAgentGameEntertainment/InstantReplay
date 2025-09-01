@@ -1,11 +1,9 @@
-use rand::RngCore;
 
 use unienc_common::{
     AudioSample, CompletionHandle, EncodedData, Encoder, EncoderInput, EncoderOutput, EncodingSystem, Muxer, MuxerInput, VideoSample
 };
 
 use unienc::PlatformEncodingSystem;
-use unienc_windows_mf::video::VideoEncodedData;
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_e2e() {
@@ -43,7 +41,7 @@ async fn test_e2e_typed<T: EncodingSystem + Send>(encoding_system: T) {
     let emit_video = tokio::spawn(async move {
         let frames = (target_duration * 10.0) as u32;
         for i in 0..frames {
-            let mut data = vec![0; 1280 * 720 * 4];
+            let data = vec![0; 1280 * 720 * 4];
 
             {
                 // let mut rng = rand::rng();
