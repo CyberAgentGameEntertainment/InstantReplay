@@ -1,5 +1,5 @@
 fileFormatVersion: 2
-guid: 398ad4aa41ed0473e9c0982763cfec45
+guid: 3f4a7a92c318441398a82852e5b9d6a9
 PluginImporter:
   externalObjects: {}
   serializedVersion: 2
@@ -41,7 +41,7 @@ PluginImporter:
     second:
       enabled: 1
       settings:
-        CPU: ARM64
+        CPU: x86_64
         DefaultValueInitialized: true
         OS: OSX
   - first:
@@ -49,13 +49,13 @@ PluginImporter:
     second:
       enabled: 1
       settings:
-        CPU: None
+        CPU: AnyCPU
   - first:
       Standalone: OSXUniversal
     second:
       enabled: 1
       settings:
-        CPU: None
+        CPU: x86_64
   - first:
       Standalone: Win
     second:
@@ -67,14 +67,14 @@ PluginImporter:
     second:
       enabled: 1
       settings:
-        CPU: None
+        CPU: x86_64
   - first:
       iPhone: iOS
     second:
       enabled: 0
       settings:
         AddToEmbeddedBinaries: false
-        CPU: ARM64
+        CPU: AnyCPU
         CompileFlags: 
         FrameworkDependencies: 
   userData: 
