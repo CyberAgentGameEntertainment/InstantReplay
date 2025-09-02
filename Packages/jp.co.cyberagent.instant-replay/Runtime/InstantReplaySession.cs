@@ -15,6 +15,7 @@ namespace InstantReplay
     /// <summary>
     ///     Single session of InstantReplay for recording and transcoding.
     /// </summary>
+    [Obsolete("Use RealtimeInstantReplaySession instead.")]
     public class InstantReplaySession : IDisposable
     {
         private static string _instantReplayDirectory;

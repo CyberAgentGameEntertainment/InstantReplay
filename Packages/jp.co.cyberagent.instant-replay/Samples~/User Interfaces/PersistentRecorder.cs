@@ -5,7 +5,9 @@
 using System;
 using System.IO;
 using System.Threading.Tasks;
+using UniEnc;
 using UnityEngine;
+using UnityEngine.Serialization;
 
 namespace InstantReplay.Examples
 {
@@ -13,14 +15,14 @@ namespace InstantReplay.Examples
     {
         #region Serialized Fields
 
-        [SerializeField] public int maxWidth = 640;
-        [SerializeField] public int maxHeight = 640;
-        [SerializeField] public int numFrames = 900;
+        [FormerlySerializedAs("maxWidth")] [SerializeField] public int width = 640;
+        [FormerlySerializedAs("maxHeight")] [SerializeField] public int height = 640;
+        [SerializeField] public int maxMemoryUsageMb = 20;
         [SerializeField] public int fixedFrameRate = 30;
 
         #endregion
 
-        private InstantReplaySession _currentSession;
+        private RealtimeInstantReplaySession _currentSession;
 
         #region Event Functions
 
@@ -60,8 +62,28 @@ namespace InstantReplay.Examples
                 }
             }
 
-            _currentSession =
-                new InstantReplaySession(numFrames, fixedFrameRate, maxWidth: maxWidth, maxHeight: maxHeight);
+            _currentSession = new RealtimeInstantReplaySession(new RealtimeEncodingOptions()
+            {
+                VideoOptions = new VideoEncoderOptions()
+                {
+                    Width = (uint)width,
+                    Height = (uint)height,
+                    Bitrate = (uint)Mathf.Min(width * height * 30 * 0.2f - 25000,
+                        width * height * 30 * 0.1f + 1000),
+                    FpsHint = (uint)fixedFrameRate
+
+                },
+                AudioOptions = new AudioEncoderOptions
+                {
+                    Channels = 2,
+                    SampleRate = (uint)AudioSettings.outputSampleRate,
+                    Bitrate = 128000
+                },
+                MaxMemoryUsageBytes = maxMemoryUsageMb * 1024 * 1024, // 20 MiB
+                FixedFrameRate = 30.0, // null if not using fixed frame rate
+                VideoInputQueueSize = 5, // Maximum number of raw frames to keep before encoding
+                AudioInputQueueSize = 60, // Maximum number of raw audio sample frames to keep before encoding
+            });
         }
 
         public async ValueTask<string> StopAndTranscodeAsync(IProgress<float> progress, string directory)
@@ -77,7 +99,7 @@ namespace InstantReplay.Examples
                     return null;
                 }
 
-                var outputFilename = await session.StopAndTranscodeAsync(progress);
+                var outputFilename = await session.StopAndExportAsync();
 
                 if (string.IsNullOrEmpty(outputFilename))
                     return null;
