@@ -151,7 +151,7 @@ impl EncoderInput for MediaCodecVideoEncoderInput {
         // Use Image-based approach with dynamic plane layout and padding
         let planes = image.get_planes()?;
         crate::common::write_bgra_to_yuv_planes_with_padding(
-            &data.data,
+            &data,
             self.padded_width,
             self.padded_height,
             &planes,
