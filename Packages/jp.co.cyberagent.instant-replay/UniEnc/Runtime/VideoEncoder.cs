@@ -57,7 +57,10 @@ namespace UniEnc
 
                 unsafe
                 {
+                    var runtime = RuntimeWrapper.Instance;
+
                     NativeMethods.unienc_video_encoder_push(
+                        runtime.Runtime,
                         _inputHandle,
                         (nint)frameData.GetUnsafeReadOnlyPtr(),
                         (nuint)frameData.Length,
@@ -88,10 +91,16 @@ namespace UniEnc
             var context = CallbackHelper.DataCallbackContext.Rent();
             var contextHandle = CallbackHelper.CreateSendPtr(context);
 
-            NativeMethods.unienc_video_encoder_pull(
-                _outputHandle,
-                CallbackHelper.GetDataCallbackPtr(),
-                contextHandle);
+            unsafe
+            {
+                var runtime = RuntimeWrapper.Instance;
+
+                NativeMethods.unienc_video_encoder_pull(
+                    runtime.Runtime,
+                    _outputHandle,
+                    CallbackHelper.GetDataCallbackPtr(),
+                    contextHandle);
+            }
 
             return context.Task;
         }
@@ -107,7 +116,13 @@ namespace UniEnc
             {
                 if (_inputHandle != 0)
                 {
-                    NativeMethods.unienc_free_video_encoder_input(_inputHandle);
+                    unsafe
+                    {
+                        var runtime = RuntimeWrapper.Instance;
+
+                        NativeMethods.unienc_free_video_encoder_input(runtime.Runtime, _inputHandle);
+                    }
+
                     _inputHandle = 0;
                 }
             }
@@ -121,13 +136,25 @@ namespace UniEnc
                 {
                     if (_inputHandle != 0)
                     {
-                        NativeMethods.unienc_free_video_encoder_input(_inputHandle);
+                        unsafe
+                        {
+                            var runtime = RuntimeWrapper.Instance;
+
+                            NativeMethods.unienc_free_video_encoder_input(runtime.Runtime, _inputHandle);
+                        }
+
                         _inputHandle = 0;
                     }
 
                     if (_outputHandle != 0)
                     {
-                        NativeMethods.unienc_free_video_encoder_output(_outputHandle);
+                        unsafe
+                        {
+                            var runtime = RuntimeWrapper.Instance;
+
+                            NativeMethods.unienc_free_video_encoder_output(runtime.Runtime, _outputHandle);
+                        }
+
                         _outputHandle = 0;
                     }
 

@@ -4,16 +4,15 @@ use tokio::sync::Mutex;
 use unienc_common::{CompletionHandle, EncodedData, MuxerInput};
 
 use crate::{
-    arc_from_raw, arc_from_raw_retained,
-    platform_types::{
+    arc_from_raw, arc_from_raw_retained, platform_types::{
         AudioEncodedData, AudioMuxerInput, MuxerCompletionHandle, VideoEncodedData, VideoMuxerInput,
-    },
-    ApplyCallback, SendPtr, UniencCallback, UniencError, RUNTIME,
+    }, ApplyCallback, Runtime, SendPtr, UniencCallback, UniencError
 };
 
 // Muxer input functions
 #[no_mangle]
 pub unsafe extern "C" fn unienc_muxer_push_video(
+    runtime: *mut Runtime,
     video_input: SendPtr<Mutex<Option<VideoMuxerInput>>>,
     data: SendPtr<u8>,
     size: usize,
@@ -21,7 +20,7 @@ pub unsafe extern "C" fn unienc_muxer_push_video(
     callback: usize, /*UniencCallback*/
     user_data: SendPtr<c_void>,
 ) {
-    let _guard = RUNTIME.enter();
+    let _guard = (*runtime).enter();
     let callback: UniencCallback = std::mem::transmute(callback);
     if video_input.is_null() || data.is_null() {
         UniencError::invalid_input_error("Invalid input parameters")
@@ -65,6 +64,7 @@ pub unsafe extern "C" fn unienc_muxer_push_video(
 
 #[no_mangle]
 pub unsafe extern "C" fn unienc_muxer_push_audio(
+    runtime: *mut Runtime,
     audio_input: SendPtr<Mutex<Option<AudioMuxerInput>>>,
     data: SendPtr<u8>,
     size: usize,
@@ -72,7 +72,7 @@ pub unsafe extern "C" fn unienc_muxer_push_audio(
     callback: usize, /*UniencCallback*/
     user_data: SendPtr<c_void>,
 ) {
-    let _guard = RUNTIME.enter();
+    let _guard = (*runtime).enter();
     let callback: UniencCallback = std::mem::transmute(callback);
     if audio_input.is_null() || data.is_null() {
         UniencError::invalid_input_error("Invalid input parameters")
@@ -116,11 +116,12 @@ pub unsafe extern "C" fn unienc_muxer_push_audio(
 
 #[no_mangle]
 pub unsafe extern "C" fn unienc_muxer_finish_video(
+    runtime: *mut Runtime,
     video_input: SendPtr<Mutex<Option<VideoMuxerInput>>>,
     callback: usize, /*UniencCallback*/
     user_data: SendPtr<c_void>,
 ) {
-    let _guard = RUNTIME.enter();
+    let _guard = (*runtime).enter();
     let callback: UniencCallback = std::mem::transmute(callback);
     if video_input.is_null() {
         UniencError::invalid_input_error("Invalid input parameters")
@@ -145,11 +146,12 @@ pub unsafe extern "C" fn unienc_muxer_finish_video(
 
 #[no_mangle]
 pub unsafe extern "C" fn unienc_muxer_finish_audio(
+    runtime: *mut Runtime,
     audio_input: SendPtr<Mutex<Option<AudioMuxerInput>>>,
     callback: usize, /*UniencCallback*/
     user_data: SendPtr<c_void>,
 ) {
-    let _guard = RUNTIME.enter();
+    let _guard = (*runtime).enter();
     let callback: UniencCallback = std::mem::transmute(callback);
     if audio_input.is_null() {
         UniencError::invalid_input_error("Invalid input parameters")
@@ -174,11 +176,12 @@ pub unsafe extern "C" fn unienc_muxer_finish_audio(
 
 #[no_mangle]
 pub unsafe extern "C" fn unienc_muxer_complete(
+    runtime: *mut Runtime,
     completion_handle: SendPtr<Mutex<Option<MuxerCompletionHandle>>>,
     callback: usize, /*UniencCallback*/
     user_data: SendPtr<c_void>,
 ) {
-    let _guard = RUNTIME.enter();
+    let _guard = (*runtime).enter();
     let callback: UniencCallback = std::mem::transmute(callback);
     if completion_handle.is_null() {
         UniencError::invalid_input_error("Invalid input parameters")
@@ -205,9 +208,10 @@ pub unsafe extern "C" fn unienc_muxer_complete(
 // Free functions for muxer components
 #[no_mangle]
 pub unsafe extern "C" fn unienc_free_muxer_video_input(
+    runtime: *mut Runtime,
     video_input: SendPtr<Mutex<Option<VideoMuxerInput>>>,
 ) {
-    let _guard = RUNTIME.enter();
+    let _guard = (*runtime).enter();
     if !video_input.is_null() {
         arc_from_raw(*video_input);
     }
@@ -215,9 +219,10 @@ pub unsafe extern "C" fn unienc_free_muxer_video_input(
 
 #[no_mangle]
 pub unsafe extern "C" fn unienc_free_muxer_audio_input(
+    runtime: *mut Runtime,
     audio_input: SendPtr<Mutex<Option<AudioMuxerInput>>>,
 ) {
-    let _guard = RUNTIME.enter();
+    let _guard = (*runtime).enter();
     if !audio_input.is_null() {
         arc_from_raw(*audio_input);
     }
@@ -225,9 +230,10 @@ pub unsafe extern "C" fn unienc_free_muxer_audio_input(
 
 #[no_mangle]
 pub unsafe extern "C" fn unienc_free_muxer_completion_handle(
+    runtime: *mut Runtime,
     completion_handle: SendPtr<Mutex<Option<MuxerCompletionHandle>>>,
 ) {
-    let _guard = RUNTIME.enter();
+    let _guard = (*runtime).enter();
     if !completion_handle.is_null() {
         arc_from_raw(*completion_handle);
     }

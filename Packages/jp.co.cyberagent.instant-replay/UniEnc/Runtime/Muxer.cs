@@ -47,7 +47,10 @@ namespace UniEnc
             {
                 fixed (byte* dataPtr = data)
                 {
+                    var runtime = RuntimeWrapper.Instance;
+
                     NativeMethods.unienc_muxer_push_video(
+                        runtime.Runtime,
                         _videoInputHandle,
                         (nint)dataPtr,
                         (nuint)data.Length,
@@ -76,7 +79,10 @@ namespace UniEnc
             {
                 fixed (byte* dataPtr = data)
                 {
+                    var runtime = RuntimeWrapper.Instance;
+
                     NativeMethods.unienc_muxer_push_audio(
+                        runtime.Runtime,
                         _audioInputHandle,
                         (nint)dataPtr,
                         (nuint)data.Length,
@@ -99,10 +105,16 @@ namespace UniEnc
             var context = CallbackHelper.SimpleCallbackContext.Rent();
             var contextHandle = CallbackHelper.CreateSendPtr(context);
 
-            NativeMethods.unienc_muxer_finish_video(
-                _videoInputHandle,
-                CallbackHelper.GetSimpleCallbackPtr(),
-                contextHandle);
+            var runtime = RuntimeWrapper.Instance;
+
+            unsafe
+            {
+                NativeMethods.unienc_muxer_finish_video(
+                    runtime.Runtime,
+                    _videoInputHandle,
+                    CallbackHelper.GetSimpleCallbackPtr(),
+                    contextHandle);
+            }
 
             return context.Task;
         }
@@ -116,11 +128,16 @@ namespace UniEnc
 
             var context = CallbackHelper.SimpleCallbackContext.Rent();
             var contextHandle = CallbackHelper.CreateSendPtr(context);
+            var runtime = RuntimeWrapper.Instance;
 
-            NativeMethods.unienc_muxer_finish_audio(
-                _audioInputHandle,
-                CallbackHelper.GetSimpleCallbackPtr(),
-                contextHandle);
+            unsafe
+            {
+                NativeMethods.unienc_muxer_finish_audio(
+                    runtime.Runtime,
+                    _audioInputHandle,
+                    CallbackHelper.GetSimpleCallbackPtr(),
+                    contextHandle);
+            }
 
             return context.Task;
         }
@@ -134,11 +151,16 @@ namespace UniEnc
 
             var context = CallbackHelper.SimpleCallbackContext.Rent();
             var contextHandle = CallbackHelper.CreateSendPtr(context);
+            var runtime = RuntimeWrapper.Instance;
 
-            NativeMethods.unienc_muxer_complete(
-                _completionHandle,
-                CallbackHelper.GetSimpleCallbackPtr(),
-                contextHandle);
+            unsafe
+            {
+                NativeMethods.unienc_muxer_complete(
+                    runtime.Runtime,
+                    _completionHandle,
+                    CallbackHelper.GetSimpleCallbackPtr(),
+                    contextHandle);
+            }
 
             return context.Task;
         }
@@ -150,19 +172,37 @@ namespace UniEnc
                 if (_disposed) return;
                 if (_completionHandle != 0)
                 {
-                    NativeMethods.unienc_free_muxer_completion_handle(_completionHandle);
+                    var runtime = RuntimeWrapper.Instance;
+
+                    unsafe
+                    {
+                        NativeMethods.unienc_free_muxer_completion_handle(runtime.Runtime, _completionHandle);
+                    }
+
                     _completionHandle = 0;
                 }
 
                 if (_videoInputHandle != 0)
                 {
-                    NativeMethods.unienc_free_muxer_video_input(_videoInputHandle);
+                    var runtime = RuntimeWrapper.Instance;
+
+                    unsafe
+                    {
+                        NativeMethods.unienc_free_muxer_video_input(runtime.Runtime, _videoInputHandle);
+                    }
+
                     _videoInputHandle = 0;
                 }
 
                 if (_audioInputHandle != 0)
                 {
-                    NativeMethods.unienc_free_muxer_audio_input(_audioInputHandle);
+                    var runtime = RuntimeWrapper.Instance;
+
+                    unsafe
+                    {
+                        NativeMethods.unienc_free_muxer_audio_input(runtime.Runtime, _audioInputHandle);
+                    }
+
                     _audioInputHandle = 0;
                 }
 

@@ -26,7 +26,9 @@ namespace UniEnc
                 var videoNative = videoOptions.ToNative();
                 var audioNative = audioOptions.ToNative();
 
-                _handle = (IntPtr)NativeMethods.unienc_new_encoding_system(&videoNative, &audioNative);
+                var runtime = RuntimeWrapper.Instance;
+
+                _handle = (IntPtr)NativeMethods.unienc_new_encoding_system(runtime.Runtime, &videoNative, &audioNative);
 
                 if (_handle == IntPtr.Zero)
                     throw new UniEncException(UniencErrorKind.InitializationError, "Failed to create encoding system");
@@ -68,7 +70,10 @@ namespace UniEnc
                 var contextHandle = CallbackHelper.CreateSendPtr(context);
                 var task = context.Task;
 
+                var runtime = RuntimeWrapper.Instance;
+
                 var success = NativeMethods.unienc_new_video_encoder(
+                    runtime.Runtime,
                     (void*)_handle,
                     &input,
                     &output,
@@ -101,7 +106,10 @@ namespace UniEnc
                 var contextHandle = CallbackHelper.CreateSendPtr(context);
                 var task = context.Task;
 
+                var runtime = RuntimeWrapper.Instance;
+
                 var success = NativeMethods.unienc_new_audio_encoder(
+                    runtime.Runtime,
                     (void*)_handle,
                     &input,
                     &output,
@@ -141,7 +149,10 @@ namespace UniEnc
                 var pathBytes = Encoding.UTF8.GetBytes(outputPath + '\0');
                 fixed (byte* pathPtr = pathBytes)
                 {
+                    var runtime = RuntimeWrapper.Instance;
+
                     var success = NativeMethods.unienc_new_muxer(
+                        runtime.Runtime,
                         (void*)_handle,
                         pathPtr,
                         &videoInput,
@@ -169,9 +180,10 @@ namespace UniEnc
                 {
                     if (_handle != IntPtr.Zero)
                     {
+                        var runtime = RuntimeWrapper.Instance;
                         unsafe
                         {
-                            NativeMethods.unienc_free_encoding_system((void*)_handle);
+                            NativeMethods.unienc_free_encoding_system(runtime.Runtime, (void*)_handle);
                         }
 
                         _handle = IntPtr.Zero;
