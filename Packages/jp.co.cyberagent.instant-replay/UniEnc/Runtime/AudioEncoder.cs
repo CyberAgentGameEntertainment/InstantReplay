@@ -52,14 +52,19 @@ namespace UniEnc
             try
             {
                 var contextHandle = CallbackHelper.CreateSendPtr(context);
+                var runtime = RuntimeWrapper.Instance;
 
-                NativeMethods.unienc_audio_encoder_push(
-                    _inputHandle,
-                    (nint)addr,
-                    (nuint)segment.Count,
-                    timestampInSamples,
-                    CallbackHelper.GetSimpleCallbackPtr(),
-                    contextHandle);
+                unsafe
+                {
+                    NativeMethods.unienc_audio_encoder_push(
+                        runtime.Runtime,
+                        _inputHandle,
+                        (nint)addr,
+                        (nuint)segment.Count,
+                        timestampInSamples,
+                        CallbackHelper.GetSimpleCallbackPtr(),
+                        contextHandle);
+                }
             }
             catch
             {
@@ -80,11 +85,16 @@ namespace UniEnc
 
             var context = CallbackHelper.DataCallbackContext.Rent();
             var contextHandle = CallbackHelper.CreateSendPtr(context);
+            var runtime = RuntimeWrapper.Instance;
 
-            NativeMethods.unienc_audio_encoder_pull(
-                _outputHandle,
-                CallbackHelper.GetDataCallbackPtr(),
-                contextHandle);
+            unsafe
+            {
+                NativeMethods.unienc_audio_encoder_pull(
+                    runtime.Runtime,
+                    _outputHandle,
+                    CallbackHelper.GetDataCallbackPtr(),
+                    contextHandle);
+            }
 
             return context.Task;
         }
@@ -100,7 +110,13 @@ namespace UniEnc
             {
                 if (_inputHandle != 0)
                 {
-                    NativeMethods.unienc_free_audio_encoder_input(_inputHandle);
+                    var runtime = RuntimeWrapper.Instance;
+
+                    unsafe
+                    {
+                        NativeMethods.unienc_free_audio_encoder_input(runtime.Runtime, _inputHandle);
+                    }
+
                     _inputHandle = 0;
                 }
             }
@@ -114,13 +130,25 @@ namespace UniEnc
                 {
                     if (_inputHandle != 0)
                     {
-                        NativeMethods.unienc_free_audio_encoder_input(_inputHandle);
+                        var runtime = RuntimeWrapper.Instance;
+
+                        unsafe
+                        {
+                            NativeMethods.unienc_free_audio_encoder_input(runtime.Runtime, _inputHandle);
+                        }
+
                         _inputHandle = 0;
                     }
 
                     if (_outputHandle != 0)
                     {
-                        NativeMethods.unienc_free_audio_encoder_output(_outputHandle);
+                        var runtime = RuntimeWrapper.Instance;
+
+                        unsafe
+                        {
+                            NativeMethods.unienc_free_audio_encoder_output(runtime.Runtime, _outputHandle);
+                        }
+
                         _outputHandle = 0;
                     }
 

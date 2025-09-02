@@ -4,14 +4,13 @@ use tokio::sync::Mutex;
 use unienc_common::{EncoderInput, EncoderOutput, VideoSample};
 
 use crate::{
-    arc_from_raw, arc_from_raw_retained,
-    platform_types::{VideoEncoderInput, VideoEncoderOutput},
-    ApplyCallback, SendPtr, UniencCallback, UniencDataCallback, UniencError, RUNTIME,
+    arc_from_raw, arc_from_raw_retained, platform_types::{VideoEncoderInput, VideoEncoderOutput}, ApplyCallback, Runtime, SendPtr, UniencCallback, UniencDataCallback, UniencError
 };
 
 // Video encoder input/output functions
 #[no_mangle]
 pub unsafe extern "C" fn unienc_video_encoder_push(
+    runtime: *mut Runtime,
     input: SendPtr<Mutex<Option<VideoEncoderInput>>>,
     data: SendPtr<u8>,
     data_size: usize,
@@ -21,7 +20,7 @@ pub unsafe extern "C" fn unienc_video_encoder_push(
     callback: usize, /*UniencCallback*/
     user_data: SendPtr<c_void>,
 ) {
-    let _guard = RUNTIME.enter();
+    let _guard = (*runtime).enter();
     let callback: UniencCallback = std::mem::transmute(callback);
     if input.is_null() || data.is_null() {
         UniencError::invalid_input_error("Invalid input parameters")
@@ -56,11 +55,12 @@ pub unsafe extern "C" fn unienc_video_encoder_push(
 
 #[no_mangle]
 pub unsafe extern "C" fn unienc_video_encoder_pull(
+    runtime: *mut Runtime,
     output: SendPtr<Mutex<Option<VideoEncoderOutput>>>,
     callback: usize, /*UniencDataCallback*/
     user_data: SendPtr<c_void>,
 ) {
-    let _guard = RUNTIME.enter();
+    let _guard = (*runtime).enter();
     let callback: UniencDataCallback = std::mem::transmute(callback);
     if output.is_null() {
         UniencError::invalid_input_error("Invalid input parameters")
@@ -70,7 +70,7 @@ pub unsafe extern "C" fn unienc_video_encoder_pull(
 
     let output = arc_from_raw_retained(*output);
 
-    RUNTIME.spawn(async move {
+    tokio::spawn(async move {
         let mut output = output.lock().await;
         let result = match output
             .as_mut()
@@ -88,9 +88,10 @@ pub unsafe extern "C" fn unienc_video_encoder_pull(
 
 #[no_mangle]
 pub unsafe extern "C" fn unienc_free_video_encoder_input(
+    runtime: *mut Runtime,
     video_input: SendPtr<Mutex<Option<VideoEncoderInput>>>,
 ) {
-    let _guard = RUNTIME.enter();
+    let _guard = (*runtime).enter();
     if !video_input.is_null() {
         arc_from_raw(*video_input);
     }
@@ -98,9 +99,10 @@ pub unsafe extern "C" fn unienc_free_video_encoder_input(
 
 #[no_mangle]
 pub unsafe extern "C" fn unienc_free_video_encoder_output(
+    runtime: *mut Runtime,
     video_output: SendPtr<Mutex<Option<VideoEncoderOutput>>>,
 ) {
-    let _guard = RUNTIME.enter();
+    let _guard = (*runtime).enter();
     if !video_output.is_null() {
         arc_from_raw(*video_output);
     }
