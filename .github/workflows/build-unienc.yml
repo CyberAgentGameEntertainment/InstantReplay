@@ -107,12 +107,13 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        arch: [aarch64, i686, x86_64]
+        arch: [x86_64]
     timeout-minutes: 30
     defaults:
       run:
         working-directory: InstantReplay.Externals/unienc/crates/unienc
     steps:
+      - uses: ilammy/setup-nasm@v1
       - uses: actions/checkout@v4
       - run: rustup default stable
       - run: rustup target add ${{ matrix.arch }}-unknown-linux-gnu
