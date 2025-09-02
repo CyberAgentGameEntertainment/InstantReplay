@@ -116,6 +116,7 @@ jobs:
       - uses: actions/checkout@v4
       - run: rustup default stable
       - run: rustup target add ${{ matrix.arch }}-unknown-linux-gnu
+      - run: sudo apt update && sudo apt install gcc-multilib
       - run: cargo build --target ${{ matrix.arch }}-unknown-linux-gnu --profile ${{ env._RUST_BUILD_CONFIG == 'debug' && 'dev' || env._RUST_BUILD_CONFIG }}
       - uses: actions/upload-artifact@v4
         with:
