@@ -284,12 +284,11 @@ pub type PlatformEncodingSystem = unienc_windows_mf::MediaFoundationEncodingSyst
 >;
 
 #[cfg(not(any(target_vendor = "apple", target_os = "android", windows)))]
-pub type PlatformEncodingSystem = (); // Placeholder - will generate compile error below
+pub type PlatformEncodingSystem = unienc_ffmpeg::FFmpegEncodingSystem<
+    VideoEncoderOptionsNative,
+    AudioEncoderOptionsNative,
+>;
 
-#[cfg(not(any(target_vendor = "apple", target_os = "android", windows)))]
-compile_error!(
-    "Platform not supported. Only Apple, Android, and Windows platforms are currently implemented."
-);
 
 mod platform_types {
     use unienc_common::EncoderOutput;

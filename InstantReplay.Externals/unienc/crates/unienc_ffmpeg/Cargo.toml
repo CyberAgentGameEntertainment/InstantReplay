@@ -1,0 +1,12 @@
+[package]
+name = "unienc_ffmpeg"
+version = "0.1.0"
+edition.workspace = true
+
+[dependencies]
+anyhow = { workspace = true }
+tokio = { version = "1.45.1", features = ["rt", "time", "macros", "sync", "net", "process", "io-util"] }
+unienc_common = { workspace = true }
+bincode = { workspace = true }
+libc = "0.2.175"
+cros-codecs = "0.0.6"
