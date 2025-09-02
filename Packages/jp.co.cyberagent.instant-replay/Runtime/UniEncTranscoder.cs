@@ -3,6 +3,7 @@ using System.Buffers;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Threading;
+using System.Threading.Channels;
 using System.Threading.Tasks;
 using UniEnc;
 using Unity.Collections;
@@ -15,6 +16,7 @@ namespace InstantReplay
         private readonly AudioEncoder _audioEncoder;
         private readonly int _channels;
         private readonly EncodingSystem _encodingSystem;
+        private readonly ChannelWriter<Task<(NativeArray<byte>, nint, nint, double)>> _jpegDecoderWriter;
         private readonly Muxer _muxer;
         private readonly VideoEncoder _videoEncoder;
         private ulong _audioTimestampInSamples;
@@ -94,6 +96,57 @@ namespace InstantReplay
                     Debug.LogException(ex);
                 }
             });
+
+            // jpeg decoder channel
+            ThreadPool.GetMinThreads(out var numWorkerThread, out _);
+
+            var channel = Channel.CreateBounded<Task<(NativeArray<byte>, nint, nint, double)>>(
+                new BoundedChannelOptions(numWorkerThread)
+                {
+                    FullMode = BoundedChannelFullMode.Wait,
+                    SingleReader = true,
+                    SingleWriter = true
+                });
+
+            var reader = channel.Reader;
+            _jpegDecoderWriter = channel.Writer;
+
+            Task.Run(async () =>
+            {
+                try
+                {
+                    try
+                    {
+                        Exception exception = null;
+                        await foreach (var task in reader.ReadAllAsync())
+                            try
+                            {
+                                var (data, width, height, timestamp) = await task;
+
+                                using (data)
+                                {
+                                    if (exception == null)
+                                        await _videoEncoder.PushFrameAsync(data, (uint)width, (uint)height, timestamp);
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                exception = ex;
+                            }
+
+                        if (exception != null)
+                            throw exception;
+                    }
+                    finally
+                    {
+                        _videoEncoder.CompleteInput();
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Debug.LogException(ex);
+                }
+            });
         }
 
         public ValueTask DisposeAsync()
@@ -109,30 +162,28 @@ namespace InstantReplay
 
         public async ValueTask PushFrameAsync(string path, double timestamp, CancellationToken ct = default)
         {
-            var bytes = await File.ReadAllBytesAsync(path, ct);
-
-            var (data, width, height, pitch) = UniEnc.Utils.DecodeJpeg(bytes,
-                static (data, width, height, pitch, _) =>
-                {
-                    var length = height * pitch;
-                    var expectedLength = width * height * 4;
-
-                    var array = new NativeArray<byte>(data.Length, Allocator.Persistent);
-
-                    if (data.Length == expectedLength)
-                        data.CopyTo(array.AsSpan());
-                    else
-                        for (var y = 0; y < height; y++)
-                            data.Slice((int)(y * pitch), (int)(width * 4))
-                                .CopyTo(array.AsSpan().Slice((int)(y * width * 4), (int)(width * 4)));
-
-                    return (array, width, height, pitch);
-                }, 0);
-
-            using (data)
+            await _jpegDecoderWriter.WriteAsync(Task.Run(async () =>
             {
-                await _videoEncoder.PushFrameAsync(data, (uint)width, (uint)height, timestamp);
-            }
+                var bytes = await File.ReadAllBytesAsync(path, ct);
+                var (data, width, height, _) = UniEnc.Utils.DecodeJpeg(bytes,
+                    static (data, width, height, pitch, _) =>
+                    {
+                        var expectedLength = width * height * 4;
+
+                        var array = new NativeArray<byte>(data.Length, Allocator.Persistent);
+
+                        if (data.Length == expectedLength)
+                            data.CopyTo(array.AsSpan());
+                        else
+                            for (var y = 0; y < height; y++)
+                                data.Slice((int)(y * pitch), (int)(width * 4))
+                                    .CopyTo(array.AsSpan().Slice((int)(y * width * 4), (int)(width * 4)));
+
+                        return (array, width, height, pitch);
+                    }, 0);
+
+                return (data, width, height, timestamp);
+            }, ct), ct);
         }
 
         public async ValueTask PushAudioSamplesAsync(ReadOnlyMemory<byte> buffer, CancellationToken ct = default)
@@ -155,7 +206,7 @@ namespace InstantReplay
 
         public ValueTask CompleteAsync()
         {
-            _videoEncoder.CompleteInput();
+            _jpegDecoderWriter.TryComplete();
             _audioEncoder.CompleteInput();
             return _muxer.CompleteAsync();
         }
