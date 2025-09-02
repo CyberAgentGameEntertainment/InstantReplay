@@ -1,4 +1,4 @@
-name: Build unienc native binaries
+name: Build unienc
 on:
   workflow_dispatch:
     inputs:
@@ -15,7 +15,7 @@ env:
 
 jobs:
   build-windows:
-    name: Build uneinc native binaries (Windows)
+    name: Build uneinc (Windows)
     runs-on: windows-2022
     strategy:
       matrix:
@@ -38,7 +38,7 @@ jobs:
           path: InstantReplay.Externals/unienc/target/${{ matrix.arch }}-pc-windows-msvc/${{ env._RUST_BUILD_CONFIG }}/libunienc.dll
           retention-days: 1
   build-android:
-    name: Build uneinc native binaries (Android)
+    name: Build uneinc (Android)
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -61,7 +61,7 @@ jobs:
           path: InstantReplay.Externals/unienc/target/${{ matrix.triple }}/${{ env._RUST_BUILD_CONFIG }}/libunienc.so
           retention-days: 1
   build-macos:
-    name: Build uneinc native binaries (macOS)
+    name: Build uneinc (macOS)
     runs-on: macos-15
     strategy:
       matrix:
@@ -82,7 +82,7 @@ jobs:
           path: InstantReplay.Externals/unienc/target/${{ matrix.arch }}-apple-darwin/${{ env._RUST_BUILD_CONFIG }}/libunienc.dylib
           retention-days: 1
   build-ios:
-    name: Build uneinc native binaries (iOS)
+    name: Build uneinc (iOS)
     runs-on: macos-15
     strategy:
       matrix:
@@ -102,10 +102,29 @@ jobs:
           name: ${{ matrix.arch }}-apple-ios
           path: InstantReplay.Externals/unienc/target/${{ matrix.arch }}-apple-ios/${{ env._RUST_BUILD_CONFIG }}/libunienc.a
           retention-days: 1
-
+  build-linux:
+    name: Build uneinc (Linux)
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        arch: [aarch64, i686, x86_64]
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: InstantReplay.Externals/unienc/crates/unienc
+    steps:
+      - uses: actions/checkout@v4
+      - run: rustup default stable
+      - run: rustup target add ${{ matrix.arch }}-unknown-linux-gnu
+      - run: cargo build --target ${{ matrix.arch }}-unknown-linux-gnu --profile ${{ env._RUST_BUILD_CONFIG == 'debug' && 'dev' || env._RUST_BUILD_CONFIG }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.arch }}-unknown-linux
+          path: InstantReplay.Externals/unienc/target/${{ matrix.arch }}-unknown-linux-gnu/${{ env._RUST_BUILD_CONFIG }}/libunienc.so
+          retention-days: 1
   update-unity-native:
     name: Push unienc native libraries
-    needs: [build-windows, build-android, build-ios, build-macos]
+    needs: [build-windows, build-android, build-ios, build-macos, build-linux]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
