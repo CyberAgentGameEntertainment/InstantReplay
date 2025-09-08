@@ -34,6 +34,7 @@ impl FFmpegMuxer {
         video_options: &impl unienc_common::VideoEncoderOptions,
         audio_options: &impl unienc_common::AudioEncoderOptions,
     ) -> Result<Self> {
+        // raw H.264 frame cannot have timestamp, so we need to assume CFR (encoder also supports CFR)
         let mut ffmpeg = ffmpeg::Builder::new()
             .use_stdin(true)
             .input([
@@ -42,7 +43,7 @@ impl FFmpegMuxer {
                 "-r",
                 &format!("{}", video_options.fps_hint()),
             ])
-            .input(["-f", "aac", "-ac", &format!("{}", audio_options.channels())])
+            .input(["-f", "aac"])
             .build(
                 [
                     "-pix_fmt",
@@ -51,11 +52,6 @@ impl FFmpegMuxer {
                     "copy",
                     "-c:a",
                     "copy",
-                    "-ar",
-                    &format!("{}", audio_options.sample_rate()),
-                    // "-r",
-                    // &format!("{}", video_options.fps_hint()),
-                    "-shortest",
                     "-f",
                     "mp4",
                 ],

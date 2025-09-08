@@ -48,6 +48,7 @@ impl FFmpegVideoEncoder {
         let height = options.height();
         let cfr = options.fps_hint();
 
+        // enumerate supported codecs
         let codecs = Command::new(ffmpeg::FFMPEG_PATH.as_os_str())
             .args(["-y", "-loglevel", "error", "-codecs"])
             .stdout(std::process::Stdio::piped())
@@ -74,6 +75,7 @@ impl FFmpegVideoEncoder {
             .map(|s| s.split(' ').collect::<Vec<_>>())
             .context("failed to find H.264 encoder")?;
 
+        // we would like to use hardware encoder if available
         let preferred_encoders = [
             "h264_nvenc",
             "h264_videotoolbox",
@@ -89,7 +91,11 @@ impl FFmpegVideoEncoder {
             .copied()
             .unwrap_or("h264");
 
+        println!("Using H.264 encoder: {}", encoder);
+
+        // encode raw BGRA frames into H.264 stream
         let mut ffmpeg = ffmpeg::Builder::new()
+            .use_stdin(true)
             .input([
                 "-f",
                 "rawvideo",
@@ -193,6 +199,8 @@ impl EncoderInput for FFmpegVideoEncoderInput {
             data.clone()
         };
 
+        // raw H.264 frames cannot have timestamps, so we need to assume CFR
+        // we need to repeat or discard frames to match frame rate specified as fps_hint
         let Some((data, count)) = self.cfr.push(data, timestamp)? else {
             return Ok(());
         };
@@ -224,22 +232,22 @@ impl EncoderOutput for FFmpegVideoEncoderOutput {
                 }
             }
 
-            let mut buf = vec![0; 1024];
+            // read H.264 stream
+            // H.264 byte stream is sequence of NAL units and each frame is a NAL unit
+            let mut buf = vec![0; 65536];
 
             let read = self.output.read(&mut buf).await?;
 
-            // let mut buf = Vec::new();
-            // let read = self.output.read_to_end(&mut buf).await?;
-
             fn create_emit<'a>(state: &'a mut ReaderState, cfr: u32) -> impl FnMut(&NalUnit) + 'a {
                 move |nalu: &NalUnit| {
-                    // println!("NALU type: {:?}", nalu.header.type_);
                     match nalu.nalu.header.type_ {
+                        // parameter set used by decoder
                         NaluType::Sps | NaluType::Pps => {
                             _ = state
                                 .buffer_tx
                                 .send(VideoEncodedData::ParameterSet(nalu.data.to_vec()));
                         }
+                        // interpolated frame
                         NaluType::Slice => {
                             let frame_index = state.frame_index;
                             state.frame_index += 1;
@@ -249,6 +257,7 @@ impl EncoderOutput for FFmpegVideoEncoderOutput {
                                 is_idr: false,
                             });
                         }
+                        // key frame
                         NaluType::SliceIdr => {
                             let frame_index = state.frame_index;
                             state.frame_index += 1;
@@ -266,7 +275,7 @@ impl EncoderOutput for FFmpegVideoEncoderOutput {
             }
 
             if read == 0 {
-                // end
+                // end of stream
                 let Some(mut state) = self.reader_state.take() else {
                     unreachable!();
                 };

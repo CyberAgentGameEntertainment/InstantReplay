@@ -8,6 +8,9 @@ pub struct NaluReader {
     current: Vec<u8>,
 }
 
+
+// finds start code of NAL unit 0x000001 and returns its position
+// the first value is the start position of the NAL unit including preceding zero bytes and the the second is the position the content starts at
 fn get_start_position(data: &[u8]) -> Option<(usize, usize)> {
     data.windows(3)
         .position(|window| window == [0x00, 0x00, 0x01])
