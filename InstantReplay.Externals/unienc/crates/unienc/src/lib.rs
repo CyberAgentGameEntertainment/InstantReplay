@@ -44,10 +44,6 @@ impl UniencError {
         kind: UniencErrorKind::Success,
         message: None,
     };
-    pub const ERROR: Self = Self {
-        kind: UniencErrorKind::Error,
-        message: None,
-    };
     pub fn with_native(&self, f: impl FnOnce(&UniencErrorNative)) {
         let message = self
             .message
@@ -65,7 +61,7 @@ impl UniencError {
 
     /// Convert an anyhow::Error to UniencError with appropriate categorization
     pub fn from_anyhow(err: anyhow::Error) -> Self {
-        let message = err.to_string();
+        let message = format!("{err:?}").to_string();
         let kind = Self::categorize_error(&message);
         Self {
             kind,
@@ -284,12 +280,10 @@ pub type PlatformEncodingSystem = unienc_windows_mf::MediaFoundationEncodingSyst
 >;
 
 #[cfg(not(any(target_vendor = "apple", target_os = "android", windows)))]
-pub type PlatformEncodingSystem = (); // Placeholder - will generate compile error below
+pub type PlatformEncodingSystem = ();
 
 #[cfg(not(any(target_vendor = "apple", target_os = "android", windows)))]
-compile_error!(
-    "Platform not supported. Only Apple, Android, and Windows platforms are currently implemented."
-);
+compile_error!("Unsupported platform");
 
 mod platform_types {
     use unienc_common::EncoderOutput;
@@ -356,10 +350,8 @@ pub unsafe extern "C" fn unienc_new_encoding_system(
 
 #[no_mangle]
 pub unsafe extern "C" fn unienc_free_encoding_system(
-    runtime: *mut Runtime,
     system: *mut PlatformEncodingSystem,
 ) {
-    let _guard = (*runtime).enter();
     if !system.is_null() {
         unsafe {
             let _ = Box::from_raw(system);
@@ -504,8 +496,9 @@ pub unsafe extern "C" fn unienc_new_muxer(
 
 fn arc_from_raw_retained<T: Send>(ptr: *const T) -> Arc<T> {
     let arc = unsafe { Arc::from_raw(ptr) };
-    let _ = Arc::into_raw(arc.clone());
-    arc
+    let clone = arc.clone();
+    let _ = Arc::into_raw(arc);
+    clone
 }
 
 fn arc_from_raw<T: Send>(ptr: *const T) -> Arc<T> {

@@ -4,7 +4,9 @@ use tokio::sync::Mutex;
 use unienc_common::{AudioSample, EncoderInput, EncoderOutput};
 
 use crate::{
-    arc_from_raw, arc_from_raw_retained, platform_types::{AudioEncoderInput, AudioEncoderOutput}, ApplyCallback, Runtime, SendPtr, UniencCallback, UniencDataCallback, UniencError
+    arc_from_raw, arc_from_raw_retained,
+    platform_types::{AudioEncoderInput, AudioEncoderOutput},
+    ApplyCallback, Runtime, SendPtr, UniencCallback, UniencDataCallback, UniencError,
 };
 
 // Audio encoder input/output functions
@@ -78,10 +80,8 @@ pub unsafe extern "C" fn unienc_audio_encoder_pull(
 
 #[no_mangle]
 pub unsafe extern "C" fn unienc_free_audio_encoder_input(
-    runtime: *mut Runtime,
     audio_input: SendPtr<Mutex<Option<AudioEncoderInput>>>,
 ) {
-    let _guard = (*runtime).enter();
     if !audio_input.is_null() {
         arc_from_raw(*audio_input);
     }
@@ -89,10 +89,8 @@ pub unsafe extern "C" fn unienc_free_audio_encoder_input(
 
 #[no_mangle]
 pub unsafe extern "C" fn unienc_free_audio_encoder_output(
-    runtime: *mut Runtime,
     audio_output: SendPtr<Mutex<Option<AudioEncoderOutput>>>,
 ) {
-    let _guard = (*runtime).enter();
     if !audio_output.is_null() {
         arc_from_raw(*audio_output);
     }

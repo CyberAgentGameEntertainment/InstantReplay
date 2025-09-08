@@ -204,10 +204,20 @@ namespace InstantReplay
             }
         }
 
-        public ValueTask CompleteAsync()
+        public ValueTask CompleteVideoAsync()
         {
             _jpegDecoderWriter.TryComplete();
+            return default;
+        }
+
+        public ValueTask CompleteAudioAsync()
+        {
             _audioEncoder.CompleteInput();
+            return default;
+        }
+
+        public ValueTask CompleteAsync()
+        {
             return _muxer.CompleteAsync();
         }
     }
