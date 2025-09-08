@@ -18,7 +18,7 @@ namespace UniEnc
         // For example if we keep lifetime of the runtime object by reference counting and release it in Dispose() of other native handles, and it happens to be called from an async callback, it will crash.
         // It means we cannot use the runtime to drop native resources.
 
-        private static RuntimeWrapper Instance = new((nint)NativeMethods.unienc_new_runtime());
+        private static RuntimeWrapper _instance = new((nint)NativeMethods.unienc_new_runtime());
 
         private readonly ReaderWriterLockSlim _lock = new(LockRecursionPolicy.NoRecursion);
 
@@ -53,7 +53,7 @@ namespace UniEnc
         /// <exception cref="ObjectDisposedException"></exception>
         public static Scope GetScope()
         {
-            return new Scope(Instance ?? throw new ObjectDisposedException(nameof(Instance)));
+            return new Scope(_instance ?? throw new ObjectDisposedException(nameof(_instance)));
         }
 
         public readonly ref struct Scope
