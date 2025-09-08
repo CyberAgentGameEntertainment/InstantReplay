@@ -10,8 +10,7 @@ namespace UniEnc
     public sealed class EncodingSystem : IDisposable
     {
         private readonly object _lock = new();
-        private bool _disposed;
-        private IntPtr _handle;
+        private EncodingSystemHandle _handle;
 
         /// <summary>
         ///     Creates a new encoding system with the specified options.
@@ -26,12 +25,10 @@ namespace UniEnc
                 var videoNative = videoOptions.ToNative();
                 var audioNative = audioOptions.ToNative();
 
-                var runtime = RuntimeWrapper.Instance;
+                using var runtime = RuntimeWrapper.GetScope();
 
-                _handle = (IntPtr)NativeMethods.unienc_new_encoding_system(runtime.Runtime, &videoNative, &audioNative);
-
-                if (_handle == IntPtr.Zero)
-                    throw new UniEncException(UniencErrorKind.InitializationError, "Failed to create encoding system");
+                _handle = new EncodingSystemHandle(
+                    (IntPtr)NativeMethods.unienc_new_encoding_system(runtime.Runtime, &videoNative, &audioNative));
             }
         }
 
@@ -59,34 +56,38 @@ namespace UniEnc
         /// </summary>
         public VideoEncoder CreateVideoEncoder()
         {
-            ThrowIfDisposed();
-
-            unsafe
+            lock (_lock)
             {
-                Mutex* input = null;
-                Mutex* output = null;
+                _ = _handle ?? throw new ObjectDisposedException(nameof(EncodingSystem));
 
-                var context = CallbackHelper.SimpleCallbackContext.Rent();
-                var contextHandle = CallbackHelper.CreateSendPtr(context);
-                var task = context.Task;
+                unsafe
+                {
+                    Mutex* input = null;
+                    Mutex* output = null;
 
-                var runtime = RuntimeWrapper.Instance;
+                    var context = CallbackHelper.SimpleCallbackContext.Rent();
+                    var contextHandle = CallbackHelper.CreateSendPtr(context);
+                    var task = context.Task;
 
-                var success = NativeMethods.unienc_new_video_encoder(
-                    runtime.Runtime,
-                    (void*)_handle,
-                    &input,
-                    &output,
-                    CallbackHelper.GetSimpleCallbackPtr(),
-                    contextHandle);
+                    using var runtime = RuntimeWrapper.GetScope();
 
-                if (task.IsCompleted)
-                    task.GetAwaiter().GetResult(); // throws if there was an error
+                    var success = NativeMethods.unienc_new_video_encoder(
+                        runtime.Runtime,
+                        (void*)_handle.DangerousGetHandle(),
+                        &input,
+                        &output,
+                        CallbackHelper.GetSimpleCallbackPtr(),
+                        contextHandle);
 
-                if (!success || input == null || output == null)
-                    throw new UniEncException(UniencErrorKind.InitializationError, "Failed to create video encoder");
+                    if (task.IsCompleted)
+                        task.GetAwaiter().GetResult(); // throws if there was an error
 
-                return new VideoEncoder((IntPtr)input, (IntPtr)output);
+                    if (!success || input == null || output == null)
+                        throw new UniEncException(UniencErrorKind.InitializationError,
+                            "Failed to create video encoder");
+
+                    return new VideoEncoder((IntPtr)input, (IntPtr)output);
+                }
             }
         }
 
@@ -95,34 +96,38 @@ namespace UniEnc
         /// </summary>
         public AudioEncoder CreateAudioEncoder()
         {
-            ThrowIfDisposed();
-
-            unsafe
+            lock (_lock)
             {
-                Mutex* input = null;
-                Mutex* output = null;
+                _ = _handle ?? throw new ObjectDisposedException(nameof(EncodingSystem));
 
-                var context = CallbackHelper.SimpleCallbackContext.Rent();
-                var contextHandle = CallbackHelper.CreateSendPtr(context);
-                var task = context.Task;
+                unsafe
+                {
+                    Mutex* input = null;
+                    Mutex* output = null;
 
-                var runtime = RuntimeWrapper.Instance;
+                    var context = CallbackHelper.SimpleCallbackContext.Rent();
+                    var contextHandle = CallbackHelper.CreateSendPtr(context);
+                    var task = context.Task;
 
-                var success = NativeMethods.unienc_new_audio_encoder(
-                    runtime.Runtime,
-                    (void*)_handle,
-                    &input,
-                    &output,
-                    CallbackHelper.GetSimpleCallbackPtr(),
-                    contextHandle);
+                    using var runtime = RuntimeWrapper.GetScope();
 
-                if (task.IsCompleted)
-                    task.GetAwaiter().GetResult(); // throws if there was an error
+                    var success = NativeMethods.unienc_new_audio_encoder(
+                        runtime.Runtime,
+                        (void*)_handle.DangerousGetHandle(),
+                        &input,
+                        &output,
+                        CallbackHelper.GetSimpleCallbackPtr(),
+                        contextHandle);
 
-                if (!success || input == null || output == null)
-                    throw new UniEncException(UniencErrorKind.InitializationError, "Failed to create audio encoder");
+                    if (task.IsCompleted)
+                        task.GetAwaiter().GetResult(); // throws if there was an error
 
-                return new AudioEncoder((IntPtr)input, (IntPtr)output);
+                    if (!success || input == null || output == null)
+                        throw new UniEncException(UniencErrorKind.InitializationError,
+                            "Failed to create audio encoder");
+
+                    return new AudioEncoder((IntPtr)input, (IntPtr)output);
+                }
             }
         }
 
@@ -131,43 +136,46 @@ namespace UniEnc
         /// </summary>
         public Muxer CreateMuxer(string outputPath)
         {
-            ThrowIfDisposed();
-
-            if (string.IsNullOrEmpty(outputPath))
-                throw new ArgumentNullException(nameof(outputPath));
-
-            unsafe
+            lock (_lock)
             {
-                Mutex* videoInput = null;
-                Mutex* audioInput = null;
-                Mutex* completionHandle = null;
+                _ = _handle ?? throw new ObjectDisposedException(nameof(EncodingSystem));
 
-                var context = CallbackHelper.SimpleCallbackContext.Rent();
-                var contextHandle = CallbackHelper.CreateSendPtr(context);
-                var task = context.Task;
+                if (string.IsNullOrEmpty(outputPath))
+                    throw new ArgumentNullException(nameof(outputPath));
 
-                var pathBytes = Encoding.UTF8.GetBytes(outputPath + '\0');
-                fixed (byte* pathPtr = pathBytes)
+                unsafe
                 {
-                    var runtime = RuntimeWrapper.Instance;
+                    Mutex* videoInput = null;
+                    Mutex* audioInput = null;
+                    Mutex* completionHandle = null;
 
-                    var success = NativeMethods.unienc_new_muxer(
-                        runtime.Runtime,
-                        (void*)_handle,
-                        pathPtr,
-                        &videoInput,
-                        &audioInput,
-                        &completionHandle,
-                        CallbackHelper.GetSimpleCallbackPtr(),
-                        contextHandle);
+                    var context = CallbackHelper.SimpleCallbackContext.Rent();
+                    var contextHandle = CallbackHelper.CreateSendPtr(context);
+                    var task = context.Task;
 
-                    if (task.IsCompleted)
-                        task.GetAwaiter().GetResult(); // throws if there was an error
+                    var pathBytes = Encoding.UTF8.GetBytes(outputPath + '\0');
+                    fixed (byte* pathPtr = pathBytes)
+                    {
+                        using var runtime = RuntimeWrapper.GetScope();
 
-                    if (!success || videoInput == null || audioInput == null || completionHandle == null)
-                        throw new UniEncException(UniencErrorKind.InitializationError, "Failed to create muxer");
+                        var success = NativeMethods.unienc_new_muxer(
+                            runtime.Runtime,
+                            (void*)_handle.DangerousGetHandle(),
+                            pathPtr,
+                            &videoInput,
+                            &audioInput,
+                            &completionHandle,
+                            CallbackHelper.GetSimpleCallbackPtr(),
+                            contextHandle);
 
-                    return new Muxer((IntPtr)videoInput, (IntPtr)audioInput, (IntPtr)completionHandle);
+                        if (task.IsCompleted)
+                            task.GetAwaiter().GetResult(); // throws if there was an error
+
+                        if (!success || videoInput == null || audioInput == null || completionHandle == null)
+                            throw new UniEncException(UniencErrorKind.InitializationError, "Failed to create muxer");
+
+                        return new Muxer((IntPtr)videoInput, (IntPtr)audioInput, (IntPtr)completionHandle);
+                    }
                 }
             }
         }
@@ -176,21 +184,9 @@ namespace UniEnc
         {
             lock (_lock)
             {
-                if (!_disposed)
-                {
-                    if (_handle != IntPtr.Zero)
-                    {
-                        var runtime = RuntimeWrapper.Instance;
-                        unsafe
-                        {
-                            NativeMethods.unienc_free_encoding_system(runtime.Runtime, (void*)_handle);
-                        }
-
-                        _handle = IntPtr.Zero;
-                    }
-
-                    _disposed = true;
-                }
+                var handle = _handle;
+                _handle = null;
+                handle?.Dispose();
             }
         }
 
@@ -199,10 +195,17 @@ namespace UniEnc
             Dispose(false);
         }
 
-        private void ThrowIfDisposed()
+        private class EncodingSystemHandle : GeneralHandle
         {
-            if (_disposed)
-                throw new ObjectDisposedException(nameof(EncodingSystem));
+            public EncodingSystemHandle(IntPtr handle) : base(handle)
+            {
+            }
+
+            protected override unsafe bool ReleaseHandle()
+            {
+                NativeMethods.unienc_free_encoding_system((void*)handle);
+                return true;
+            }
         }
     }
 }

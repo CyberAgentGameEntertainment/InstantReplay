@@ -4,9 +4,11 @@ use tokio::sync::Mutex;
 use unienc_common::{CompletionHandle, EncodedData, MuxerInput};
 
 use crate::{
-    arc_from_raw, arc_from_raw_retained, platform_types::{
+    arc_from_raw, arc_from_raw_retained,
+    platform_types::{
         AudioEncodedData, AudioMuxerInput, MuxerCompletionHandle, VideoEncodedData, VideoMuxerInput,
-    }, ApplyCallback, Runtime, SendPtr, UniencCallback, UniencError
+    },
+    ApplyCallback, Runtime, SendPtr, UniencCallback, UniencError,
 };
 
 // Muxer input functions
@@ -28,8 +30,9 @@ pub unsafe extern "C" fn unienc_muxer_push_video(
         return;
     }
 
+    let video_input = arc_from_raw_retained(*video_input);
+
     unsafe {
-        let video_input = arc_from_raw_retained(*video_input);
         let data_slice = std::slice::from_raw_parts(*data, size);
 
         // Deserialize the encoded data
@@ -54,7 +57,7 @@ pub unsafe extern "C" fn unienc_muxer_push_video(
                 Ok(video_input) => video_input
                     .push(decoded_data)
                     .await
-                    .map_err(|_e| UniencError::ERROR),
+                    .map_err(UniencError::from_anyhow),
                 Err(err) => Err(err),
             };
             result.apply_callback(callback, user_data);
@@ -80,8 +83,9 @@ pub unsafe extern "C" fn unienc_muxer_push_audio(
         return;
     }
 
+    let audio_input = arc_from_raw_retained(*audio_input);
+
     unsafe {
-        let audio_input = arc_from_raw_retained(*audio_input);
         let data_slice = std::slice::from_raw_parts(*data, size);
 
         // Deserialize the encoded data
@@ -106,7 +110,7 @@ pub unsafe extern "C" fn unienc_muxer_push_audio(
                 Ok(audio_input) => audio_input
                     .push(decoded_data)
                     .await
-                    .map_err(|_e| UniencError::ERROR),
+                    .map_err(UniencError::from_anyhow),
                 Err(err) => Err(err),
             };
             result.apply_callback(callback, user_data);
@@ -208,10 +212,8 @@ pub unsafe extern "C" fn unienc_muxer_complete(
 // Free functions for muxer components
 #[no_mangle]
 pub unsafe extern "C" fn unienc_free_muxer_video_input(
-    runtime: *mut Runtime,
     video_input: SendPtr<Mutex<Option<VideoMuxerInput>>>,
 ) {
-    let _guard = (*runtime).enter();
     if !video_input.is_null() {
         arc_from_raw(*video_input);
     }
@@ -219,10 +221,8 @@ pub unsafe extern "C" fn unienc_free_muxer_video_input(
 
 #[no_mangle]
 pub unsafe extern "C" fn unienc_free_muxer_audio_input(
-    runtime: *mut Runtime,
     audio_input: SendPtr<Mutex<Option<AudioMuxerInput>>>,
 ) {
-    let _guard = (*runtime).enter();
     if !audio_input.is_null() {
         arc_from_raw(*audio_input);
     }
@@ -230,10 +230,8 @@ pub unsafe extern "C" fn unienc_free_muxer_audio_input(
 
 #[no_mangle]
 pub unsafe extern "C" fn unienc_free_muxer_completion_handle(
-    runtime: *mut Runtime,
     completion_handle: SendPtr<Mutex<Option<MuxerCompletionHandle>>>,
 ) {
-    let _guard = (*runtime).enter();
     if !completion_handle.is_null() {
         arc_from_raw(*completion_handle);
     }
