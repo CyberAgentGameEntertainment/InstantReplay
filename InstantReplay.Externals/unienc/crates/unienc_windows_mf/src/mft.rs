@@ -438,27 +438,25 @@ impl Drop for Transform {
             let output_info = *output_info;
             let output_id = *output_id;
 
-            tokio::spawn(async move {
-                loop {
-                    match process_output(&transform, &output_info, output_id) {
-                        Ok(data) => {
-                            let Ok(_) = output_tx.try_send(data) else {
-                                return; // channel is already closed
-                            };
-                            continue;
-                        }
-                        Err(err) => {
-                            if let Ok(err) = err.downcast::<windows_core::Error>() {
-                                if err.code() == MF_E_TRANSFORM_NEED_MORE_INPUT {
-                                    return;
-                                } else {
-                                    panic!("{:?}", err)
-                                }
+            loop {
+                match process_output(&transform, &output_info, output_id) {
+                    Ok(data) => {
+                        let Ok(_) = output_tx.try_send(data) else {
+                            return; // channel is already closed
+                        };
+                        continue;
+                    }
+                    Err(err) => {
+                        if let Ok(err) = err.downcast::<windows_core::Error>() {
+                            if err.code() == MF_E_TRANSFORM_NEED_MORE_INPUT {
+                                return;
+                            } else {
+                                panic!("{:?}", err)
                             }
                         }
                     }
                 }
-            });
+            }
         }
     }
 }

@@ -57,10 +57,20 @@ namespace InstantReplay
             await stream.FlushAsync(ct);
         }
 
-        public async ValueTask CompleteAsync()
+        public ValueTask CompleteVideoAsync()
         {
             _videoEncoder.StandardInput.Close();
+            return default;
+        }
+
+        public ValueTask CompleteAudioAsync()
+        {
             _audioEncoder.StandardInput.Close();
+            return default;
+        }
+
+        public async ValueTask CompleteAsync()
+        {
             await Task.WhenAll(_videoEncoderTask, _audioEncoderTask);
 
             using var muxer = new FFmpegHost(

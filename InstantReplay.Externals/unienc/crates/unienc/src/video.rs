@@ -4,7 +4,9 @@ use tokio::sync::Mutex;
 use unienc_common::{EncoderInput, EncoderOutput, VideoSample};
 
 use crate::{
-    arc_from_raw, arc_from_raw_retained, platform_types::{VideoEncoderInput, VideoEncoderOutput}, ApplyCallback, Runtime, SendPtr, UniencCallback, UniencDataCallback, UniencError
+    arc_from_raw, arc_from_raw_retained,
+    platform_types::{VideoEncoderInput, VideoEncoderOutput},
+    ApplyCallback, Runtime, SendPtr, UniencCallback, UniencDataCallback, UniencError,
 };
 
 // Video encoder input/output functions
@@ -28,9 +30,10 @@ pub unsafe extern "C" fn unienc_video_encoder_push(
         return;
     }
 
+    let input = arc_from_raw_retained(*input);
+
     unsafe {
         tokio::spawn(async move {
-            let input = arc_from_raw_retained(*input);
             let mut input = input.lock().await;
             let data_slice = std::slice::from_raw_parts(*data, data_size);
             let sample = VideoSample {
@@ -88,10 +91,8 @@ pub unsafe extern "C" fn unienc_video_encoder_pull(
 
 #[no_mangle]
 pub unsafe extern "C" fn unienc_free_video_encoder_input(
-    runtime: *mut Runtime,
     video_input: SendPtr<Mutex<Option<VideoEncoderInput>>>,
 ) {
-    let _guard = (*runtime).enter();
     if !video_input.is_null() {
         arc_from_raw(*video_input);
     }
@@ -99,10 +100,8 @@ pub unsafe extern "C" fn unienc_free_video_encoder_input(
 
 #[no_mangle]
 pub unsafe extern "C" fn unienc_free_video_encoder_output(
-    runtime: *mut Runtime,
     video_output: SendPtr<Mutex<Option<VideoEncoderOutput>>>,
 ) {
-    let _guard = (*runtime).enter();
     if !video_output.is_null() {
         arc_from_raw(*video_output);
     }

@@ -21,11 +21,11 @@ pub struct FFmpegCompletionHandle {
 }
 
 pub struct FFmpegMuxerVideoInput {
-    input: ffmpeg::Input,
+    input: Option<ffmpeg::Input>,
 }
 
 pub struct FFmpegMuxerAudioInput {
-    input: ffmpeg::Input,
+    input: Option<ffmpeg::Input>,
 }
 
 impl FFmpegMuxer {
@@ -34,14 +34,16 @@ impl FFmpegMuxer {
         video_options: &impl unienc_common::VideoEncoderOptions,
         audio_options: &impl unienc_common::AudioEncoderOptions,
     ) -> Result<Self> {
+        // raw H.264 frame cannot have timestamp, so we need to assume CFR (encoder also supports CFR)
         let mut ffmpeg = ffmpeg::Builder::new()
+            .use_stdin(true)
             .input([
                 "-f",
                 "h264",
-                "-framerate",
+                "-r",
                 &format!("{}", video_options.fps_hint()),
             ])
-            .input(["-f", "aac", "-ac", &format!("{}", audio_options.channels())])
+            .input(["-f", "aac"])
             .build(
                 [
                     "-pix_fmt",
@@ -50,10 +52,6 @@ impl FFmpegMuxer {
                     "copy",
                     "-c:a",
                     "copy",
-                    "-ar",
-                    &format!("{}", audio_options.sample_rate()),
-                    "-r",
-                    &format!("{}", video_options.fps_hint()),
                     "-f",
                     "mp4",
                 ],
@@ -65,8 +63,8 @@ impl FFmpegMuxer {
         let video_input = inputs.remove(0);
 
         Ok(FFmpegMuxer {
-            video: FFmpegMuxerVideoInput { input: video_input },
-            audio: FFmpegMuxerAudioInput { input: audio_input },
+            video: FFmpegMuxerVideoInput { input: Some(video_input) },
+            audio: FFmpegMuxerAudioInput { input: Some(audio_input) },
             completion: FFmpegCompletionHandle { child: ffmpeg },
         })
     }
@@ -92,19 +90,24 @@ impl MuxerInput for FFmpegMuxerVideoInput {
     type Data = VideoEncodedData;
 
     async fn push(&mut self, data: Self::Data) -> anyhow::Result<()> {
+        let input = self.input.as_mut().context(anyhow::anyhow!("Input is None"))?;
         match data {
             VideoEncodedData::ParameterSet(payload) => {
-                self.input.write_all(&payload).await?;
+                input.write_all(&payload).await?;
             }
             VideoEncodedData::Slice { payload, .. } => {
-                self.input.write_all(&payload).await?;
+                input.write_all(&payload).await?;
             }
         }
+
+        input.flush().await?;
+
         Ok(())
     }
 
     async fn finish(mut self) -> Result<()> {
-        self.input.shutdown().await?;
+        // take input to drop it to ensure stdin / pipe is closed
+        self.input.take().context("Failed to take input")?.shutdown().await?;
         Ok(())
     }
 }
@@ -113,23 +116,30 @@ impl MuxerInput for FFmpegMuxerAudioInput {
     type Data = AudioEncodedData;
 
     async fn push(&mut self, data: Self::Data) -> Result<()> {
-        self.input.write_all(&data.header).await?;
-        self.input.write_all(&data.payload).await?;
+        let input = self.input.as_mut().context("Input is None")?;
+        input.write_all(&data.header).await?;
+        input.write_all(&data.payload).await?;
+
+        input.flush().await?;
+
         Ok(())
     }
 
     async fn finish(mut self) -> Result<()> {
-        self.input.shutdown().await?;
+        // take input to drop it to ensure stdin / pipe is closed
+        self.input.take().context("Failed to take input")?.shutdown().await?;
         Ok(())
     }
 }
 
 impl CompletionHandle for FFmpegCompletionHandle {
     async fn finish(self) -> Result<()> {
-        if self.child.wait().await?.success() {
+        let result = self.child.wait().await?;
+        println!("FFmpeg exited: {}", result);
+        if result.success() {
             Ok(())
         } else {
-            Err(anyhow::anyhow!("ffmpeg process failed"))
+            Err(anyhow::anyhow!("FFmpeg process failed"))
         }
     }
 }

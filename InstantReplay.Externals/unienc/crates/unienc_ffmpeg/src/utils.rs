@@ -1,5 +1,6 @@
 use anyhow::Result;
 
+// an utility to calculate frame repeating / discarding to keep constant frame rate
 pub struct Cfr<T> {
     last: Option<T>,
     last_frame_index: u64,

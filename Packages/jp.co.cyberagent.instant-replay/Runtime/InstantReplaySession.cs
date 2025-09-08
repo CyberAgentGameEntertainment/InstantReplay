@@ -256,6 +256,7 @@ namespace InstantReplay
                                 await transcoder.PushAudioSamplesAsync(segment, ct);
 
                             await reader.CompleteAsync();
+                            await transcoder.CompleteAudioAsync();
                         }, default);
 
                         var startTime = frames.Span[0].Time;
@@ -268,9 +269,12 @@ namespace InstantReplay
                             progress?.Report(0.01f + (float)i / frames.Length * 0.89f);
                         }
 
-                        await encodeAudioSamplesTask;
+                        await transcoder.CompleteVideoAsync().ConfigureAwait(false);
+
+                        await encodeAudioSamplesTask.ConfigureAwait(false);
 
                         await transcoder.CompleteAsync().ConfigureAwait(false);
+
                         progress?.Report(1f);
                     }
 

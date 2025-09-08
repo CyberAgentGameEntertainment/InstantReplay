@@ -1,13 +1,16 @@
 use std::io::Cursor;
 
 use anyhow::{anyhow, Result};
-use cros_codecs::codec::h264::parser::Nalu;
+use cros_codecs::codec::h264::{nalu, parser::Nalu};
 
 #[derive(Default)]
 pub struct NaluReader {
     current: Vec<u8>,
 }
 
+
+// finds start code of NAL unit 0x000001 and returns its position
+// the first value is the start position of the NAL unit including preceding zero bytes and the the second is the position the content starts at
 fn get_start_position(data: &[u8]) -> Option<(usize, usize)> {
     data.windows(3)
         .position(|window| window == [0x00, 0x00, 0x01])
@@ -20,35 +23,55 @@ fn get_start_position(data: &[u8]) -> Option<(usize, usize)> {
         })
 }
 
-impl NaluReader {
-    pub fn push(&mut self, data: &[u8], emit: &mut impl FnMut(&Nalu)) -> Result<()> {
-        self.current.extend_from_slice(data);
+pub struct NalUnit<'a> {
+    pub nalu: Nalu<'a>,
+    pub data: &'a [u8],
+}
 
-        if let Some((start_code_pos, mut nalu_pos)) = get_start_position(&self.current) {
-            if start_code_pos != 0 {
+impl NaluReader {
+    pub fn push(&mut self, data: &[u8], emit: &mut impl FnMut(&NalUnit)) -> Result<()> {
+        self.current.extend_from_slice(data);
+        self.drain(emit)
+    }
+
+    fn drain(&mut self, emit: &mut impl FnMut(&NalUnit)) -> Result<()> {
+        if let Some((start_pos, mut nalu_pos)) = get_start_position(&self.current) {
+            if start_pos != 0 {
                 return Err(anyhow!("Invalid start code"));
             }
-            // println!("{start_code_pos}, {nalu_pos}");
 
             while let Some((next, next_nalu_pos)) = get_start_position(&self.current[nalu_pos..]) {
                 let Ok(nalu) = Nalu::next(&mut Cursor::new(&self.current)) else {
                     return Err(anyhow!("Invalid NALU"));
                 };
 
-                emit(&nalu);
+                let nal_unit = NalUnit {
+                    nalu,
+                    data: &self.current[..nalu_pos + next],
+                };
 
-                self.current.drain(0..nalu_pos+next);
+                emit(&nal_unit);
+
+                self.current.drain(..nalu_pos + next);
                 nalu_pos = next_nalu_pos - next;
             }
         }
         Ok(())
     }
 
-    pub fn end(self, emit: &mut impl FnMut(&Nalu)) {
+    pub fn end(mut self, emit: &mut impl FnMut(&NalUnit)) -> Result<()> {
+        self.drain(emit)?;
         let mut cursor = Cursor::new(self.current.as_slice());
-
-        while let Ok(nalu) = Nalu::next(&mut cursor) {
-            emit(&nalu);
+        match Nalu::next(&mut cursor) {
+            Ok(nalu) => {
+                let nal_unit = NalUnit {
+                    nalu,
+                    data: &self.current,
+                };
+                emit(&nal_unit);
+                Ok(())
+            }
+            Err(err) => Err(anyhow!("{}", err)),
         }
     }
 }

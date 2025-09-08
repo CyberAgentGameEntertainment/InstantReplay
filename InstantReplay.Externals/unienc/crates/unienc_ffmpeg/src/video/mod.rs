@@ -12,7 +12,7 @@ use unienc_common::{
     VideoSample,
 };
 
-use crate::{ffmpeg, utils::Cfr, video::nalu::NaluReader};
+use crate::{ffmpeg, utils::Cfr, video::nalu::{NalUnit, NaluReader}};
 
 mod nalu;
 
@@ -48,9 +48,7 @@ impl FFmpegVideoEncoder {
         let height = options.height();
         let cfr = options.fps_hint();
 
-        println!("FFmpegVideoEncoder::new()");
-        println!("{}", ffmpeg::FFMPEG_PATH.to_str().unwrap());
-
+        // enumerate supported codecs
         let codecs = Command::new(ffmpeg::FFMPEG_PATH.as_os_str())
             .args(["-y", "-loglevel", "error", "-codecs"])
             .stdout(std::process::Stdio::piped())
@@ -77,6 +75,7 @@ impl FFmpegVideoEncoder {
             .map(|s| s.split(' ').collect::<Vec<_>>())
             .context("failed to find H.264 encoder")?;
 
+        // we would like to use hardware encoder if available
         let preferred_encoders = [
             "h264_nvenc",
             "h264_videotoolbox",
@@ -92,7 +91,11 @@ impl FFmpegVideoEncoder {
             .copied()
             .unwrap_or("h264");
 
+        println!("Using H.264 encoder: {}", encoder);
+
+        // encode raw BGRA frames into H.264 stream
         let mut ffmpeg = ffmpeg::Builder::new()
+            .use_stdin(true)
             .input([
                 "-f",
                 "rawvideo",
@@ -196,6 +199,8 @@ impl EncoderInput for FFmpegVideoEncoderInput {
             data.clone()
         };
 
+        // raw H.264 frames cannot have timestamps, so we need to assume CFR
+        // we need to repeat or discard frames to match frame rate specified as fps_hint
         let Some((data, count)) = self.cfr.push(data, timestamp)? else {
             return Ok(());
         };
@@ -203,6 +208,8 @@ impl EncoderInput for FFmpegVideoEncoderInput {
         for _i in 0..count {
             self.input.write_all(&data.data).await?;
         }
+
+        self.input.flush().await?;
 
         Ok(())
     }
@@ -225,29 +232,22 @@ impl EncoderOutput for FFmpegVideoEncoderOutput {
                 }
             }
 
-            let mut buf = vec![0; 1024];
+            // read H.264 stream
+            // H.264 byte stream is sequence of NAL units and each frame is a NAL unit
+            let mut buf = vec![0; 65536];
 
             let read = self.output.read(&mut buf).await?;
 
-            // let mut buf = Vec::new();
-            // let read = self.output.read_to_end(&mut buf).await?;
-
-            fn create_emit<'a>(state: &'a mut ReaderState, cfr: u32) -> impl FnMut(&Nalu) + 'a {
-                move |nalu: &Nalu| {
-                    // println!("NALU type: {:?}", nalu.header.type_);
-                    match nalu.header.type_ {
+            fn create_emit<'a>(state: &'a mut ReaderState, cfr: u32) -> impl FnMut(&NalUnit) + 'a {
+                move |nalu: &NalUnit| {
+                    match nalu.nalu.header.type_ {
+                        // parameter set used by decoder
                         NaluType::Sps | NaluType::Pps => {
                             _ = state
                                 .buffer_tx
                                 .send(VideoEncodedData::ParameterSet(nalu.data.to_vec()));
                         }
-                        /*x
-                        NaluType::Sei => {
-                            _ = state
-                                .buffer_tx
-                                .send(VideoEncodedData::ParameterSet(nalu.data.to_vec()));
-                        },
-                        */
+                        // interpolated frame
                         NaluType::Slice => {
                             let frame_index = state.frame_index;
                             state.frame_index += 1;
@@ -257,6 +257,7 @@ impl EncoderOutput for FFmpegVideoEncoderOutput {
                                 is_idr: false,
                             });
                         }
+                        // key frame
                         NaluType::SliceIdr => {
                             let frame_index = state.frame_index;
                             state.frame_index += 1;
@@ -267,14 +268,14 @@ impl EncoderOutput for FFmpegVideoEncoderOutput {
                             });
                         }
                         _ => {
-                            println!("Ignoring unsupported NALU type: {:?}", nalu.header.type_);
+                            println!("Ignoring NALU type: {:?}", nalu.nalu.header.type_);
                         }
                     };
                 }
             }
 
             if read == 0 {
-                // end
+                // end of stream
                 let Some(mut state) = self.reader_state.take() else {
                     unreachable!();
                 };
@@ -282,7 +283,7 @@ impl EncoderOutput for FFmpegVideoEncoderOutput {
                 let Some(reader) = self.reader.take() else {
                     unreachable!();
                 };
-                reader.end(&mut create_emit(&mut state, self.cfr));
+                reader.end(&mut create_emit(&mut state, self.cfr))?;
             } else {
                 let Some(state) = &mut self.reader_state else {
                     unreachable!();

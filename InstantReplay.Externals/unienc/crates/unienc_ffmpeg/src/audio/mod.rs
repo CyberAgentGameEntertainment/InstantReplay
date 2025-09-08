@@ -35,7 +35,9 @@ impl FFmpegAudioEncoder {
         let sample_rate = options.sample_rate();
         let channels = options.channels();
 
+        // encode raw s16le PCM stream to ADTS
         let mut ffmpeg = ffmpeg::Builder::new()
+            .use_stdin(true)
             .input([
                 "-f",
                 "s16le",
@@ -83,6 +85,7 @@ impl EncoderInput for FFmpegAudioEncoderInput {
         };
 
         self.input.write_all(data).await?;
+        self.input.flush().await?;
 
         Ok(())
     }
@@ -92,6 +95,7 @@ impl EncoderOutput for FFmpegAudioEncoderOutput {
     type Data = AudioEncodedData;
 
     async fn pull(&mut self) -> Result<Option<Self::Data>> {
+        // read ADTS header
         let mut header = vec![0u8; 7];
         if let Err(err) = self.output.read_exact(&mut header).await {
             if err.kind() == std::io::ErrorKind::UnexpectedEof {
@@ -106,13 +110,18 @@ impl EncoderOutput for FFmpegAudioEncoderOutput {
 
         length -= 7;
 
+        // ADTS always contains 1024 samples per channel
         let timestamp_in_samples = self.timestamp_in_samples;
         self.timestamp_in_samples += 1024;
 
         let mut buf = vec![0u8; length as usize];
         self.output.read_exact(&mut buf).await?;
 
-        Ok(Some(AudioEncodedData { header, payload: buf, timestamp_in_samples, sample_rate: self.sample_rate }))
+        let data = AudioEncodedData { header, payload: buf, timestamp_in_samples, sample_rate: self.sample_rate };
+
+        // println!("{data:?}");
+
+        Ok(Some(data))
     }
 }
 
