@@ -77,14 +77,4 @@ namespace UniEnc
             }
         }
     }
-
-    internal abstract class GeneralHandle : SafeHandle
-    {
-        protected GeneralHandle(IntPtr handle) : base(IntPtr.Zero, true)
-        {
-            SetHandle(handle);
-        }
-
-        public override bool IsInvalid => handle == IntPtr.Zero;
-    }
 }
