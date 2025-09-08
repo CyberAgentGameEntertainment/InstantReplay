@@ -56,7 +56,7 @@ macOS|11.0+|✅|✅|
 Windows|Windows 10+, Windows Server 2016+|-|✅|
 Linux|kernel 3.2+, glibc 2.17+|-|✅|`ffmpeg` in PATH
 
-- For legacy mode, other platforms may work if `ffmpeg` is available in PATH.
+- レガシーモードでは、他のプラットフォームでも `ffmpeg` が PATH に存在すれば動作する可能性があります。
 
 ### 使用されるエンコーダー API
 
