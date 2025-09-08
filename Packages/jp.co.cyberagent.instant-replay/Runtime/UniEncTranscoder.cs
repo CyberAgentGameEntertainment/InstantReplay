@@ -17,7 +17,9 @@ namespace InstantReplay
         private readonly int _channels;
         private readonly EncodingSystem _encodingSystem;
         private readonly ChannelWriter<Task<(NativeArray<byte>, nint, nint, double)>> _jpegDecoderWriter;
+        private readonly Task _muxAudioTask;
         private readonly Muxer _muxer;
+        private readonly Task _muxVideoTask;
         private readonly VideoEncoder _videoEncoder;
         private ulong _audioTimestampInSamples;
         private int _disposed;
@@ -45,7 +47,7 @@ namespace InstantReplay
             _audioEncoder = _encodingSystem.CreateAudioEncoder();
             _muxer = _encodingSystem.CreateMuxer(outputFilename);
 
-            Task.Run(async () =>
+            _muxVideoTask = Task.Run(async () =>
             {
                 try
                 {
@@ -71,7 +73,7 @@ namespace InstantReplay
                 }
             });
 
-            Task.Run(async () =>
+            _muxAudioTask = Task.Run(async () =>
             {
                 try
                 {
@@ -216,9 +218,11 @@ namespace InstantReplay
             return default;
         }
 
-        public ValueTask CompleteAsync()
+        public async ValueTask CompleteAsync()
         {
-            return _muxer.CompleteAsync();
+            await _muxVideoTask;
+            await _muxAudioTask;
+            await _muxer.CompleteAsync();
         }
     }
 }

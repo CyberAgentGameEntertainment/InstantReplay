@@ -13,36 +13,51 @@ namespace UniEnc
         public delegate TRet OnDecodedCallback<in T, out TRet>(ReadOnlySpan<byte> data, nint width, nint height,
             nint pitch, T context);
 
+        // flag to avoid re-entrance
+        [ThreadStatic] private static bool _inUse;
         [ThreadStatic] private static Exception _currentException;
 
         public static TRet DecodeJpeg<T, TRet>(ReadOnlySpan<byte> data, OnDecodedCallback<T, TRet> callback, T context)
         {
-            var onDecodedPtr = Context<T, TRet>.OnDecodedPtr ??=
-                Marshal.GetFunctionPointerForDelegate(Context<T, TRet>.OnDecodedDelegate ??= OnDecoded);
-            _currentException = null;
-            Context<T, TRet>.Value = context;
-
-            var callbackHandle = GCHandle.Alloc(callback);
+            if (_inUse)
+                throw new InvalidOperationException("DecodeJpeg cannot be called re-entrantly.");
+            _inUse = true;
             try
             {
-                unsafe
+                var onDecodedPtr = Context<T, TRet>.OnDecodedPtr ??=
+                    Marshal.GetFunctionPointerForDelegate(Context<T, TRet>.OnDecodedDelegate ??= OnDecoded);
+                _currentException = null;
+                Context<T, TRet>.Value = context;
+
+                var callbackHandle = GCHandle.Alloc(callback);
+                try
                 {
-                    fixed (byte* dataPtr = data)
+                    unsafe
                     {
-                        NativeMethods.unienc_jpeg_decode(dataPtr, (nuint)data.Length, (nuint)onDecodedPtr,
-                            (void*)GCHandle.ToIntPtr(callbackHandle));
+                        fixed (byte* dataPtr = data)
+                        {
+                            NativeMethods.unienc_jpeg_decode(dataPtr, (nuint)data.Length, (nuint)onDecodedPtr,
+                                (void*)GCHandle.ToIntPtr(callbackHandle));
+                        }
                     }
                 }
+                finally
+                {
+                    callbackHandle.Free();
+                }
+
+                var ret = Context<T, TRet>.ReturnValue;
+                Context<T, TRet>.ReturnValue = default;
+
+                if (_currentException != null)
+                    throw _currentException;
+
+                return ret;
             }
             finally
             {
-                callbackHandle.Free();
+                _inUse = false;
             }
-
-            var ret = Context<T, TRet>.ReturnValue;
-            Context<T, TRet>.ReturnValue = default;
-
-            return ret;
 
             [MonoPInvokeCallback(typeof(Action<nint, nint, nint, nint, nint, nint>))]
             static unsafe void OnDecoded(nint error, nint data, nint width, nint height, nint pitch, nint userData)
