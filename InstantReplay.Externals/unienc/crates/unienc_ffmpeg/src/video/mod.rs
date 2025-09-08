@@ -12,7 +12,7 @@ use unienc_common::{
     VideoSample,
 };
 
-use crate::{ffmpeg, utils::Cfr, video::nalu::NaluReader};
+use crate::{ffmpeg, utils::Cfr, video::nalu::{NalUnit, NaluReader}};
 
 mod nalu;
 
@@ -47,9 +47,6 @@ impl FFmpegVideoEncoder {
         let width = options.width();
         let height = options.height();
         let cfr = options.fps_hint();
-
-        println!("FFmpegVideoEncoder::new()");
-        println!("{}", ffmpeg::FFMPEG_PATH.to_str().unwrap());
 
         let codecs = Command::new(ffmpeg::FFMPEG_PATH.as_os_str())
             .args(["-y", "-loglevel", "error", "-codecs"])
@@ -204,6 +201,8 @@ impl EncoderInput for FFmpegVideoEncoderInput {
             self.input.write_all(&data.data).await?;
         }
 
+        self.input.flush().await?;
+
         Ok(())
     }
 }
@@ -232,22 +231,15 @@ impl EncoderOutput for FFmpegVideoEncoderOutput {
             // let mut buf = Vec::new();
             // let read = self.output.read_to_end(&mut buf).await?;
 
-            fn create_emit<'a>(state: &'a mut ReaderState, cfr: u32) -> impl FnMut(&Nalu) + 'a {
-                move |nalu: &Nalu| {
+            fn create_emit<'a>(state: &'a mut ReaderState, cfr: u32) -> impl FnMut(&NalUnit) + 'a {
+                move |nalu: &NalUnit| {
                     // println!("NALU type: {:?}", nalu.header.type_);
-                    match nalu.header.type_ {
+                    match nalu.nalu.header.type_ {
                         NaluType::Sps | NaluType::Pps => {
                             _ = state
                                 .buffer_tx
                                 .send(VideoEncodedData::ParameterSet(nalu.data.to_vec()));
                         }
-                        /*x
-                        NaluType::Sei => {
-                            _ = state
-                                .buffer_tx
-                                .send(VideoEncodedData::ParameterSet(nalu.data.to_vec()));
-                        },
-                        */
                         NaluType::Slice => {
                             let frame_index = state.frame_index;
                             state.frame_index += 1;
@@ -267,7 +259,7 @@ impl EncoderOutput for FFmpegVideoEncoderOutput {
                             });
                         }
                         _ => {
-                            println!("Ignoring unsupported NALU type: {:?}", nalu.header.type_);
+                            println!("Ignoring NALU type: {:?}", nalu.nalu.header.type_);
                         }
                     };
                 }
@@ -282,7 +274,7 @@ impl EncoderOutput for FFmpegVideoEncoderOutput {
                 let Some(reader) = self.reader.take() else {
                     unreachable!();
                 };
-                reader.end(&mut create_emit(&mut state, self.cfr));
+                reader.end(&mut create_emit(&mut state, self.cfr))?;
             } else {
                 let Some(state) = &mut self.reader_state else {
                     unreachable!();

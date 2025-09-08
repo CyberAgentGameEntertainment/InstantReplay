@@ -39,7 +39,7 @@ pub static FFMPEG_PATH: LazyLock<OsString> = LazyLock::new(|| {
                 .unwrap_or(OsString::from("ffmpeg"))
         });
 
-    println!("{}", res.to_str().unwrap());
+    println!("using FFmpeg at: {}", res.to_str().unwrap());
 
     res
 });
@@ -47,6 +47,7 @@ pub static FFMPEG_PATH: LazyLock<OsString> = LazyLock::new(|| {
 #[derive(Default)]
 pub struct Builder {
     inputs: Vec<Vec<OsString>>,
+    use_stdin: bool,
 }
 
 pub enum Input {
@@ -109,6 +110,11 @@ impl Builder {
         self
     }
 
+    pub fn use_stdin(mut self, use_stdin: bool) -> Self {
+        self.use_stdin = use_stdin;
+        self
+    }
+
     pub fn build(
         self,
         output_options: impl IntoIterator<Item: AsRef<OsStr>>,
@@ -124,7 +130,7 @@ impl Builder {
         let mut pending_fd = Vec::new();
 
         for input in self.inputs {
-            if inputs.is_empty() {
+            if self.use_stdin && inputs.is_empty() {
                 // use stdin
                 command.args(input).args(["-i", "-"]).stdin(Stdio::piped());
                 inputs.push(None);
@@ -156,7 +162,7 @@ impl Builder {
             Destination::Stdout => command.stdout(Stdio::piped()).arg(OsString::from("-")),
         };
 
-        // println!("{:?}", command);
+        println!("Running FFmpeg: {command:?}");
 
         let mut child = command.spawn()?;
 

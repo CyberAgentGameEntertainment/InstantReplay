@@ -83,6 +83,7 @@ impl EncoderInput for FFmpegAudioEncoderInput {
         };
 
         self.input.write_all(data).await?;
+        self.input.flush().await?;
 
         Ok(())
     }
@@ -112,7 +113,11 @@ impl EncoderOutput for FFmpegAudioEncoderOutput {
         let mut buf = vec![0u8; length as usize];
         self.output.read_exact(&mut buf).await?;
 
-        Ok(Some(AudioEncodedData { header, payload: buf, timestamp_in_samples, sample_rate: self.sample_rate }))
+        let data = AudioEncodedData { header, payload: buf, timestamp_in_samples, sample_rate: self.sample_rate };
+
+        // println!("{data:?}");
+
+        Ok(Some(data))
     }
 }
 
