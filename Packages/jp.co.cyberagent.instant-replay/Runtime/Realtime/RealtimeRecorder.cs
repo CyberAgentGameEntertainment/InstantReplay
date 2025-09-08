@@ -12,7 +12,7 @@ namespace InstantReplay
     /// <summary>
     ///     Handles realtime recording with frame queuing and backpressure control.
     /// </summary>
-    public class RealtimeRecorder : IDisposable
+    internal class RealtimeRecorder : IDisposable
     {
         private const double AllowedLag = 0.1;
         private readonly Channel<AudioFrameData> _audioChannel;
