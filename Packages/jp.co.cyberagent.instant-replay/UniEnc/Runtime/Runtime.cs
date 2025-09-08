@@ -31,6 +31,8 @@ namespace UniEnc
 
         protected override bool ReleaseHandle()
         {
+            // wait for all native invocations on other threads depending on the runtime to complete
+            // we use ReaderWriteLockSlim to allow USING the runtime from multiple threads simultaneously but forbid DISPOSING it while in use 
             _lock.EnterWriteLock();
             try
             {
