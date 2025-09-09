@@ -10,16 +10,15 @@ namespace UniEnc
     public sealed class Muxer : IDisposable
     {
         private readonly object _lock = new();
-        private nint _audioInputHandle;
-        private nint _completionHandle;
-        private bool _disposed;
-        private nint _videoInputHandle;
+        private AudioInputHandle _audioInputHandle;
+        private CompletionHandle _completionHandle;
+        private VideoInputHandle _videoInputHandle;
 
         internal Muxer(nint videoInputHandle, nint audioInputHandle, nint completionHandle)
         {
-            _videoInputHandle = videoInputHandle;
-            _audioInputHandle = audioInputHandle;
-            _completionHandle = completionHandle;
+            _videoInputHandle = new VideoInputHandle(videoInputHandle);
+            _audioInputHandle = new AudioInputHandle(audioInputHandle);
+            _completionHandle = new CompletionHandle(completionHandle);
         }
 
         /// <summary>
@@ -37,27 +36,33 @@ namespace UniEnc
         /// <param name="frame">Encoded video data from the video encoder</param>
         public ValueTask PushVideoDataAsync(in EncodedFrame frame)
         {
-            ThrowIfDisposed();
-
-            var context = CallbackHelper.SimpleCallbackContext.Rent();
-            var contextHandle = CallbackHelper.CreateSendPtr(context);
-            var data = frame.Data;
-
-            unsafe
+            lock (_lock)
             {
-                fixed (byte* dataPtr = data)
-                {
-                    NativeMethods.unienc_muxer_push_video(
-                        _videoInputHandle,
-                        (nint)dataPtr,
-                        (nuint)data.Length,
-                        frame.Timestamp,
-                        CallbackHelper.GetSimpleCallbackPtr(),
-                        contextHandle);
-                }
-            }
+                _ = _videoInputHandle ?? throw new ObjectDisposedException(nameof(_videoInputHandle));
 
-            return context.Task;
+                var context = CallbackHelper.SimpleCallbackContext.Rent();
+                var contextHandle = CallbackHelper.CreateSendPtr(context);
+                var data = frame.Data;
+
+                unsafe
+                {
+                    fixed (byte* dataPtr = data)
+                    {
+                        using var runtime = RuntimeWrapper.GetScope();
+
+                        NativeMethods.unienc_muxer_push_video(
+                            runtime.Runtime,
+                            _videoInputHandle.DangerousGetHandle(),
+                            (nint)dataPtr,
+                            (nuint)data.Length,
+                            frame.Timestamp,
+                            CallbackHelper.GetSimpleCallbackPtr(),
+                            contextHandle);
+                    }
+                }
+
+                return context.Task;
+            }
         }
 
         /// <summary>
@@ -66,27 +71,33 @@ namespace UniEnc
         /// <param name="frame">Encoded audio data from the audio encoder</param>
         public ValueTask PushAudioDataAsync(EncodedFrame frame)
         {
-            ThrowIfDisposed();
-
-            var context = CallbackHelper.SimpleCallbackContext.Rent();
-            var contextHandle = CallbackHelper.CreateSendPtr(context);
-            var data = frame.Data;
-
-            unsafe
+            lock (_lock)
             {
-                fixed (byte* dataPtr = data)
-                {
-                    NativeMethods.unienc_muxer_push_audio(
-                        _audioInputHandle,
-                        (nint)dataPtr,
-                        (nuint)data.Length,
-                        frame.Timestamp,
-                        CallbackHelper.GetSimpleCallbackPtr(),
-                        contextHandle);
-                }
-            }
+                _ = _audioInputHandle ?? throw new ObjectDisposedException(nameof(_audioInputHandle));
 
-            return context.Task;
+                var context = CallbackHelper.SimpleCallbackContext.Rent();
+                var contextHandle = CallbackHelper.CreateSendPtr(context);
+                var data = frame.Data;
+
+                unsafe
+                {
+                    fixed (byte* dataPtr = data)
+                    {
+                        using var runtime = RuntimeWrapper.GetScope();
+
+                        NativeMethods.unienc_muxer_push_audio(
+                            runtime.Runtime,
+                            _audioInputHandle.DangerousGetHandle(),
+                            (nint)dataPtr,
+                            (nuint)data.Length,
+                            frame.Timestamp,
+                            CallbackHelper.GetSimpleCallbackPtr(),
+                            contextHandle);
+                    }
+                }
+
+                return context.Task;
+            }
         }
 
         /// <summary>
@@ -94,17 +105,26 @@ namespace UniEnc
         /// </summary>
         public ValueTask FinishVideoAsync()
         {
-            ThrowIfDisposed();
+            lock (_lock)
+            {
+                _ = _videoInputHandle ?? throw new ObjectDisposedException(nameof(_videoInputHandle));
 
-            var context = CallbackHelper.SimpleCallbackContext.Rent();
-            var contextHandle = CallbackHelper.CreateSendPtr(context);
+                var context = CallbackHelper.SimpleCallbackContext.Rent();
+                var contextHandle = CallbackHelper.CreateSendPtr(context);
 
-            NativeMethods.unienc_muxer_finish_video(
-                _videoInputHandle,
-                CallbackHelper.GetSimpleCallbackPtr(),
-                contextHandle);
+                using var runtime = RuntimeWrapper.GetScope();
 
-            return context.Task;
+                unsafe
+                {
+                    NativeMethods.unienc_muxer_finish_video(
+                        runtime.Runtime,
+                        _videoInputHandle.DangerousGetHandle(),
+                        CallbackHelper.GetSimpleCallbackPtr(),
+                        contextHandle);
+                }
+
+                return context.Task;
+            }
         }
 
         /// <summary>
@@ -112,17 +132,25 @@ namespace UniEnc
         /// </summary>
         public ValueTask FinishAudioAsync()
         {
-            ThrowIfDisposed();
+            lock (_lock)
+            {
+                _ = _audioInputHandle ?? throw new ObjectDisposedException(nameof(_audioInputHandle));
 
-            var context = CallbackHelper.SimpleCallbackContext.Rent();
-            var contextHandle = CallbackHelper.CreateSendPtr(context);
+                var context = CallbackHelper.SimpleCallbackContext.Rent();
+                var contextHandle = CallbackHelper.CreateSendPtr(context);
+                using var runtime = RuntimeWrapper.GetScope();
 
-            NativeMethods.unienc_muxer_finish_audio(
-                _audioInputHandle,
-                CallbackHelper.GetSimpleCallbackPtr(),
-                contextHandle);
+                unsafe
+                {
+                    NativeMethods.unienc_muxer_finish_audio(
+                        runtime.Runtime,
+                        _audioInputHandle.DangerousGetHandle(),
+                        CallbackHelper.GetSimpleCallbackPtr(),
+                        contextHandle);
+                }
 
-            return context.Task;
+                return context.Task;
+            }
         }
 
         /// <summary>
@@ -130,43 +158,42 @@ namespace UniEnc
         /// </summary>
         public ValueTask CompleteAsync()
         {
-            ThrowIfDisposed();
+            lock (_lock)
+            {
+                _ = _completionHandle ?? throw new ObjectDisposedException(nameof(_completionHandle));
 
-            var context = CallbackHelper.SimpleCallbackContext.Rent();
-            var contextHandle = CallbackHelper.CreateSendPtr(context);
+                var context = CallbackHelper.SimpleCallbackContext.Rent();
+                var contextHandle = CallbackHelper.CreateSendPtr(context);
+                using var runtime = RuntimeWrapper.GetScope();
 
-            NativeMethods.unienc_muxer_complete(
-                _completionHandle,
-                CallbackHelper.GetSimpleCallbackPtr(),
-                contextHandle);
+                unsafe
+                {
+                    NativeMethods.unienc_muxer_complete(
+                        runtime.Runtime,
+                        _completionHandle.DangerousGetHandle(),
+                        CallbackHelper.GetSimpleCallbackPtr(),
+                        contextHandle);
+                }
 
-            return context.Task;
+                return context.Task;
+            }
         }
 
         private void Dispose(bool disposing)
         {
             lock (_lock)
             {
-                if (_disposed) return;
-                if (_completionHandle != 0)
-                {
-                    NativeMethods.unienc_free_muxer_completion_handle(_completionHandle);
-                    _completionHandle = 0;
-                }
+                var videoInput = _videoInputHandle;
+                _videoInputHandle = null;
+                videoInput?.Dispose();
 
-                if (_videoInputHandle != 0)
-                {
-                    NativeMethods.unienc_free_muxer_video_input(_videoInputHandle);
-                    _videoInputHandle = 0;
-                }
+                var audioInput = _audioInputHandle;
+                _audioInputHandle = null;
+                audioInput?.Dispose();
 
-                if (_audioInputHandle != 0)
-                {
-                    NativeMethods.unienc_free_muxer_audio_input(_audioInputHandle);
-                    _audioInputHandle = 0;
-                }
-
-                _disposed = true;
+                var completion = _completionHandle;
+                _completionHandle = null;
+                completion?.Dispose();
             }
         }
 
@@ -175,10 +202,44 @@ namespace UniEnc
             Dispose(false);
         }
 
-        private void ThrowIfDisposed()
+        private class VideoInputHandle : GeneralHandle
         {
-            if (_disposed)
-                throw new ObjectDisposedException(nameof(Muxer));
+            public VideoInputHandle(IntPtr handle) : base(handle)
+            {
+            }
+
+            protected override bool ReleaseHandle()
+            {
+                NativeMethods.unienc_free_muxer_video_input(handle);
+                return true;
+            }
+        }
+
+        private class AudioInputHandle : GeneralHandle
+        {
+            public AudioInputHandle(IntPtr handle) : base(handle)
+            {
+            }
+
+            protected override bool ReleaseHandle()
+            {
+                NativeMethods.unienc_free_muxer_audio_input(handle);
+                return true;
+            }
+        }
+
+
+        private class CompletionHandle : GeneralHandle
+        {
+            public CompletionHandle(IntPtr handle) : base(handle)
+            {
+            }
+
+            protected override bool ReleaseHandle()
+            {
+                NativeMethods.unienc_free_muxer_completion_handle(handle);
+                return true;
+            }
         }
     }
 }

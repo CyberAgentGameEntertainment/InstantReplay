@@ -6,12 +6,13 @@ use unienc_common::{AudioSample, EncoderInput, EncoderOutput};
 use crate::{
     arc_from_raw, arc_from_raw_retained,
     platform_types::{AudioEncoderInput, AudioEncoderOutput},
-    ApplyCallback, SendPtr, UniencCallback, UniencDataCallback, UniencError, RUNTIME,
+    ApplyCallback, Runtime, SendPtr, UniencCallback, UniencDataCallback, UniencError,
 };
 
 // Audio encoder input/output functions
 #[no_mangle]
 pub unsafe extern "C" fn unienc_audio_encoder_push(
+    runtime: *mut Runtime,
     input: SendPtr<Mutex<Option<AudioEncoderInput>>>,
     data: SendPtr<i16>,
     sample_count: usize,
@@ -19,7 +20,7 @@ pub unsafe extern "C" fn unienc_audio_encoder_push(
     callback: usize, /*UniencCallback*/
     user_data: SendPtr<c_void>,
 ) {
-    let _guard = RUNTIME.enter();
+    let _guard = (*runtime).enter();
     let callback: UniencCallback = std::mem::transmute(callback);
     if input.is_null() || data.is_null() {
         UniencError::invalid_input_error("Invalid input parameters")
@@ -50,11 +51,12 @@ pub unsafe extern "C" fn unienc_audio_encoder_push(
 
 #[no_mangle]
 pub unsafe extern "C" fn unienc_audio_encoder_pull(
+    runtime: *mut Runtime,
     output: SendPtr<Mutex<Option<AudioEncoderOutput>>>,
     callback: usize, /*UniencDataCallback*/
     user_data: SendPtr<c_void>,
 ) {
-    let _guard = RUNTIME.enter();
+    let _guard = (*runtime).enter();
     let callback: UniencDataCallback = std::mem::transmute(callback);
     if output.is_null() {
         UniencError::invalid_input_error("Invalid input parameters")
@@ -80,7 +82,6 @@ pub unsafe extern "C" fn unienc_audio_encoder_pull(
 pub unsafe extern "C" fn unienc_free_audio_encoder_input(
     audio_input: SendPtr<Mutex<Option<AudioEncoderInput>>>,
 ) {
-    let _guard = RUNTIME.enter();
     if !audio_input.is_null() {
         arc_from_raw(*audio_input);
     }
@@ -90,7 +91,6 @@ pub unsafe extern "C" fn unienc_free_audio_encoder_input(
 pub unsafe extern "C" fn unienc_free_audio_encoder_output(
     audio_output: SendPtr<Mutex<Option<AudioEncoderOutput>>>,
 ) {
-    let _guard = RUNTIME.enter();
     if !audio_output.is_null() {
         arc_from_raw(*audio_output);
     }

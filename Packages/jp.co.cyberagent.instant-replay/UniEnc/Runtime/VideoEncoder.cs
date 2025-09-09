@@ -12,20 +12,14 @@ namespace UniEnc
     public sealed class VideoEncoder : IDisposable
     {
         private readonly object _lock = new();
-        private bool _disposed;
-        private nint _inputHandle;
-        private nint _outputHandle;
+        private InputHandle _inputHandle;
+        private OutputHandle _outputHandle;
 
         internal VideoEncoder(nint inputHandle, nint outputHandle)
         {
-            _inputHandle = inputHandle;
-            _outputHandle = outputHandle;
+            _inputHandle = new InputHandle(inputHandle);
+            _outputHandle = new OutputHandle(outputHandle);
         }
-
-        /// <summary>
-        ///     Gets whether the input has been completed (no more frames can be pushed).
-        /// </summary>
-        internal bool IsInputCompleted => _inputHandle == 0;
 
         /// <summary>
         ///     Releases all resources used by the video encoder.
@@ -45,35 +39,39 @@ namespace UniEnc
         /// <param name="timestamp">Frame timestamp in seconds</param>
         public ValueTask PushFrameAsync(NativeArray<byte> frameData, uint width, uint height, double timestamp)
         {
-            ThrowIfDisposed();
-
-            if (_inputHandle == 0) return default;
-
-            var context = CallbackHelper.SimpleCallbackContext.Rent();
-
-            try
+            lock (_lock)
             {
-                var contextHandle = CallbackHelper.CreateSendPtr(context);
+                _ = _inputHandle ?? throw new InvalidOperationException("Input has been completed");
 
-                unsafe
+                var context = CallbackHelper.SimpleCallbackContext.Rent();
+
+                try
                 {
-                    NativeMethods.unienc_video_encoder_push(
-                        _inputHandle,
-                        (nint)frameData.GetUnsafeReadOnlyPtr(),
-                        (nuint)frameData.Length,
-                        width,
-                        height,
-                        timestamp,
-                        CallbackHelper.GetSimpleCallbackPtr(),
-                        contextHandle);
-                }
+                    var contextHandle = CallbackHelper.CreateSendPtr(context);
 
-                return context.Task;
-            }
-            catch
-            {
-                context.Return();
-                throw;
+                    unsafe
+                    {
+                        using var runtime = RuntimeWrapper.GetScope();
+
+                        NativeMethods.unienc_video_encoder_push(
+                            runtime.Runtime,
+                            _inputHandle.DangerousGetHandle(),
+                            (nint)frameData.GetUnsafeReadOnlyPtr(),
+                            (nuint)frameData.Length,
+                            width,
+                            height,
+                            timestamp,
+                            CallbackHelper.GetSimpleCallbackPtr(),
+                            contextHandle);
+                    }
+
+                    return context.Task;
+                }
+                catch
+                {
+                    context.Return();
+                    throw;
+                }
             }
         }
 
@@ -83,17 +81,26 @@ namespace UniEnc
         /// <returns>The encoded frame, or null if no frames are available</returns>
         public ValueTask<EncodedFrame> PullFrameAsync()
         {
-            ThrowIfDisposed();
+            lock (_lock)
+            {
+                _ = _outputHandle ?? throw new InvalidOperationException("Output has been completed");
 
-            var context = CallbackHelper.DataCallbackContext.Rent();
-            var contextHandle = CallbackHelper.CreateSendPtr(context);
+                var context = CallbackHelper.DataCallbackContext.Rent();
+                var contextHandle = CallbackHelper.CreateSendPtr(context);
 
-            NativeMethods.unienc_video_encoder_pull(
-                _outputHandle,
-                CallbackHelper.GetDataCallbackPtr(),
-                contextHandle);
+                unsafe
+                {
+                    using var runtime = RuntimeWrapper.GetScope();
 
-            return context.Task;
+                    NativeMethods.unienc_video_encoder_pull(
+                        runtime.Runtime,
+                        _outputHandle.DangerousGetHandle(),
+                        CallbackHelper.GetDataCallbackPtr(),
+                        contextHandle);
+                }
+
+                return context.Task;
+            }
         }
 
         /// <summary>
@@ -105,11 +112,9 @@ namespace UniEnc
         {
             lock (_lock)
             {
-                if (_inputHandle != 0)
-                {
-                    NativeMethods.unienc_free_video_encoder_input(_inputHandle);
-                    _inputHandle = 0;
-                }
+                var input = _inputHandle;
+                _inputHandle = null;
+                input?.Dispose();
             }
         }
 
@@ -117,22 +122,13 @@ namespace UniEnc
         {
             lock (_lock)
             {
-                if (!_disposed)
-                {
-                    if (_inputHandle != 0)
-                    {
-                        NativeMethods.unienc_free_video_encoder_input(_inputHandle);
-                        _inputHandle = 0;
-                    }
+                var input = _inputHandle;
+                _inputHandle = null;
+                input?.Dispose();
 
-                    if (_outputHandle != 0)
-                    {
-                        NativeMethods.unienc_free_video_encoder_output(_outputHandle);
-                        _outputHandle = 0;
-                    }
-
-                    _disposed = true;
-                }
+                var output = _outputHandle;
+                _outputHandle = null;
+                output?.Dispose();
             }
         }
 
@@ -141,10 +137,30 @@ namespace UniEnc
             Dispose(false);
         }
 
-        private void ThrowIfDisposed()
+        private class InputHandle : GeneralHandle
         {
-            if (_disposed)
-                throw new ObjectDisposedException(nameof(VideoEncoder));
+            public InputHandle(IntPtr handle) : base(handle)
+            {
+            }
+
+            protected override bool ReleaseHandle()
+            {
+                NativeMethods.unienc_free_video_encoder_input((nint)handle);
+                return true;
+            }
+        }
+
+        private class OutputHandle : GeneralHandle
+        {
+            public OutputHandle(IntPtr handle) : base(handle)
+            {
+            }
+
+            protected override bool ReleaseHandle()
+            {
+                NativeMethods.unienc_free_video_encoder_output((nint)handle);
+                return true;
+            }
         }
     }
 }

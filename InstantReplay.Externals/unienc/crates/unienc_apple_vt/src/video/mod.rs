@@ -110,6 +110,10 @@ unsafe extern "C-unwind" fn handle_video_encode_output(
     } // otherwise dropped
 }
 
+unsafe extern "C-unwind" fn release_pixel_buffer(release_ref_con: *mut c_void, _base_address: *const c_void) {
+    drop(Box::<Vec::<u8>>::from_raw(release_ref_con as *mut _));
+}
+
 impl Encoder for VideoToolboxEncoder {
     type InputType = VideoToolboxEncoderInput;
 
@@ -124,7 +128,7 @@ impl EncoderInput for VideoToolboxEncoderInput {
     type Data = VideoSample;
 
     async fn push(&mut self, data: &Self::Data) -> Result<()> {
-        let pixel_data = &data.data;
+        let pixel_data = Box::new(data.data.clone());
         let pixel_data_ptr = pixel_data.as_ptr();
 
         let mut buffer: *mut CVPixelBuffer = std::ptr::null_mut();
@@ -137,8 +141,8 @@ impl EncoderInput for VideoToolboxEncoderInput {
                 NonNull::new(pixel_data_ptr as *mut c_void)
                     .context("Failed to create NonNull from pixel data pointer")?,
                 (data.width * 4) as usize,
-                None,
-                std::ptr::null_mut(),
+                Some(release_pixel_buffer),
+                Box::into_raw(pixel_data) as *mut _,
                 None,
                 NonNull::new(&mut buffer).context("Failed to create CVPixelBuffer")?,
             )

@@ -14,6 +14,8 @@ namespace InstantReplay
 
         ValueTask PushAudioSamplesAsync(ReadOnlyMemory<byte> buffer, CancellationToken ct = default);
 
+        ValueTask CompleteVideoAsync();
+        ValueTask CompleteAudioAsync();
         ValueTask CompleteAsync();
     }
 }

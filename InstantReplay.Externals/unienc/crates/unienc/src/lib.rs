@@ -1,12 +1,15 @@
 use std::ffi::{c_char, c_void, CStr, CString};
 use std::ops::Deref;
 use std::path::Path;
-use std::sync::{Arc, LazyLock};
+use std::sync::Arc;
 
+use anyhow::Result;
+use tokio::runtime::EnterGuard;
 use tokio::sync::Mutex;
 use unienc_common::{EncodedData, Encoder, EncodingSystem, Muxer, UniencDataKind};
 
 mod audio;
+mod jpeg;
 mod mux;
 mod public_types;
 mod video;
@@ -41,10 +44,6 @@ impl UniencError {
         kind: UniencErrorKind::Success,
         message: None,
     };
-    pub const ERROR: Self = Self {
-        kind: UniencErrorKind::Error,
-        message: None,
-    };
     pub fn with_native(&self, f: impl FnOnce(&UniencErrorNative)) {
         let message = self
             .message
@@ -62,7 +61,7 @@ impl UniencError {
 
     /// Convert an anyhow::Error to UniencError with appropriate categorization
     pub fn from_anyhow(err: anyhow::Error) -> Self {
-        let message = err.to_string();
+        let message = format!("{err:?}").to_string();
         let kind = Self::categorize_error(&message);
         Self {
             kind,
@@ -263,7 +262,7 @@ impl unienc_common::AudioEncoderOptions for AudioEncoderOptionsNative {
 }
 
 #[cfg(target_vendor = "apple")]
- type PlatformEncodingSystem = unienc_apple_vt::VideoToolboxEncodingSystem<
+pub type PlatformEncodingSystem = unienc_apple_vt::VideoToolboxEncodingSystem<
     VideoEncoderOptionsNative,
     AudioEncoderOptionsNative,
 >;
@@ -281,12 +280,10 @@ pub type PlatformEncodingSystem = unienc_windows_mf::MediaFoundationEncodingSyst
 >;
 
 #[cfg(not(any(target_vendor = "apple", target_os = "android", windows)))]
-pub type PlatformEncodingSystem = (); // Placeholder - will generate compile error below
+pub type PlatformEncodingSystem = ();
 
 #[cfg(not(any(target_vendor = "apple", target_os = "android", windows)))]
-compile_error!(
-    "Platform not supported. Only Apple, Android, and Windows platforms are currently implemented."
-);
+compile_error!("Unsupported platform");
 
 mod platform_types {
     use unienc_common::EncoderOutput;
@@ -312,17 +309,39 @@ use platform_types::*;
 
 pub use unienc_common::{AudioEncoderOptions, VideoEncoderOptions};
 
-// Runtime for async operations
-use tokio::runtime::Runtime;
+pub struct Runtime {
+    tokio_runtime: tokio::runtime::Runtime,
+}
 
-static RUNTIME: LazyLock<Runtime> = LazyLock::new(|| Runtime::new().unwrap());
+impl Runtime {
+    pub fn new() -> Result<Runtime> {
+        let tokio_runtime = tokio::runtime::Runtime::new()?;
+        Ok(Self { tokio_runtime })
+    }
+
+    pub fn enter(&self) -> EnterGuard<'_> {
+        self.tokio_runtime.enter()
+    }
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn unienc_new_runtime() -> *mut Runtime {
+    let runtime = Runtime::new().unwrap();
+    Box::into_raw(Box::new(runtime))
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn unienc_drop_runtime(runtime: *mut Runtime) {
+    drop(Box::from_raw(runtime));
+}
 
 #[no_mangle]
 pub unsafe extern "C" fn unienc_new_encoding_system(
+    runtime: *mut Runtime,
     video_options: *const VideoEncoderOptionsNative,
     audio_options: *const AudioEncoderOptionsNative,
 ) -> *mut PlatformEncodingSystem {
-    let _guard = RUNTIME.enter();
+    let _guard = (*runtime).enter();
     unsafe {
         let system = PlatformEncodingSystem::new(&*video_options, &*audio_options);
         Box::into_raw(Box::new(system))
@@ -330,8 +349,9 @@ pub unsafe extern "C" fn unienc_new_encoding_system(
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn unienc_free_encoding_system(system: *mut PlatformEncodingSystem) {
-    let _guard = RUNTIME.enter();
+pub unsafe extern "C" fn unienc_free_encoding_system(
+    system: *mut PlatformEncodingSystem,
+) {
     if !system.is_null() {
         unsafe {
             let _ = Box::from_raw(system);
@@ -341,13 +361,14 @@ pub unsafe extern "C" fn unienc_free_encoding_system(system: *mut PlatformEncodi
 
 #[no_mangle]
 pub unsafe extern "C" fn unienc_new_video_encoder(
+    runtime: *mut Runtime,
     system: *const PlatformEncodingSystem,
     input_out: *mut *const Mutex<Option<VideoEncoderInput>>,
     output_out: *mut *const Mutex<Option<VideoEncoderOutput>>,
-    on_error: usize /*UniencCallback*/,
+    on_error: usize, /*UniencCallback*/
     user_data: SendPtr<c_void>,
 ) -> bool {
-    let _guard = RUNTIME.enter();
+    let _guard = (*runtime).enter();
     let on_error: UniencCallback = std::mem::transmute(on_error);
 
     if system.is_null() {
@@ -379,13 +400,14 @@ pub unsafe extern "C" fn unienc_new_video_encoder(
 
 #[no_mangle]
 pub unsafe extern "C" fn unienc_new_audio_encoder(
+    runtime: *mut Runtime,
     system: *const PlatformEncodingSystem,
     input_out: *mut *const Mutex<Option<AudioEncoderInput>>,
     output_out: *mut *const Mutex<Option<AudioEncoderOutput>>,
-    on_error: usize /*UniencCallback*/,
+    on_error: usize, /*UniencCallback*/
     user_data: SendPtr<c_void>,
 ) -> bool {
-    let _guard = RUNTIME.enter();
+    let _guard = (*runtime).enter();
     let on_error: UniencCallback = std::mem::transmute(on_error);
 
     if system.is_null() {
@@ -417,15 +439,16 @@ pub unsafe extern "C" fn unienc_new_audio_encoder(
 
 #[no_mangle]
 pub unsafe extern "C" fn unienc_new_muxer(
+    runtime: *mut Runtime,
     system: *const PlatformEncodingSystem,
     output_path: *const c_char,
     video_input_out: *mut *const Mutex<Option<VideoMuxerInput>>,
     audio_input_out: *mut *const Mutex<Option<AudioMuxerInput>>,
     completion_handle_out: *mut *const Mutex<Option<MuxerCompletionHandle>>,
-    on_error: usize /*UniencCallback*/,
+    on_error: usize, /*UniencCallback*/
     user_data: SendPtr<c_void>,
 ) -> bool {
-    let _guard = RUNTIME.enter();
+    let _guard = (*runtime).enter();
     let on_error: UniencCallback = std::mem::transmute(on_error);
 
     if system.is_null() || output_path.is_null() {
@@ -473,8 +496,9 @@ pub unsafe extern "C" fn unienc_new_muxer(
 
 fn arc_from_raw_retained<T: Send>(ptr: *const T) -> Arc<T> {
     let arc = unsafe { Arc::from_raw(ptr) };
-    let _ = Arc::into_raw(arc.clone());
-    arc
+    let clone = arc.clone();
+    let _ = Arc::into_raw(arc);
+    clone
 }
 
 fn arc_from_raw<T: Send>(ptr: *const T) -> Arc<T> {
