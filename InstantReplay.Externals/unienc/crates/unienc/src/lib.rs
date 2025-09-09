@@ -279,10 +279,16 @@ pub type PlatformEncodingSystem = unienc_windows_mf::MediaFoundationEncodingSyst
     AudioEncoderOptionsNative,
 >;
 
-#[cfg(not(any(target_vendor = "apple", target_os = "android", windows)))]
+#[cfg(all(unix, not(any(target_vendor = "apple", target_os = "android", windows))))]
+pub type PlatformEncodingSystem = unienc_ffmpeg::FFmpegEncodingSystem<
+    VideoEncoderOptionsNative,
+    AudioEncoderOptionsNative,
+>;
+
+#[cfg(not(any(target_vendor = "apple", target_os = "android", windows, unix)))]
 pub type PlatformEncodingSystem = ();
 
-#[cfg(not(any(target_vendor = "apple", target_os = "android", windows)))]
+#[cfg(not(any(target_vendor = "apple", target_os = "android", windows, unix)))]
 compile_error!("Unsupported platform");
 
 mod platform_types {
