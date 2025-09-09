@@ -13,6 +13,11 @@ namespace InstantReplay.Examples
 {
     public class PersistentRecorder : MonoBehaviour
     {
+        private const float BitPerPixel = 6f;
+        private const float BitPerPixelBias = -25000f;
+        private const float LowerBitPerPixel = 3f;
+        private const float LowerBitPerPixelBias = 1000f;
+
         #region Serialized Fields
 
         [FormerlySerializedAs("maxWidth")] [SerializeField] public int width = 640;
@@ -62,16 +67,20 @@ namespace InstantReplay.Examples
                 }
             }
 
-            _currentSession = new RealtimeInstantReplaySession(new RealtimeEncodingOptions()
+            _currentSession = new RealtimeInstantReplaySession(new RealtimeEncodingOptions
             {
-                VideoOptions = new VideoEncoderOptions()
+                VideoOptions = new VideoEncoderOptions
                 {
                     Width = (uint)width,
                     Height = (uint)height,
-                    Bitrate = (uint)Mathf.Min(width * height * 30 * 0.2f - 25000,
-                        width * height * 30 * 0.1f + 1000),
-                    FpsHint = (uint)fixedFrameRate
 
+                    Bitrate = (uint)Mathf.Max(
+                        // approximates the values YouTube recommends https://support.google.com/youtube/answer/1722171?hl=ja
+                        width * height * BitPerPixel + BitPerPixelBias,
+                        // and a lower bound
+                        width * height * LowerBitPerPixel + LowerBitPerPixelBias
+                    ),
+                    FpsHint = (uint)fixedFrameRate
                 },
                 AudioOptions = new AudioEncoderOptions
                 {
@@ -82,7 +91,7 @@ namespace InstantReplay.Examples
                 MaxMemoryUsageBytes = maxMemoryUsageMb * 1024 * 1024, // 20 MiB
                 FixedFrameRate = 30.0, // null if not using fixed frame rate
                 VideoInputQueueSize = 5, // Maximum number of raw frames to keep before encoding
-                AudioInputQueueSize = 60, // Maximum number of raw audio sample frames to keep before encoding
+                AudioInputQueueSize = 60 // Maximum number of raw audio sample frames to keep before encoding
             });
         }
 
