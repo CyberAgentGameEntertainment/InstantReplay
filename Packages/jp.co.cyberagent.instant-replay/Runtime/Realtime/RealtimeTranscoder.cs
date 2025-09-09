@@ -10,7 +10,7 @@ namespace InstantReplay
     /// <summary>
     ///     Realtime transcoder that encodes frames as they arrive and maintains a circular buffer.
     /// </summary>
-    public class RealtimeTranscoder : IDisposable
+    internal class RealtimeTranscoder : IDisposable
     {
         private readonly Task _audioTransferTask;
         private readonly object _lock = new();

@@ -12,7 +12,7 @@ namespace InstantReplay
     /// <summary>
     ///     Handles GPU frame readback operations for realtime encoding.
     /// </summary>
-    public static class RealtimeFrameReadback
+    internal static class RealtimeFrameReadback
     {
         private static readonly Action<AsyncGPUReadbackRequest, ReadbackContext>
             OnAsyncGPUReadbackCompletedDelegate = OnAsyncGPUReadbackCompleted;

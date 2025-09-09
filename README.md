@@ -23,7 +23,7 @@ When a bug occurs, you can export the operations performed up to that point as a
 * [Instant Replay for Unity](#instant-replay-for-unity)
   * [Table of Contents](#table-of-contents)
   * [Requirements](#requirements)
-    * [Supported Platforms (Default Mode)](#supported-platforms-default-mode)
+    * [Encoder APIs in use](#encoder-apis-in-use)
   * [Installation](#installation)
     * [Install Dependencies](#install-dependencies)
       * [Method 1: Install via UnityNuGet and dependency package](#method-1-install-via-unitynuget-and-dependency-package)
@@ -31,32 +31,41 @@ When a bug occurs, you can export the operations performed up to that point as a
     * [Install the Package](#install-the-package)
   * [Quick Start](#quick-start)
   * [Detailed Usage](#detailed-usage)
-    * [Setting Recording Time and Frame Rate](#setting-recording-time-and-frame-rate)
-    * [Setting the Size](#setting-the-size)
+    * [Options](#options)
     * [Setting the Video Source](#setting-the-video-source)
     * [Setting the Audio Source](#setting-the-audio-source)
     * [Getting the Recording State](#getting-the-recording-state)
-    * [Getting the Progress of Writing](#getting-the-progress-of-writing)
-  * [Real-time Mode](#real-time-mode)
-    * [Settings](#settings)
-  * [Platform Support](#platform-support)
+  * [Legacy Mode](#legacy-mode)
+    * [Setting Recording Time and Frame Rate](#setting-recording-time-and-frame-rate)
+    * [Setting the Size](#setting-the-size)
+    * [Video and Audio Sources](#video-and-audio-sources)
 <!-- TOC -->
 
 ## Requirements
 
 - Unity 2022.3 or later
 
-### Supported Platforms (Default Mode)
+> [!NOTE]
+> The following information is based on the APIs and platform tools being used, and actual functionality may not have been verified.
 
-- iOS
-  - **13.0 or later**
-- Android
-- macOS (Editor and Standalone)
-  - **10.15 (Catalina) or later**
-- Windows (Editor and Standalone)
-- Any other systems with `ffmpeg` command line tool installed in PATH
+Platform|OS version|aarch64|x86_64|Other requirements
+-|-|-|-|-
+iOS|13.0+|✅|N/A|
+Android|5.0+|✅|✅|
+macOS|11.0+|✅|✅|
+Windows|Windows 10+, Windows Server 2016+|-|✅|
+Linux|kernel 3.2+, glibc 2.17+|-|✅|`ffmpeg` in PATH
 
-See [Platform Support](#platform-support) for details.
+- For legacy mode, other platforms may work if `ffmpeg` is available in PATH.
+
+### Encoder APIs in use
+
+Platform|APIs
+-|-
+iOS / macOS|Video Toolbox (H.264), Audio Toolbox (AAC)
+Android|MediaCodec (H.264 / AAC)
+Windows|Media Foundation (H.264 / AAC)
+Linux and others|FFmpeg installed on the system (H.264 / AAC)
 
 ## Installation
 
@@ -97,7 +106,7 @@ Place `InstantReplay Recorder.prefab` in the scene. This prefab has `RecorderInt
 
 <img width="585" alt="Image" src="https://github.com/user-attachments/assets/0724b264-f92b-4a68-b6dc-85b9aae9c05b" />
 
-Then, you can stop the recording and save the video by calling `RecorderInterface.StopAndTranscode()`. For example, you can trigger this method by clicking the button in the scene.
+Then, you can stop the recording and save the video by calling `RecorderInterface.StopAndExport()`. For example, you can trigger this method by clicking the button in the scene.
 
 <img width="585" alt="Image" src="https://github.com/user-attachments/assets/0674da6c-e7e8-4988-8890-01baa11f4322" />
 
@@ -107,7 +116,118 @@ Recorded video will be displayed on the screen.
 
 ## Detailed Usage
 
-To record the gameplay, use `InstantReplaySession`.
+To record the gameplay, use `RealtimeInstantReplaySession`.
+
+```csharp
+using InstantReplay;
+
+var ct = destroyCancellationToken;
+
+// Start recording
+using var session = RealtimeInstantReplaySession.CreateDefault();
+
+// 〜 Gameplay 〜
+await Task.Delay(10000, ct);
+
+// Stop recording and transcode
+var outputPath = await session.StopAndExportAsync(ct: ct);
+File.Move(outputPath, Path.Combine(Application.persistentDataPath, Path.GetFileName(outputPath)));
+```
+
+### Options
+
+The recording duration is determined by the memory usage. The default setting is set to 20 MiB, and when the total size of compressed frames and audio samples reaches this limit, older data is discarded. To enable longer recordings, increase the memory usage `MaxMemoryUsageBytes` or reduce the frame rate, resolution, or bitrate.
+
+It consumes some memory for the buffers that hold the compressed data, as well as for the raw frames and audio samples to be encoded. This is necessary because the encoder operates asynchronously, allowing it to receive the next frame while encoding the current one. You can specify the size of these queues with `VideoInputQueueSize` and `AudioInputQueueSize`. Reducing these values can decrease memory usage, but it may increase the likelihood of frame drops.
+
+```csharp
+// Default settings
+var options = new RealtimeEncodingOptions
+{
+    VideoOptions = new VideoEncoderOptions
+    {
+        Width = 1280,
+        Height = 720,
+        FpsHint = 30,
+        Bitrate = 2500000 // 2.5 Mbps
+    },
+    AudioOptions = new AudioEncoderOptions
+    {
+        SampleRate = 44100,
+        Channels = 2,
+        Bitrate = 128000 // 128 kbps
+    },
+    MaxMemoryUsageBytes = 20 * 1024 * 1024, // 20 MiB
+    FixedFrameRate = 30.0, // null if not using fixed frame rate
+    VideoInputQueueSize = 5, // Maximum number of raw frames to keep before encoding
+    AudioInputQueueSize = 60, // Maximum number of raw audio sample frames to keep before encoding
+};
+
+using var session = new RealtimeInstantReplaySession(options);
+ ```
+
+### Setting the Video Source
+
+By default, InstantReplay uses `ScreenCapture.CaptureScreenshotIntoRenderTexture()` for recording. You can also use any RenderTexture as the source.
+
+Create a class that inherits `InstantReplay.IFrameProvider` and pass it as `frameProvider` to the `RealtimeInstantReplaySession` constructor. You can also specify whether `RealtimeInstantReplaySession` automatically discards `frameProvider` by `disposeFrameProvider`.
+
+```csharp
+public interface IFrameProvider : IDisposable
+{
+    public delegate void ProvideFrame(Frame frame);
+
+    event ProvideFrame OnFrameProvided;
+}
+
+new RealtimeInstantReplaySession(options, frameProvider: new CustomFrameProvider(), disposeFrameProvider: true);
+
+```
+
+### Setting the Audio Source
+
+By default, it captures the audio via `OnAudioFilterRead`. THis automatically searches for and uses a specific AudioListener on the scene.
+
+> [!WARNING]
+> AudioSource with Bypass Listener Effects will not be captured.
+
+If there are multiple AudioListeners in the scene, you can specify which one to use by passing it to the `InstantReplay.UnityAudioSampleProvider` constructor and then passing it as `audioSampleProvider` to the `RealtimeInstantReplaySession` constructor.
+
+```csharp
+new RealtimeInstantReplaySession(options, audioSampleProvider: new UnityAudioSampleProvider(audioListener), disposeAudioSampleProvider: true);
+```
+
+If you want to disable the audio, you can use `NullAudioSampleProvider.Instance`.
+
+```csharp
+new RealtimeInstantReplaySession(options, audioSampleProvider: NullAudioSampleProvider.Instance);
+```
+
+> [!NOTE]
+> You don't have to care about `IDisposable` of `NullAudioSampleProvider`.
+
+You can also use your own audio source by implementing `IAudioSampleProvider`.
+
+```csharp
+public interface IAudioSampleProvider : IDisposable
+{
+    public delegate void ProvideAudioSamples(ReadOnlySpan<float> samples, int channels, int sampleRate,
+        double timestamp);
+
+    event ProvideAudioSamples OnProvideAudioSamples;
+}
+
+new RealtimeInstantReplaySession(options, audioSampleProvider: new CustomAudioSampleProvider(), disposeFrameProvider: true);
+
+```
+
+### Getting the Recording State
+
+You can get the recording state with the `InstantReplaySession.State` property.
+
+## Legacy Mode
+
+By default, `RealtimeInstantReplaySession` encodes video and audio samples in real-time but legacy `InstantReplaySession` saves JPEG-compressed video frames and raw audio samples into disk and transcodes them to a video file when `StopAndTranscodeAsync` is called. While this mode has a higher disk access, it reduces the CPU load during recording.
 
 ```csharp
 using InstantReplay;
@@ -140,153 +260,6 @@ Frames exceeding `numFrames` will be discarded from the oldest. The disk usage d
 
 By default, it records at the actual screen size, but you can also specify `maxWidth` and `maxHeight` in the `InstantReplaySession` constructor. If you specify `maxWidth` and `maxHeight`, it will automatically resize. Reducing the size can reduce the disk usage and time required for writing during recording. It also reduces memory usage during recording.
 
-### Setting the Video Source
+### Video and Audio Sources
 
-By default, InstantReplay uses `ScreenCapture.CaptureScreenshotIntoRenderTexture()` for recording. You can also use any RenderTexture as the source.
-
-Create a class that inherits `InstantReplay.IFrameProvider` and pass it as `frameProvider` to the `InstantReplaySession` constructor. You can also specify whether `InstantReplaySession` automatically discards `frameProvider` by `disposeFrameProvider`.
-
-```csharp
-public interface IFrameProvider : IDisposable
-{
-    public delegate void ProvideFrame(Frame frame);
-
-    event ProvideFrame OnFrameProvided;
-}
-
-new InstantReplaySession(900, frameProvider: new CustomFrameProvider(), disposeFrameProvider: true);
-
-```
-
-### Setting the Audio Source
-
-By default, it captures the audio via `OnAudioFilterRead`. THis automatically searches for and uses a specific AudioListener on the scene.
-
-> [!WARNING]
-> AudioSource with Bypass Listener Effects will not be captured.
-
-If there are multiple AudioListeners in the scene, you can specify which one to use by passing it to the `InstantReplay.UnityAudioSampleProvider` constructor and then passing it as `audioSampleProvider` to the `InstantReplaySession` constructor.
-
-```csharp
-new InstantReplaySession(900, audioSampleProvider: new UnityAudioSampleProvider(audioListener), disposeAudioSampleProvider: true);
-```
-
-If you want to disable the audio, you can use `NullAudioSampleProvider.Instance`.
-
-```csharp
-new InstantReplaySession(900, audioSampleProvider: NullAudioSampleProvider.Instance);
-```
-
-> [!NOTE]
-> You don't have to care about `IDisposable` of `NullAudioSampleProvider`.
-
-You can also use your own audio source by implementing `IAudioSampleProvider`.
-
-```csharp
-public interface IAudioSampleProvider : IDisposable
-{
-    public delegate void ProvideAudioSamples(ReadOnlySpan<float> samples, int channels, int sampleRate,
-        double timestamp);
-
-    event ProvideAudioSamples OnProvideAudioSamples;
-}
-
-new InstantReplaySession(900, audioSampleProvider: new CustomAudioSampleProvider(), disposeFrameProvider: true);
-
-```
-
-### Getting the Recording State
-
-You can get the recording state with the `InstantReplaySession.State` property.
-
-### Getting the Progress of Writing
-
-You can get the progress in the range of 0.0 to 1.0 by passing `IProgress<float>` to `InstantReplaySession.StopAndTranscodeAsync`.
-
-## Real-time Mode
-
-Instant Replay usually saves the recorded frames as JPEG images to disk and compresses them again during writing. This mode has low computational load and can be used on more platforms, but it has a large disk write during recording.
-
-In contrast, **real-time mode** compresses frames and audio samples in real-time during recording, and during writing, it multiplexes the already compressed data directly. This mode avoids disk writes by operating entirely in memory, but it has a high computational load and currently has limited platform support.
-
-See [Platform Support](#platform-support) for details.
-
-To use real-time mode, create `RealtimeInstantReplaySession` instead of `InstantReplaySession`.
-
-```csharp
-// Start recording
-using var session = RealtimeInstantReplaySession().CreateDefault();
-
-// 〜 Gameplay 〜
-await Task.Delay(10000, ct);
-
-// Stop recording and export
-var outputPath = await session.StopAndExportAsync();
-File.Move(outputPath, Path.Combine(Application.persistentDataPath, Path.GetFileName(outputPath)));
-```
-
-### Settings
-
-In real-time mode, the recording duration is determined by the memory usage. The default setting is set to 20 MiB, and when the total size of compressed frames and audio samples reaches this limit, older data is discarded. To enable longer recordings, increase the memory usage `MaxMemoryUsageBytes` or reduce the frame rate, resolution, or bitrate.
-
-It consumes some memory for the buffers that hold the compressed data, as well as for the raw frames and audio samples to be encoded. This is necessary because the encoder operates asynchronously, allowing it to receive the next frame while encoding the current one. You can specify the size of these queues with `VideoInputQueueSize` and `AudioInputQueueSize`. Reducing these values can decrease memory usage, but it may increase the likelihood of frame drops.
-
-```csharp
-// Default settings
-var options = new RealtimeEncodingOptions
-{
-    VideoOptions = new VideoEncoderOptions
-    {
-        Width = 1280,
-        Height = 720,
-        FpsHint = 30,
-        Bitrate = 2500000 // 2.5 Mbps
-    },
-    AudioOptions = new AudioEncoderOptions
-    {
-        SampleRate = 44100,
-        Channels = 2,
-        Bitrate = 128000 // 128 kbps
-    },
-    MaxMemoryUsageBytes = 20 * 1024 * 1024, // 20 MiB
-    FixedFrameRate = 30.0, // null if not using fixed frame rate
-    VideoInputQueueSize = 5, // Maximum number of raw frames to keep before encoding
-    AudioInputQueueSize = 60, // Maximum number of raw audio sample frames to keep before encoding
-};
-
-using var session = new RealtimeInstantReplaySession(options)
-```
-
-## Platform Support
-
-> [!NOTE]
-> The following information is based on the APIs and platform tools being used, and actual functionality may not have been verified.
-
-### Default Mode
-
-Platform|OS version|ISA
--|-|-
-iOS|13.0 and later|aarch64
-Android|5.0 and later|Any
-macOS|10.15 and later|aarch64, x86_64
-Windows|Windows 7 (SP1) and later|x86_64
-Linux and others (requires FFmpeg)|Any|Any
-
-### Real-time Mode
-
-Platform|OS version|ISA
--|-|-
-iOS|10.0 and later|aarch64
-Android|5.0 and later|aarch64, armv7a
-macOS|11.0 and later|aarch64
-Windows|Windows 7 (SP1) and later|x86_64
-Linux and others|(Unsupported)|(Unsupported)
-
-### Encoder APIs in use
-
-Platform|Default Mode|Real-time Mode
--|-|-
-iOS / macOS|Video Toolbox (H.264), AVFoundation (AAC)|Video Toolbox (H.264), Audio Toolbox (AAC)
-Android|MediaCodec (H.264 / AAC)|MediaCodec (H.264 / AAC)
-Windows|Media Foundation (H.264 / AAC)|Media Foundation (H.264 / AAC)
-Linux and others|FFmpeg installed on the system (H.264 / AAC)|-
+`InstantReplaySession` also supports custom video and audio sources in the same way as `RealtimeInstantReplaySession`.

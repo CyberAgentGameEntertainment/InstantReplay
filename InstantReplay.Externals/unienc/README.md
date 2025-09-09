@@ -6,6 +6,7 @@ The project implements platform-specific encoders:
 - **Apple platforms**: VideoToolbox for video, AudioToolbox for audio, AVFoundation for muxing
 - **Android**: MediaCodec for video/audio encoding and MediaMuxer for muxing
 - **Windows**: Media Foundation (implementation in progress)
+- **Linux and others**: FFmpeg (installed on the system)
 
 ## Architecture
 
@@ -14,7 +15,8 @@ The codebase follows a modular architecture with platform-specific implementatio
 - `crates/unienc_common/`: Defines common traits and interfaces (`EncodingSystem`, `Encoder`, `Muxer`, etc.)
 - `crates/unienc_apple_vt/`: Apple VideoToolbox/AudioToolbox implementation
 - `crates/unienc_android_mc/`: Android MediaCodec implementation
-- `crates/unienc_windows_mf/`: Windows Media Foundation implementation (stub)
+- `crates/unienc_windows_mf/`: Windows Media Foundation implementation
+- `crates/unienc_ffmpeg/`: FFmpeg implementation for unix-like systems
 - `crates/unienc/`: Main crate that conditionally compiles platform-specific implementations and exposes C FFI functions for the Unity plugin. `csbindgen` generates the C# bindings for the functions.
 
 Key traits:

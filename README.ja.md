@@ -23,7 +23,7 @@ Instant Replay は Unity で直近のゲームプレイ動画をいつでも保�
 * [Instant Replay for Unity](#instant-replay-for-unity)
   * [Table of Contents](#table-of-contents)
   * [要件](#要件)
-    * [対応プラットフォーム (デフォルトモード)](#対応プラットフォーム-デフォルトモード)
+    * [使用されるエンコーダー API](#使用されるエンコーダー-api)
   * [インストール](#インストール)
     * [依存関係のインストール](#依存関係のインストール)
       * [方法1: UnityNuGet と依存パッケージを使用したインストール](#方法1-unitynuget-と依存パッケージを使用したインストール)
@@ -31,32 +31,41 @@ Instant Replay は Unity で直近のゲームプレイ動画をいつでも保�
     * [パッケージのインストール](#パッケージのインストール)
   * [クイックスタート](#クイックスタート)
   * [詳細な使い方](#詳細な使い方)
-    * [録画時間とフレームレートの設定](#録画時間とフレームレートの設定)
-    * [サイズの設定](#サイズの設定)
+    * [設定](#設定)
     * [映像ソースの設定](#映像ソースの設定)
     * [音声ソースの設定](#音声ソースの設定)
     * [録画状態を取得する](#録画状態を取得する)
-    * [書き出しの進捗状況を取得する](#書き出しの進捗状況を取得する)
-  * [リアルタイムモード](#リアルタイムモード)
-    * [設定](#設定)
-  * [プラットフォーム対応](#プラットフォーム対応)
+  * [レガシーモード](#レガシーモード)
+    * [録画時間とフレームレートの設定](#録画時間とフレームレートの設定)
+    * [サイズの設定](#サイズの設定)
+    * [映像・音声ソースの設定](#映像音声ソースの設定)
 <!-- TOC -->
 
 ## 要件
 
 - Unity 2022.3 以降
 
-### 対応プラットフォーム (デフォルトモード)
+> [!NOTE]
+> 以下の情報は使用している API やプラットフォームツール等から推定したもので、実際には動作が検証されていない場合があります。
 
-- iOS
-  - **13.0以降**
-- Android
-- macOS (Editor and Standalone)
-  - **10.15 (Catalina) 以降**
-- Windows (Editor and Standalone)
-- その他 `ffmpeg` コマンドラインツールが PATH にインストールされたシステム
+Platform|OS version|aarch64|x86_64|Other requirements
+-|-|-|-|-
+iOS|13.0+|✅|N/A|
+Android|5.0+|✅|✅|
+macOS|11.0+|✅|✅|
+Windows|Windows 10+, Windows Server 2016+|-|✅|
+Linux|kernel 3.2+, glibc 2.17+|-|✅|`ffmpeg` in PATH
 
-詳しくは [プラットフォーム対応](#プラットフォーム対応) を参照してください。
+- レガシーモードでは、他のプラットフォームでも `ffmpeg` が PATH に存在すれば動作する可能性があります。
+
+### 使用されるエンコーダー API
+
+Platform|APIs
+-|-
+iOS / macOS|Video Toolbox (H.264), Audio Toolbox (AAC)
+Android|MediaCodec (H.264 / AAC)
+Windows|Media Foundation (H.264 / AAC)
+Linux and others|システムにインストールされたFFmpeg (H.264 / AAC)
 
 ## インストール
 
@@ -95,7 +104,7 @@ Package Manager から "User Interfaces" サンプルをインポートしてく
 
 <img width="585" alt="Image" src="https://github.com/user-attachments/assets/0724b264-f92b-4a68-b6dc-85b9aae9c05b" />
 
-その後、`RecorderInterface.StopAndTranscode()` を呼び出すことで録画を停止してビデオを保存できます。例えば、シーン内のボタンをクリックすることでこのメソッドを呼び出すことができます。
+その後、`RecorderInterface.StopAndExport()` を呼び出すことで録画を停止してビデオを保存できます。例えば、シーン内のボタンをクリックすることでこのメソッドを呼び出すことができます。
 
 <img width="585" alt="Image" src="https://github.com/user-attachments/assets/0674da6c-e7e8-4988-8890-01baa11f4322" />
 
@@ -105,7 +114,114 @@ Package Manager から "User Interfaces" サンプルをインポートしてく
 
 ## 詳細な使い方
 
-録画を行うには `InstantReplaySession` を使用します。
+録画を行うには `RealtimeInstantReplaySession` を使用します。
+
+```csharp
+// 録画開始
+using var session = RealtimeInstantReplaySession().CreateDefault();
+
+// 〜 ゲームプレイ 〜
+await Task.Delay(10000, ct);
+
+// 録画停止と書き出し
+var outputPath = await session.StopAndExportAsync();
+File.Move(outputPath, Path.Combine(Application.persistentDataPath, Path.GetFileName(outputPath)));
+```
+
+### 設定
+
+録画できる時間はメモリ使用量によって決定されます。デフォルト設定では 20MiB に設定されており、圧縮されたフレームや音声サンプルの合計サイズがこの上限に達すると古いデータから順に破棄されます。より長時間の録画を可能にするには、メモリ使用量 `MaxMemoryUsageBytes` を上げたり、フレームレートや解像度、ビットレートを下げてください。
+
+実行時に使用されるメモリとしては、上記のエンコード済みのデータを保持するバッファに加え、エンコード前の生のフレームや音声サンプルがいくつか保持されます。これはエンコーダーが非同期的に動作する関係で、あるフレームをエンコードしている間に次のフレームを受け取るためです。`VideoInputQueueSize` と `AudioInputQueueSize` でそれぞれのキューのサイズを指定でき、この値を小さくすることでメモリ使用量を削減できる場合がありますが、フレームドロップの可能性が高まります。
+
+```csharp
+// デフォルト設定
+var options = new RealtimeEncodingOptions
+{
+    VideoOptions = new VideoEncoderOptions
+    {
+        Width = 1280,
+        Height = 720,
+        FpsHint = 30,
+        Bitrate = 2500000 // 2.5 Mbps
+    },
+    AudioOptions = new AudioEncoderOptions
+    {
+        SampleRate = 44100,
+        Channels = 2,
+        Bitrate = 128000 // 128 kbps
+    },
+    MaxMemoryUsageBytes = 20 * 1024 * 1024, // 20 MiB
+    FixedFrameRate = 30.0, // 固定フレームレートを使用しない場合はnull
+    VideoInputQueueSize = 5, // エンコード前の生のフレームを保持する数の上限
+    AudioInputQueueSize = 60, // エンコード前の生の音声サンプルフレームを保持する数の上限
+};
+
+using var session = new RealtimeInstantReplaySession(options)
+```
+
+### 映像ソースの設定
+
+デフォルトでは `ScreenCapture.CaptureScreenshotIntoRenderTexture()` を使用して録画を行いますが、任意の RenderTexture をソースとして使用することも可能です。
+
+`InstantReplay.IFrameProvider` を継承したクラスを作成し、`RealtimeInstantReplaySession` のコンストラクタに`frameProvider` として渡してください。また `disposeFrameProvider` によって `RealtimeInstantReplaySession` 側で `frameProvider` を自動的に破棄するかどうかを指定できます。
+
+```csharp
+public interface IFrameProvider : IDisposable
+{
+    public delegate void ProvideFrame(Frame frame);
+
+    event ProvideFrame OnFrameProvided;
+}
+
+new RealtimeInstantReplaySession(options, frameProvider: new CustomFrameProvider(), disposeFrameProvider: true);
+
+```
+
+### 音声ソースの設定
+
+デフォルトでは Unity デフォルトの出力音声を `OnAudioFilterRead` を使用してキャプチャします。これはシーン上の特定の AudioListener を自動的に検索して使用します。
+
+> [!WARNING]
+> Bypass Listener Effects が有効化された AudioSource の音声はキャプチャされません。
+
+シーン上に複数の AudioListener が存在する場合は、`InstantReplay.UnityAudioSampleProvider` のコンストラクタに AudioListener を渡して初期化し、`RealtimeInstantReplaySession` のコンストラクタに `audioSampleProvider` として渡してください。
+
+```csharp
+new RealtimeInstantReplaySession(options, audioSampleProvider: new UnityAudioSampleProvider(audioListener), disposeAudioSampleProvider: true);
+```
+
+音声ソースを無効化したい場合は、`NullAudioSampleProvider.Instance` を使用してください。
+
+```csharp
+new RealtimeInstantReplaySession(options, audioSampleProvider: NullAudioSampleProvider.Instance);
+```
+
+> [!NOTE]
+> `NullAudioSampleProvider` では `IDisposable` に関する考慮は不要です。
+
+また、`IAudioSampleProvider` を実装することで独自の音声ソースを使用することも可能です。
+
+```csharp
+public interface IAudioSampleProvider : IDisposable
+{
+    public delegate void ProvideAudioSamples(ReadOnlySpan<float> samples, int channels, int sampleRate,
+        double timestamp);
+
+    event ProvideAudioSamples OnProvideAudioSamples;
+}
+
+new RealtimeInstantReplaySession(options, audioSampleProvider: new CustomAudioSampleProvider(), disposeFrameProvider: true);
+
+```
+
+### 録画状態を取得する
+
+`InstantReplaySession.State` プロパティで録画の状態を取得できます。
+
+## レガシーモード
+
+デフォルトでは、`RealtimeInstantReplaySession` はビデオ・オーディオデータをリアルタイムでエンコードしますが、`InstantReplaySession` を使用するとJPEGで圧縮されたフレームとPCM音声サンプルを一時的にディスクに保存し、`StopAndTranscodeAsync()` 時にまとめてエンコードするレガシーモードで録画できます。ディスク負荷が大きい代わりに、録画中の計算負荷が小さくなります。
 
 ```csharp
 using InstantReplay;
@@ -138,153 +254,6 @@ new InstantReplaySession(numFrames: 900, fixedFrameRate: 30);
 
 デフォルトでは実際の画面サイズで録画しますが、`InstantReplaySession` のコンストラクタで `maxWidth` や `maxHeight` を指定することもできます。`maxWidth` や `maxHeight` を指定している場合は自動的にリサイズします。サイズを縮小することで録画中のディスク使用量や書き出しにかかる時間を短縮できます。また、録画中のメモリ使用量も減少します。
 
-### 映像ソースの設定
+### 映像・音声ソースの設定
 
-デフォルトでは `ScreenCapture.CaptureScreenshotIntoRenderTexture()` を使用して録画を行いますが、任意の RenderTexture をソースとして使用することも可能です。
-
-`InstantReplay.IFrameProvider` を継承したクラスを作成し、`InstantReplaySession` のコンストラクタに`frameProvider` として渡してください。また `disposeFrameProvider` によって `InstantReplaySession` 側で `frameProvider` を自動的に破棄するかどうかを指定できます。
-
-```csharp
-public interface IFrameProvider : IDisposable
-{
-    public delegate void ProvideFrame(Frame frame);
-
-    event ProvideFrame OnFrameProvided;
-}
-
-new InstantReplaySession(900, frameProvider: new CustomFrameProvider(), disposeFrameProvider: true);
-
-```
-
-### 音声ソースの設定
-
-デフォルトでは Unity デフォルトの出力音声を `OnAudioFilterRead` を使用してキャプチャします。これはシーン上の特定の AudioListener を自動的に検索して使用します。
-
-> [!WARNING]
-> Bypass Listener Effects が有効化された AudioSource の音声はキャプチャされません。
-
-シーン上に複数の AudioListener が存在する場合は、`InstantReplay.UnityAudioSampleProvider` のコンストラクタに AudioListener を渡して初期化し、`InstantReplaySession` のコンストラクタに `audioSampleProvider` として渡してください。
-
-```csharp
-new InstantReplaySession(900, audioSampleProvider: new UnityAudioSampleProvider(audioListener), disposeAudioSampleProvider: true);
-```
-
-音声ソースを無効化したい場合は、`NullAudioSampleProvider.Instance` を使用してください。
-
-```csharp
-new InstantReplaySession(900, audioSampleProvider: NullAudioSampleProvider.Instance);
-```
-
-> [!NOTE]
-> `NullAudioSampleProvider` では `IDisposable` に関する考慮は不要です。
-
-また、`IAudioSampleProvider` を実装することで独自の音声ソースを使用することも可能です。
-
-```csharp
-public interface IAudioSampleProvider : IDisposable
-{
-    public delegate void ProvideAudioSamples(ReadOnlySpan<float> samples, int channels, int sampleRate,
-        double timestamp);
-
-    event ProvideAudioSamples OnProvideAudioSamples;
-}
-
-new InstantReplaySession(900, audioSampleProvider: new CustomAudioSampleProvider(), disposeFrameProvider: true);
-
-```
-
-### 録画状態を取得する
-
-`InstantReplaySession.State` プロパティで録画の状態を取得できます。
-
-### 書き出しの進捗状況を取得する
-
-`InstantReplaySession.StopAndTranscodeAsync()` の引数に `IProgress<float>` を渡すことで書き出しの進捗状況を 0.0〜1.0 で取得できます。
-
-## リアルタイムモード
-
-Instant Replay は、通常は録画中のフレームを JPEG 画像としてディスクに一時保存し、書き出し時に改めて圧縮を行います。このモードは計算負荷が小さく、より多くのプラットフォームで使用できますが、録画中のディスク書き込みが大きいという欠点があります。
-
-これに対し、**リアルタイムモード**では、録画中にリアルタイムでフレームや音声サンプルの圧縮を行い、書き出し時にはそれらの圧縮済みデータを直接多重化します。このモードはオンメモリで完結しディスク負荷を回避できますが、計算負荷が大きく、現在のところプラットフォームサポートが限られています。
-
-詳しくは [プラットフォーム対応](#プラットフォーム対応) を参照してください。
-
-リアルタイムモードを使用するには、`InstantReplaySession` の代わりに `RealtimeInstantReplaySession` を使用してください。
-
-```csharp
-// 録画開始
-using var session = RealtimeInstantReplaySession().CreateDefault();
-
-// 〜 ゲームプレイ 〜
-await Task.Delay(10000, ct);
-
-// 録画停止と書き出し
-var outputPath = await session.StopAndExportAsync();
-File.Move(outputPath, Path.Combine(Application.persistentDataPath, Path.GetFileName(outputPath)));
-```
-
-### 設定
-
-リアルタイムモードでは、録画できる時間はメモリ使用量によって決定されます。デフォルト設定では 20MiB に設定されており、圧縮されたフレームや音声サンプルの合計サイズがこの上限に達すると古いデータから順に破棄されます。より長時間の録画を可能にするには、メモリ使用量 `MaxMemoryUsageBytes` を上げたり、フレームレートや解像度、ビットレートを下げてください。
-
-実行時に使用されるメモリとしては、上記のエンコード済みのデータを保持するバッファに加え、エンコード前の生のフレームや音声サンプルがいくつか保持されます。これはエンコーダーが非同期的に動作する関係で、あるフレームをエンコードしている間に次のフレームを受け取るためです。`VideoInputQueueSize` と `AudioInputQueueSize` でそれぞれのキューのサイズを指定でき、この値を小さくすることでメモリ使用量を削減できる場合がありますが、フレームドロップの可能性が高まります。
-
-```csharp
-// デフォルト設定
-var options = new RealtimeEncodingOptions
-{
-    VideoOptions = new VideoEncoderOptions
-    {
-        Width = 1280,
-        Height = 720,
-        FpsHint = 30,
-        Bitrate = 2500000 // 2.5 Mbps
-    },
-    AudioOptions = new AudioEncoderOptions
-    {
-        SampleRate = 44100,
-        Channels = 2,
-        Bitrate = 128000 // 128 kbps
-    },
-    MaxMemoryUsageBytes = 20 * 1024 * 1024, // 20 MiB
-    FixedFrameRate = 30.0, // 固定フレームレートを使用しない場合はnull
-    VideoInputQueueSize = 5, // エンコード前の生のフレームを保持する数の上限
-    AudioInputQueueSize = 60, // エンコード前の生の音声サンプルフレームを保持する数の上限
-};
-
-using var session = new RealtimeInstantReplaySession(options)
-```
-
-## プラットフォーム対応
-
-> [!NOTE]
-> 以下の情報は使用している API やプラットフォームツール等から推定したもので、実際には動作が検証されていない場合があります。
-
-### デフォルトモード
-
-プラットフォーム|OS バージョン|ISA
--|-|-
-iOS|13.0 and later|aarch64
-Android|5.0 and later|Any
-macOS|10.15 and later|aarch64, x86_64
-Windows|Windows 7 (SP1) and later|x86_64
-Linux and others (requires FFmpeg)|Any|Any
-
-### リアルタイムモード
-
-プラットフォーム|OS バージョン|ISA
--|-|-
-iOS|10.0 and later|aarch64
-Android|5.0 and later|aarch64, armv7a
-macOS|11.0 and later|aarch64
-Windows|Windows 7 (SP1) and later|x86_64
-Linux and others|(Unsupported)|(Unsupported)
-
-### 使用しているエンコーダー API
-
-プラットフォーム|デフォルトモード|リアルタイムモード
--|-|-
-iOS / macOS|Video Toolbox (H.264), AVFoundation (AAC)|Video Toolbox (H.264), Audio Toolbox (AAC)
-Android|MediaCodec (H.264 / AAC)|MediaCodec (H.264 / AAC)
-Windows|Media Foundation (H.264 / AAC)|Media Foundation (H.264 / AAC)
-Linux and others|FFmpeg installed on the system (H.264 / AAC)|-
+`InstantReplaySession` も `RealtimeInstantReplaySession` と同様に、`IFrameProvider` や `IAudioSampleProvider` を使用して映像・音声ソースをカスタマイズできます。

@@ -39,7 +39,9 @@ namespace InstantReplay.Examples
 
         #endregion
 
-        public void StopAndTranscode()
+        [Obsolete("Renamed to StopAndExport.")]
+        public void StopAndTranscode() => StopAndExport();
+        public void StopAndExport()
         {
             _ = Wrap();
             return;
@@ -57,11 +59,14 @@ namespace InstantReplay.Examples
             }
         }
 
-        public async ValueTask<string> StopAndTranscodeAsync()
+        [Obsolete("Renamed to StopAndExportAsync.")]
+        public async ValueTask<string> StopAndTranscodeAsync() => await StopAndExportAsync();
+
+        public async ValueTask<string> StopAndExportAsync()
         {
             try
             {
-                ShowText("Transcoding...");
+                ShowText("Muxing...");
                 transcodingProgressImage.fillAmount = 0f;
                 var location = outputLocation switch
                 {
