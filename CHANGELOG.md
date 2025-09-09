@@ -1,3 +1,22 @@
+## [1.0.0] - 2025/09/09
+
+### Added
+
+- Added Linux x86_64 support for `unienc` depending on `ffmpeg` in `PATH`.
+
+### Changed
+
+- Real-time mode is now default.
+- Former default mode is deprecated and renamed to legacy mode.
+- "User Interfaces" sample now uses real-time mode.
+- Removed legacy `ITranscoder` implementations for iOS, macOS, Android and Windows including native plugins and are replaced with the implementations used in real-time mode.
+- `unienc` is now built with MSVC for Windows.
+- `BoundedEncodedFrameBuffer`, `RealtimeFrameReadback`, `RealtimeRecorder` and `RealtimeTranscoder` are now internal.
+
+### Fixed
+
+- Improved stability of UniEnc on domain unloading during async operations are performed.
+
 ## [0.4.0] - 2025/08/22
 
 ### Added
