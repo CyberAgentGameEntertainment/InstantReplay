@@ -15,7 +15,7 @@ env:
 
 jobs:
   build-windows:
-    name: Build uneinc (Windows)
+    name: Build unienc (Windows)
     runs-on: windows-2022
     strategy:
       matrix:
@@ -38,7 +38,7 @@ jobs:
           path: InstantReplay.Externals/unienc/target/${{ matrix.arch }}-pc-windows-msvc/${{ env._RUST_BUILD_CONFIG }}/libunienc.dll
           retention-days: 1
   build-android:
-    name: Build uneinc (Android)
+    name: Build unienc (Android)
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -61,7 +61,7 @@ jobs:
           path: InstantReplay.Externals/unienc/target/${{ matrix.triple }}/${{ env._RUST_BUILD_CONFIG }}/libunienc.so
           retention-days: 1
   build-macos:
-    name: Build uneinc (macOS)
+    name: Build unienc (macOS)
     runs-on: macos-15
     strategy:
       matrix:
@@ -82,7 +82,7 @@ jobs:
           path: InstantReplay.Externals/unienc/target/${{ matrix.arch }}-apple-darwin/${{ env._RUST_BUILD_CONFIG }}/libunienc.dylib
           retention-days: 1
   build-ios:
-    name: Build uneinc (iOS)
+    name: Build unienc (iOS)
     runs-on: macos-15
     strategy:
       matrix:
@@ -103,7 +103,7 @@ jobs:
           path: InstantReplay.Externals/unienc/target/${{ matrix.arch }}-apple-ios/${{ env._RUST_BUILD_CONFIG }}/libunienc.a
           retention-days: 1
   build-linux:
-    name: Build uneinc (Linux)
+    name: Build unienc (Linux)
     runs-on: ubuntu-latest
     strategy:
       matrix:
