@@ -1,3 +1,9 @@
+## [1.0.1] - 2025/09/10
+
+### Fixed
+
+- Fixed the encoder tries to use unsupported hardware encoder of FFmpeg on Linux.
+
 ## [1.0.0] - 2025/09/09
 
 ### Added
