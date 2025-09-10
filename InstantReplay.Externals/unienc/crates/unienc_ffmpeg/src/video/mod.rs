@@ -1,8 +1,12 @@
-use std::{process::Command, sync::Arc, vec};
+use std::{
+    process::Command,
+    sync::{Arc, LazyLock},
+    vec,
+};
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result};
 use bincode::{Decode, Encode};
-use cros_codecs::codec::h264::parser::{Nalu, NaluType};
+use cros_codecs::codec::h264::parser::NaluType;
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     process::ChildStdout,
@@ -12,7 +16,11 @@ use unienc_common::{
     VideoSample,
 };
 
-use crate::{ffmpeg, utils::Cfr, video::nalu::{NalUnit, NaluReader}};
+use crate::{
+    ffmpeg,
+    utils::Cfr,
+    video::nalu::{NalUnit, NaluReader},
+};
 
 mod nalu;
 
@@ -42,38 +50,25 @@ pub struct FFmpegVideoEncoderOutput {
     reader: Option<NaluReader>,
 }
 
-impl FFmpegVideoEncoder {
-    pub fn new<V: VideoEncoderOptions>(options: &V) -> Result<Self> {
-        let width = options.width();
-        let height = options.height();
-        let cfr = options.fps_hint();
-
-        // enumerate supported codecs
+static FFMPEG_CODEC: LazyLock<String> = LazyLock::new(|| {
+    (|| -> Result<String> {
+        // enumerate supported encoders
         let codecs = Command::new(ffmpeg::FFMPEG_PATH.as_os_str())
-            .args(["-y", "-loglevel", "error", "-codecs"])
+            .args(["-y", "-loglevel", "error", "-encoders"])
             .stdout(std::process::Stdio::piped())
             .spawn()?
             .wait_with_output()?;
 
         // read stdout
         let stdout = String::from_utf8_lossy(&codecs.stdout);
-        // grep h264
-        let Some(h264_line) = stdout.lines().find(|line| line.contains("h264")) else {
-            return Err(anyhow!("Failed to find h264 codec"));
-        };
-
-        // find "(encoders: ...)"
-        let encoders = h264_line
-            .find("(encoders:")
-            .and_then(|start| {
-                h264_line[start + "(encoders:".len()..]
-                    .find(')')
-                    .map(|end| {
-                        &h264_line[start + "(encoders:".len()..start + "(encoders:".len() + end]
-                    })
-            })
-            .map(|s| s.split(' ').collect::<Vec<_>>())
-            .context("failed to find H.264 encoder")?;
+        // grep h264 and extract encoder name
+        // example:
+        // V....D libx264              libx264 H.264 / AVC / MPEG-4 AVC / MPEG-4 part 10 (codec h264)
+        let encoders = stdout
+            .lines()
+            .filter(|line| line.contains("(codec h264)"))
+            .flat_map(|s| s.split(" ").nth(2))
+            .collect::<Vec<_>>();
 
         // we would like to use hardware encoder if available
         let preferred_encoders = [
@@ -85,13 +80,56 @@ impl FFmpegVideoEncoder {
             "libx264",
         ];
 
-        let encoder = preferred_encoders
+        // filter available encoders by preferred list order
+        let mut encoder_candidates = preferred_encoders
             .iter()
-            .find(|&&e| encoders.contains(&e))
-            .copied()
-            .unwrap_or("h264");
+            .filter_map(|e| encoders.iter().find(|&&enc| enc == *e));
+
+        // ffmpeg -encoders returns encoders including not actually available on the system
+        // so we need to verify by trying to create a simple command line
+        let encoder = encoder_candidates.find(|e| {
+            println!("Testing ffmpeg H.264 encoder: {}", e);
+            let res = Command::new(ffmpeg::FFMPEG_PATH.as_os_str())
+                .args([
+                    "-y",
+                    "-loglevel",
+                    "error",
+                    "-f",
+                    "lavfi",
+                    "-i",
+                    "testsrc=s=256x256:r=2:d=1",
+                    "-c:v",
+                    e,
+                    "-f",
+                    "null",
+                    "-",
+                ])
+                .status();
+
+            match res {
+                Ok(status) => status.success(),
+                Err(_) => false,
+            }
+        });
+
+        let encoder = encoder.context("No suitable H.264 encoder found")?;
 
         println!("Using H.264 encoder: {}", encoder);
+
+        Ok(encoder.to_string())
+    })()
+    .map_err(|e| {
+        println!("Error determining ffmpeg H.264 encoder: {}", e);
+        e
+    })
+    .unwrap_or("h264".to_string())
+});
+
+impl FFmpegVideoEncoder {
+    pub fn new<V: VideoEncoderOptions>(options: &V) -> Result<Self> {
+        let width = options.width();
+        let height = options.height();
+        let cfr = options.fps_hint();
 
         // encode raw BGRA frames into H.264 stream
         let mut ffmpeg = ffmpeg::Builder::new()
@@ -115,7 +153,7 @@ impl FFmpegVideoEncoder {
                     "-r",
                     &format!("{cfr}"),
                     "-c:v",
-                    encoder,
+                    &*FFMPEG_CODEC,
                     "-b:v",
                     &format!("{}", options.bitrate()),
                     "-force_key_frames",
