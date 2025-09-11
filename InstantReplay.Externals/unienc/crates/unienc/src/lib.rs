@@ -3,7 +3,7 @@ use std::ops::Deref;
 use std::path::Path;
 use std::sync::Arc;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use tokio::runtime::EnterGuard;
 use tokio::sync::Mutex;
 use unienc_common::{EncodedData, Encoder, EncodingSystem, Muxer, UniencDataKind};
@@ -385,7 +385,7 @@ pub unsafe extern "C" fn unienc_new_video_encoder(
 
     unsafe {
         match (*system).new_video_encoder() {
-            Ok(encoder) => match encoder.get() {
+            Ok(encoder) => match encoder.get().context("Failed to get encoded video sample") {
                 Ok((input, output)) => {
                     *input_out = Arc::into_raw(Arc::new(Mutex::new(Some(input))));
                     *output_out = Arc::into_raw(Arc::new(Mutex::new(Some(output))));
@@ -424,7 +424,7 @@ pub unsafe extern "C" fn unienc_new_audio_encoder(
 
     unsafe {
         match (*system).new_audio_encoder() {
-            Ok(encoder) => match encoder.get() {
+            Ok(encoder) => match encoder.get().context("Failed to get encoded audio sample") {
                 Ok((input, output)) => {
                     *input_out = Arc::into_raw(Arc::new(Mutex::new(Some(input))));
                     *output_out = Arc::into_raw(Arc::new(Mutex::new(Some(output))));
@@ -476,7 +476,7 @@ pub unsafe extern "C" fn unienc_new_muxer(
 
         match (*system).new_muxer(path) {
             Ok(muxer) => {
-                match muxer.get_inputs() {
+                match muxer.get_inputs().context("Failed to get muxer input") {
                     Ok((video_input, audio_input, completion_handle)) => {
                         // Box the completion handle and store as raw pointer
 

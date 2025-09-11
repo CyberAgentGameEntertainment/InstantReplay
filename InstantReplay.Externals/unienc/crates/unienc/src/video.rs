@@ -1,5 +1,6 @@
 use std::ffi::c_void;
 
+use anyhow::Context;
 use tokio::sync::Mutex;
 use unienc_common::{EncoderInput, EncoderOutput, VideoSample};
 
@@ -47,7 +48,11 @@ pub unsafe extern "C" fn unienc_video_encoder_push(
                 .as_mut()
                 .ok_or(UniencError::resource_allocation_error("Resource is None"))
             {
-                Ok(input) => input.push(&sample).await.map_err(UniencError::from_anyhow),
+                Ok(input) => input
+                    .push(&sample)
+                    .await
+                    .context("Failed to pull video sample")
+                    .map_err(UniencError::from_anyhow),
                 Err(err) => Err(err),
             };
 
@@ -80,7 +85,11 @@ pub unsafe extern "C" fn unienc_video_encoder_pull(
             .ok_or(UniencError::resource_allocation_error("Resource is None"))
         {
             Ok(output) => {
-                let result = output.pull().await.map_err(UniencError::from_anyhow);
+                let result = output
+                    .pull()
+                    .await
+                    .context("Failed to pull video sample")
+                    .map_err(UniencError::from_anyhow);
                 result
             }
             Err(err) => Err(err),
