@@ -19,6 +19,27 @@ pub struct MediaFoundationAudioEncoder {
 
 impl MediaFoundationAudioEncoder {
     pub fn new<V: AudioEncoderOptions>(options: &V) -> Result<Self> {
+        let input_type = unsafe {
+            let input_type = MFCreateMediaType()?;
+            input_type.SetGUID(&MF_MT_MAJOR_TYPE, &MFMediaType_Audio)?;
+            input_type.SetGUID(&MF_MT_SUBTYPE, &MFAudioFormat_PCM)?;
+            input_type.SetUINT32(&MF_MT_AUDIO_BITS_PER_SAMPLE, 16)?;
+            input_type.SetUINT32(&MF_MT_AUDIO_SAMPLES_PER_SECOND, options.sample_rate())?;
+            input_type.SetUINT32(&MF_MT_AUDIO_NUM_CHANNELS, options.channels())?;
+            input_type
+        };
+
+        let output_type = unsafe {
+            let output_type = MFCreateMediaType()?;
+            output_type.SetGUID(&MF_MT_MAJOR_TYPE, &MFMediaType_Audio)?;
+            output_type.SetGUID(&MF_MT_SUBTYPE, &MFAudioFormat_AAC)?;
+            output_type.SetUINT32(&MF_MT_AUDIO_BITS_PER_SAMPLE, 16)?;
+            output_type.SetUINT32(&MF_MT_AUDIO_SAMPLES_PER_SECOND, options.sample_rate())?;
+            output_type.SetUINT32(&MF_MT_AUDIO_NUM_CHANNELS, options.channels())?;
+            output_type.SetUINT32(&MF_MT_AUDIO_AVG_BYTES_PER_SECOND, options.bitrate() >> 3)?;
+            output_type
+        };
+
         let (transform, output_rx) = Transform::new(
             MFT_CATEGORY_AUDIO_ENCODER,
             MFT_REGISTER_TYPE_INFO {
@@ -29,26 +50,8 @@ impl MediaFoundationAudioEncoder {
                 guidMajorType: MFMediaType_Audio,
                 guidSubtype: MFAudioFormat_AAC,
             },
-            move || unsafe {
-                let input_type = MFCreateMediaType()?;
-                input_type.SetGUID(&MF_MT_MAJOR_TYPE, &MFMediaType_Audio)?;
-                input_type.SetGUID(&MF_MT_SUBTYPE, &MFAudioFormat_PCM)?;
-                input_type.SetUINT32(&MF_MT_AUDIO_BITS_PER_SAMPLE, 16)?;
-                input_type.SetUINT32(&MF_MT_AUDIO_SAMPLES_PER_SECOND, options.sample_rate())?;
-                input_type.SetUINT32(&MF_MT_AUDIO_NUM_CHANNELS, options.channels())?;
-
-                Ok(input_type)
-            },
-            move || unsafe {
-                let output_type = MFCreateMediaType()?;
-                output_type.SetGUID(&MF_MT_MAJOR_TYPE, &MFMediaType_Audio)?;
-                output_type.SetGUID(&MF_MT_SUBTYPE, &MFAudioFormat_AAC)?;
-                output_type.SetUINT32(&MF_MT_AUDIO_BITS_PER_SAMPLE, 16)?;
-                output_type.SetUINT32(&MF_MT_AUDIO_SAMPLES_PER_SECOND, options.sample_rate())?;
-                output_type.SetUINT32(&MF_MT_AUDIO_NUM_CHANNELS, options.channels())?;
-                output_type.SetUINT32(&MF_MT_AUDIO_AVG_BYTES_PER_SECOND, options.bitrate() >> 3)?;
-                Ok(output_type)
-            },
+            input_type,
+            output_type,
         )?;
 
         Ok(Self {
@@ -70,7 +73,7 @@ impl Encoder for MediaFoundationAudioEncoder {
             AudioEncoderInputImpl {
                 transform: self.transform,
                 sample_rate: self.sample_rate,
-                channels: self.channels
+                channels: self.channels,
             },
             AudioEncoderOutputImpl {
                 receiver: self.output_rx,
@@ -128,7 +131,8 @@ impl EncoderInput for AudioEncoderInputImpl {
         };
         unsafe {
             sample.SetSampleDuration(
-                ((data.data.len() / self.channels as usize) as f64 / self.sample_rate  as f64 * 10_000_000_f64) as i64,
+                ((data.data.len() / self.channels as usize) as f64 / self.sample_rate as f64
+                    * 10_000_000_f64) as i64,
             )?
         };
         self.transform.push(sample).await

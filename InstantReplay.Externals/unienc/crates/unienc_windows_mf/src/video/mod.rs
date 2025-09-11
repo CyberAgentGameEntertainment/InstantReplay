@@ -18,6 +18,36 @@ pub struct MediaFoundationVideoEncoder {
 
 impl MediaFoundationVideoEncoder {
     pub fn new<V: VideoEncoderOptions>(options: &V) -> Result<Self> {
+        let input_type = unsafe {
+            let input_type = MFCreateMediaType()?;
+            input_type.SetGUID(&MF_MT_MAJOR_TYPE, &MFMediaType_Video)?;
+            input_type.SetGUID(&MF_MT_SUBTYPE, &MFVideoFormat_NV12)?;
+            input_type.SetUINT32(&MF_MT_INTERLACE_MODE, MFVideoInterlace_Progressive.0 as u32)?;
+
+            input_type.SetUINT64(
+                &MF_MT_FRAME_SIZE,
+                ((options.width() as u64) << 32) + options.height() as u64,
+            )?;
+
+            input_type.SetUINT64(&MF_MT_FRAME_RATE, ((options.fps_hint() as u64) << 32) + 1)?;
+            input_type
+        };
+
+        let output_type = unsafe {
+            let output_type = MFCreateMediaType()?;
+            output_type.SetGUID(&MF_MT_MAJOR_TYPE, &MFMediaType_Video)?;
+            output_type.SetGUID(&MF_MT_SUBTYPE, &MFVideoFormat_H264)?;
+            output_type.SetUINT32(&MF_MT_AVG_BITRATE, options.bitrate())?;
+            output_type.SetUINT64(&MF_MT_FRAME_RATE, ((options.fps_hint() as u64) << 32) + 1)?;
+            output_type.SetUINT64(
+                &MF_MT_FRAME_SIZE,
+                ((options.width() as u64) << 32) + options.height() as u64,
+            )?;
+            output_type.SetUINT32(&MF_MT_INTERLACE_MODE, MFVideoInterlace_Progressive.0 as u32)?;
+            output_type.SetUINT32(&MF_MT_MPEG2_PROFILE, eAVEncH264VProfile_Base.0 as u32)?;
+            output_type
+        };
+
         let (transform, output_rx) = Transform::new(
             MFT_CATEGORY_VIDEO_ENCODER,
             MFT_REGISTER_TYPE_INFO {
@@ -28,37 +58,8 @@ impl MediaFoundationVideoEncoder {
                 guidMajorType: MFMediaType_Video,
                 guidSubtype: MFVideoFormat_H264,
             },
-            move || unsafe {
-                let input_type = MFCreateMediaType()?;
-                input_type.SetGUID(&MF_MT_MAJOR_TYPE, &MFMediaType_Video)?;
-                input_type.SetGUID(&MF_MT_SUBTYPE, &MFVideoFormat_NV12)?;
-                input_type
-                    .SetUINT32(&MF_MT_INTERLACE_MODE, MFVideoInterlace_Progressive.0 as u32)?;
-
-                input_type.SetUINT64(
-                    &MF_MT_FRAME_SIZE,
-                    ((options.width() as u64) << 32) + options.height() as u64,
-                )?;
-
-                input_type.SetUINT64(&MF_MT_FRAME_RATE, ((options.fps_hint() as u64) << 32) + 1)?;
-                Ok(input_type)
-            },
-            move || unsafe {
-                let output_type = MFCreateMediaType()?;
-                output_type.SetGUID(&MF_MT_MAJOR_TYPE, &MFMediaType_Video)?;
-                output_type.SetGUID(&MF_MT_SUBTYPE, &MFVideoFormat_H264)?;
-                output_type.SetUINT32(&MF_MT_AVG_BITRATE, options.bitrate())?;
-                output_type
-                    .SetUINT64(&MF_MT_FRAME_RATE, ((options.fps_hint() as u64) << 32) + 1)?;
-                output_type.SetUINT64(
-                    &MF_MT_FRAME_SIZE,
-                    ((options.width() as u64) << 32) + options.height() as u64,
-                )?;
-                output_type
-                    .SetUINT32(&MF_MT_INTERLACE_MODE, MFVideoInterlace_Progressive.0 as u32)?;
-                output_type.SetUINT32(&MF_MT_MPEG2_PROFILE, eAVEncH264VProfile_Base.0 as u32)?;
-                Ok(output_type)
-            },
+            input_type,
+            output_type,
         )?;
 
         Ok(Self {

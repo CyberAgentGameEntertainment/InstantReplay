@@ -1,5 +1,6 @@
 use tokio::sync::{mpsc, oneshot};
 use windows::Win32::Media::MediaFoundation::{IMFSample, IMFTransform, MFT_OUTPUT_STREAM_INFO};
+use windows::Win32::System::Com::CoTaskMemFree;
 
 use crate::common::UnsafeSend;
 use anyhow::{anyhow, Context, Result};
@@ -154,12 +155,60 @@ fn process_output(
     Ok(sample.into())
 }
 
+struct MftIter {
+    category: windows_core::GUID,
+    input: MFT_REGISTER_TYPE_INFO,
+    output: MFT_REGISTER_TYPE_INFO,
+    flags: Vec<MFT_ENUM_FLAG>,
+    current: Vec<IMFActivate>,
+}
+impl MftIter {
+    fn new(
+        category: windows_core::GUID,
+        input: MFT_REGISTER_TYPE_INFO,
+        output: MFT_REGISTER_TYPE_INFO,
+    ) -> Self {
+        Self {
+            category,
+            input,
+            output,
+            flags: vec![
+                MFT_ENUM_FLAG_SORTANDFILTER | MFT_ENUM_FLAG_HARDWARE,
+                MFT_ENUM_FLAG_SORTANDFILTER | MFT_ENUM_FLAG_ASYNCMFT,
+                MFT_ENUM_FLAG_SORTANDFILTER | MFT_ENUM_FLAG_SYNCMFT,
+            ],
+            current: vec![],
+        }
+    }
+}
+impl Iterator for MftIter {
+    type Item = IMFActivate;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if let Some(activate) = self.current.pop() {
+            return Some(activate);
+        }
+
+        if let Some(flag) = self.flags.pop() {
+            if let Ok(mut activates) = enum_mft(self.category, self.input, self.output, flag) {
+                activates.reverse();
+                self.current = activates;
+                return self.current.pop();
+            } else {
+                return self.next();
+            }
+        }
+
+        None
+    }
+}
+
 fn enum_mft(
     category: windows_core::GUID,
     input: MFT_REGISTER_TYPE_INFO,
     output: MFT_REGISTER_TYPE_INFO,
     flags: MFT_ENUM_FLAG,
-) -> Result<Option<IMFActivate>> {
+) -> Result<Vec<IMFActivate>> {
     let mut activate: *mut Option<IMFActivate> = ptr::null_mut();
     let mut num_activate: u32 = 0;
 
@@ -174,11 +223,23 @@ fn enum_mft(
         )?
     };
 
-    if num_activate == 0 {
-        return Ok(None);
+    let activates = if num_activate > 0 {
+        unsafe {
+            std::slice::from_raw_parts(activate, num_activate as usize)
+                .iter()
+                .flatten()
+                .cloned()
+                .collect::<Vec<_>>()
+        }
+    } else {
+        vec![]
+    };
+
+    if !activate.is_null() {
+        unsafe { CoTaskMemFree(Some(activate as *const _)) };
     }
 
-    Ok(unsafe { (*activate).take() })
+    Ok(activates)
 }
 
 pub struct Transform {
@@ -205,36 +266,54 @@ impl Transform {
         category: windows_core::GUID,
         input: MFT_REGISTER_TYPE_INFO,
         output: MFT_REGISTER_TYPE_INFO,
-        input_type: impl FnOnce() -> Result<IMFMediaType>,
-        output_type: impl FnOnce() -> Result<IMFMediaType>,
+        input_type: IMFMediaType,
+        output_type: IMFMediaType,
     ) -> Result<(Self, mpsc::Receiver<UnsafeSend<IMFSample>>)> {
-        let (activate, is_async) = {
-            if let Some(activate_hardware) = enum_mft(
-                category,
-                input,
-                output,
-                MFT_ENUM_FLAG_SORTANDFILTER | MFT_ENUM_FLAG_HARDWARE,
-            )? {
-                (activate_hardware, true)
-            } else if let Some(activate_async) = enum_mft(
-                category,
-                input,
-                output,
-                MFT_ENUM_FLAG_SORTANDFILTER | MFT_ENUM_FLAG_ASYNCMFT,
-            )? {
-                (activate_async, true)
-            } else if let Some(activate_sync) = enum_mft(
-                category,
-                input,
-                output,
-                MFT_ENUM_FLAG_SORTANDFILTER | MFT_ENUM_FLAG_SYNCMFT,
-            )? {
-                (activate_sync, false)
-            } else {
-                return Err(anyhow!("No suitable video encoder found"));
+        let mfts = MftIter::new(category, input, output);
+
+        let mut input_type = Some(input_type);
+        let mut output_type = Some(output_type);
+
+        let mut result = None;
+
+        for activate in mfts {
+            if let Some(_r) = &result {
+                println!("Skipping MFT: {}", Self::get_name(&activate)?);
+                continue;
             }
+            match Self::try_activate(activate, &mut input_type, &mut output_type) {
+                Ok(r) => {
+                    result = Some(r);
+                },
+                Err(err) => {
+                    println!("Failed to activate MFT: {:?}", err);
+                }
+            };
+        }
+
+        result.context("No suitable MFT found")
+    }
+
+    fn get_name(activate: &IMFActivate) -> Result<String> {
+        let mut length = unsafe { activate.GetStringLength(&MFT_FRIENDLY_NAME_Attribute)?} + 1 /* NULL termination */;
+        let mut buffer: Vec<u16> = vec![0; length as usize];
+
+        unsafe {
+            activate.GetString(&MFT_FRIENDLY_NAME_Attribute, &mut buffer, Some(&mut length))?
         };
 
+        let value: String = BSTR::from_wide(&buffer[..length as usize]).try_into()?;
+        Ok(value)
+    }
+
+    fn try_activate(
+        activate: IMFActivate,
+        input_type: &mut Option<IMFMediaType>,
+        output_type: &mut Option<IMFMediaType>,
+    ) -> Result<(Self, mpsc::Receiver<UnsafeSend<IMFSample>>)> {
+        println!("Trying MFT: {}", Self::get_name(&activate)?);
+
+        let is_async = unsafe { activate.GetUINT32(&MF_TRANSFORM_ASYNC) }.unwrap_or(0) != 0;
         let transform = unsafe { activate.ActivateObject::<IMFTransform>()? };
 
         if is_async {
@@ -265,11 +344,18 @@ impl Transform {
         let input_id = input_ids[0];
         let output_id = output_ids[0];
 
-        let input_type = input_type()?;
-        let output_type = output_type()?;
+        {
+            let Some(input_type) = &input_type else {
+                return Err(anyhow!("Input type is None"));
+            };
 
-        unsafe { transform.SetOutputType(output_id, &output_type, 0)? };
-        unsafe { transform.SetInputType(input_id, &input_type, 0)? };
+            let Some(output_type) = &output_type else {
+                return Err(anyhow!("Output type is None"));
+            };
+
+            unsafe { transform.SetOutputType(output_id, output_type, 0)? };
+            unsafe { transform.SetInputType(input_id, input_type, 0)? };
+        }
 
         let mut input_info = MFT_INPUT_STREAM_INFO::default();
 
@@ -298,6 +384,7 @@ impl Transform {
                         Ok(event) => {
                             let event_type: u32 = unsafe { event.GetType()? };
                             match MF_EVENT_TYPE(event_type as i32) {
+                                #[allow(non_upper_case_globals)]
                                 METransformNeedInput => {
                                     let Some(sample) = sample_rx.recv().await else {
                                         unsafe {
@@ -316,10 +403,12 @@ impl Transform {
                                         transform.ProcessInput(input_id, &*sample, 0)?;
                                     };
                                 }
+                                #[allow(non_upper_case_globals)]
                                 METransformHaveOutput => {
                                     let data = process_output(&transform, &output_info, output_id)?;
                                     output_tx.send(data).await?;
                                 }
+                                #[allow(non_upper_case_globals)]
                                 METransformDrainComplete => {
                                     println!("Transform drain complete");
                                     // end
@@ -342,8 +431,8 @@ impl Transform {
             Ok((
                 Self {
                     pipeline: Pipeline::Async { sample_tx },
-                    input_type: UnsafeSend(input_type),
-                    output_type: UnsafeSend(output_type),
+                    input_type: UnsafeSend(input_type.take().context("Input type is None")?),
+                    output_type: UnsafeSend(output_type.take().context("Output type is None")?),
                 },
                 output_rx,
             ))
@@ -359,8 +448,8 @@ impl Transform {
                         output_id,
                         output_info,
                     },
-                    input_type: UnsafeSend(input_type),
-                    output_type: UnsafeSend(output_type),
+                    input_type: UnsafeSend(input_type.take().context("Input type is None")?),
+                    output_type: UnsafeSend(output_type.take().context("Output type is None")?),
                 },
                 output_rx,
             ))

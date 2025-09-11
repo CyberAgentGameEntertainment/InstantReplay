@@ -189,6 +189,7 @@ impl Stream {
                 if let Ok(event) = event {
                     let event_type: u32 = unsafe { event.GetType()? };
                     match MF_EVENT_TYPE(event_type as i32) {
+                        #[allow(non_upper_case_globals)]
                         MEStreamSinkRequestSample => {
                             if let Some(sample) = sample_rx.recv().await {
                                 unsafe { stream_cap.ProcessSample(&*sample)? };
