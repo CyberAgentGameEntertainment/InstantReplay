@@ -173,9 +173,9 @@ impl MftIter {
             input,
             output,
             flags: vec![
-                MFT_ENUM_FLAG_SORTANDFILTER | MFT_ENUM_FLAG_HARDWARE,
-                MFT_ENUM_FLAG_SORTANDFILTER | MFT_ENUM_FLAG_ASYNCMFT,
                 MFT_ENUM_FLAG_SORTANDFILTER | MFT_ENUM_FLAG_SYNCMFT,
+                MFT_ENUM_FLAG_SORTANDFILTER | MFT_ENUM_FLAG_ASYNCMFT,
+                MFT_ENUM_FLAG_SORTANDFILTER | MFT_ENUM_FLAG_HARDWARE,
             ],
             current: vec![],
         }
@@ -193,10 +193,8 @@ impl Iterator for MftIter {
             if let Ok(mut activates) = enum_mft(self.category, self.input, self.output, flag) {
                 activates.reverse();
                 self.current = activates;
-                return self.current.pop();
-            } else {
-                return self.next();
             }
+            return self.next();
         }
 
         None
