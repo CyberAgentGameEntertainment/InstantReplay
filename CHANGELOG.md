@@ -1,3 +1,11 @@
+## [1.0.2] - 2025/09/12
+
+### Fixed
+
+- Added fallback to encoder (MFT) selection code for Windows to work with environments which fail to initialize the encoder with MF_E_UNSUPPORTED_D3D_TYPE (0xC00D6D76).
+- Added context to error messages to improve debuggability.
+- Changed UniEnc.VideoEncoder UniEnc.AudioEncoder to throw ObjectDisposedException instead of InvalidOperationException when the encoder input or output is disposed already.
+
 ## [1.0.1] - 2025/09/10
 
 ### Fixed
