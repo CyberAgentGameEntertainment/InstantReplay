@@ -1,5 +1,6 @@
 use std::ffi::{c_char, c_void, CString};
 
+use anyhow::Context;
 
 type Callback = extern "C" fn(
     error: *const c_char,
@@ -19,7 +20,7 @@ pub extern "C" fn unienc_jpeg_decode(
 ) {
     let callback = unsafe { std::mem::transmute::<usize, Callback>(callback) };
     let data = unsafe { std::slice::from_raw_parts(data, size) };
-    match turbojpeg::decompress(data, turbojpeg::PixelFormat::BGRA) {
+    match turbojpeg::decompress(data, turbojpeg::PixelFormat::BGRA).context("Failed to decompress JPEG image") {
         Ok(image) => {
             callback(
                 std::ptr::null(),

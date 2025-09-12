@@ -41,7 +41,7 @@ namespace UniEnc
         {
             lock (_lock)
             {
-                _ = _inputHandle ?? throw new InvalidOperationException("Input has been completed");
+                _ = _inputHandle ?? throw new ObjectDisposedException(nameof(_inputHandle));
 
                 var context = CallbackHelper.SimpleCallbackContext.Rent();
 
@@ -83,7 +83,7 @@ namespace UniEnc
         {
             lock (_lock)
             {
-                _ = _outputHandle ?? throw new InvalidOperationException("Output has been completed");
+                _ = _outputHandle ?? throw new ObjectDisposedException(nameof(_outputHandle));
 
                 var context = CallbackHelper.DataCallbackContext.Rent();
                 var contextHandle = CallbackHelper.CreateSendPtr(context);

@@ -39,7 +39,7 @@ namespace UniEnc
         {
             lock (_lock)
             {
-                _ = _inputHandle ?? throw new InvalidOperationException("Input has been completed");
+                _ = _inputHandle ?? throw new ObjectDisposedException(nameof(_inputHandle));
 
                 if (!MemoryMarshal.TryGetArray(audioData, out var segment))
                     throw new ArgumentException("Audio data must be a contiguous array", nameof(audioData));
@@ -83,7 +83,7 @@ namespace UniEnc
         {
             lock (_lock)
             {
-                _ = _outputHandle ?? throw new InvalidOperationException("Output has been completed");
+                _ = _outputHandle ?? throw new ObjectDisposedException(nameof(_outputHandle));
 
                 var context = CallbackHelper.DataCallbackContext.Rent();
                 var contextHandle = CallbackHelper.CreateSendPtr(context);
