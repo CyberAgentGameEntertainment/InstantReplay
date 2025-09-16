@@ -32,6 +32,7 @@ When a bug occurs, you can export the operations performed up to that point as a
   * [Quick Start](#quick-start)
   * [Detailed Usage](#detailed-usage)
     * [Options](#options)
+    * [Pausing and Resuming](#pausing-and-resuming)
     * [Setting the Video Source](#setting-the-video-source)
     * [Setting the Audio Source](#setting-the-audio-source)
     * [Getting the Recording State](#getting-the-recording-state)
@@ -164,7 +165,11 @@ var options = new RealtimeEncodingOptions
 };
 
 using var session = new RealtimeInstantReplaySession(options);
- ```
+```
+
+### Pausing and Resuming
+
+You can pause and resume the recording using `RealtimeInstantReplaySession.Pause()` and `RealtimeInstantReplaySession.Resume()`.
 
 ### Setting the Video Source
 

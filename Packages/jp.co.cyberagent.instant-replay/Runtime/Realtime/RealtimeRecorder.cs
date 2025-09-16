@@ -32,8 +32,9 @@ namespace InstantReplay
         private long? _currentSamplePosition;
         private bool _disposed;
         private double _frameTimer;
-        private bool _isRecording;
+        private double _pauseStartTime;
         private double _prevFrameTime;
+        private double _totalPausedDuration;
         private double? _videoTimeDifference;
 
         /// <summary>
@@ -72,7 +73,8 @@ namespace InstantReplay
             if (options.FixedFrameRate is { } fixedFrameRate)
             {
                 if (fixedFrameRate <= 0)
-                    throw new ArgumentOutOfRangeException(nameof(fixedFrameRate), "Fixed frame rate must be greater than zero.");
+                    throw new ArgumentOutOfRangeException(nameof(fixedFrameRate),
+                        "Fixed frame rate must be greater than zero.");
                 _fixedFrameInterval = 1.0 / fixedFrameRate;
             }
 
@@ -118,6 +120,10 @@ namespace InstantReplay
                     $"Encoding may fail if sample rate is neither 48000 nor 41000 (current: {_options.AudioOptions.SampleRate}.");
         }
 
+        public bool IsRecording { get; private set; }
+
+        private static double Now => (double)Stopwatch.GetTimestamp() / Stopwatch.Frequency;
+
         /// <summary>
         ///     Disposes all resources.
         /// </summary>
@@ -127,7 +133,7 @@ namespace InstantReplay
             {
                 if (!_disposed)
                 {
-                    _isRecording = false;
+                    IsRecording = false;
 
                     // Signal cancellation and complete channels
                     _videoWriter.Complete();
@@ -153,9 +159,9 @@ namespace InstantReplay
 
         private void OnFrameProvided(IFrameProvider.Frame frame)
         {
-            var realTime = (double)Stopwatch.GetTimestamp() / Stopwatch.Frequency;
+            var realTime = Now;
 
-            if (_disposed || !_isRecording)
+            if (_disposed || !IsRecording)
                 return;
 
             var texture = frame.Texture;
@@ -198,6 +204,8 @@ namespace InstantReplay
                 }
             }
 
+            time -= _totalPausedDuration;
+
             var renderTexture = _framePreprocessor.Process(texture, needFlipVertically);
             var nativeArrayData = RealtimeFrameReadback.ReadbackFrameAsync(renderTexture);
 
@@ -222,9 +230,9 @@ namespace InstantReplay
         private void OnProvideAudioSamples(ReadOnlySpan<float> samples, int channels, int sampleRate,
             double timestamp)
         {
-            var realTime = (double)Stopwatch.GetTimestamp() / Stopwatch.Frequency;
+            var realTime = Now;
 
-            if (_disposed || !_isRecording || samples == null || samples.Length == 0)
+            if (_disposed || !IsRecording || samples == null || samples.Length == 0)
                 return;
 
             // adjust timestamp
@@ -249,6 +257,8 @@ namespace InstantReplay
                     timestamp -= _audioTimeDifference.Value;
                 }
             }
+
+            timestamp -= _totalPausedDuration;
 
             var numSamples = samples.Length / channels;
             var sampleRateInOption = _options.AudioOptions.SampleRate;
@@ -291,7 +301,7 @@ namespace InstantReplay
             for (var j = 0; j < numChannelsInOption; j++)
             {
                 // NOTE: should we interpolate samples?
-                var pos = sampleRate == sampleRateInOption
+                var pos = numSamples == numScaledSamples
                     ? i
                     : (int)Math.Floor(i * ((double)numSamples / numScaledSamples));
                 var sample = samples[pos * channels + j % channels];
@@ -315,31 +325,35 @@ namespace InstantReplay
         /// <summary>
         ///     Starts recording.
         /// </summary>
-        public void StartRecording()
+        public void Resume()
         {
             lock (_lock)
             {
                 if (_disposed)
                     throw new ObjectDisposedException(nameof(RealtimeRecorder));
 
-                if (_isRecording)
+                if (IsRecording)
                     return;
 
-                _isRecording = true;
+                _totalPausedDuration += Now - _pauseStartTime;
+
+                IsRecording = true;
             }
         }
 
         /// <summary>
         ///     Stops recording.
         /// </summary>
-        public void StopRecording()
+        public void Pause()
         {
             lock (_lock)
             {
-                if (!_isRecording)
+                if (!IsRecording)
                     return;
 
-                _isRecording = false;
+                _pauseStartTime = Now;
+
+                IsRecording = false;
             }
         }
 

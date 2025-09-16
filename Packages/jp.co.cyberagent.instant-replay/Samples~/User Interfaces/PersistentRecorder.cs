@@ -29,6 +29,8 @@ namespace InstantReplay.Examples
 
         private RealtimeInstantReplaySession _currentSession;
 
+        public bool IsPaused => _currentSession?.IsPaused ?? true;
+
         #region Event Functions
 
         private void OnEnable()
@@ -127,6 +129,16 @@ namespace InstantReplay.Examples
                 if (isActiveAndEnabled)
                     NewSession(false);
             }
+        }
+
+        public void Pause()
+        {
+            _currentSession?.Pause();
+        }
+
+        public void Resume()
+        {
+            _currentSession?.Resume();
         }
     }
 }
