@@ -32,6 +32,7 @@ Instant Replay は Unity で直近のゲームプレイ動画をいつでも保�
   * [クイックスタート](#クイックスタート)
   * [詳細な使い方](#詳細な使い方)
     * [設定](#設定)
+    * [ポーズと再開](#ポーズと再開)
     * [映像ソースの設定](#映像ソースの設定)
     * [音声ソースの設定](#音声ソースの設定)
     * [録画状態を取得する](#録画状態を取得する)
@@ -159,6 +160,10 @@ var options = new RealtimeEncodingOptions
 
 using var session = new RealtimeInstantReplaySession(options)
 ```
+
+### ポーズと再開
+
+`RealtimeInstantReplaySession.Pause()` と `RealtimeInstantReplaySession.Resume()` を使用して録画を一時停止および再開できます。
 
 ### 映像ソースの設定
 

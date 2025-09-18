@@ -37,8 +37,10 @@ namespace InstantReplay
                 disposeAudioSampleProvider);
 
             // Start recording automatically
-            _recorder.StartRecording();
+            _recorder.Resume();
         }
+
+        public bool IsPaused => _recorder.IsPaused;
 
         /// <summary>
         ///     Gets the current state of the session.
@@ -56,7 +58,7 @@ namespace InstantReplay
                 {
                     // Stop recording if still recording
                     if (State == SessionState.Recording)
-                        _recorder?.StopRecording();
+                        _recorder?.Pause();
 
                     _recorder?.Dispose();
                     _disposed = true;
@@ -122,7 +124,7 @@ namespace InstantReplay
                         $"Cannot export when state is {State}. Export can only be called once.");
 
                 State = SessionState.WaitForRecordingComplete;
-                _recorder.StopRecording();
+                _recorder.Pause();
             }
 
             try
@@ -147,6 +149,22 @@ namespace InstantReplay
                 State = SessionState.Invalid;
                 throw;
             }
+        }
+
+        /// <summary>
+        ///     Pauses the recording.
+        /// </summary>
+        public void Pause()
+        {
+            _recorder.Pause();
+        }
+
+        /// <summary>
+        ///     Resumes the recording.
+        /// </summary>
+        public void Resume()
+        {
+            _recorder.Resume();
         }
     }
 }
