@@ -40,7 +40,7 @@ namespace InstantReplay
             _recorder.Resume();
         }
 
-        public bool IsPaused => !_recorder.IsRecording;
+        public bool IsPaused => _recorder.IsPaused;
 
         /// <summary>
         ///     Gets the current state of the session.

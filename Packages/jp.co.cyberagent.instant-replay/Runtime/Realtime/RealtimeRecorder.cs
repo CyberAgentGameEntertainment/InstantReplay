@@ -120,7 +120,7 @@ namespace InstantReplay
                     $"Encoding may fail if sample rate is neither 48000 nor 41000 (current: {_options.AudioOptions.SampleRate}.");
         }
 
-        public bool IsRecording { get; private set; }
+        public bool IsPaused { get; private set; } = true;
 
         private static double Now => (double)Stopwatch.GetTimestamp() / Stopwatch.Frequency;
 
@@ -133,7 +133,7 @@ namespace InstantReplay
             {
                 if (!_disposed)
                 {
-                    IsRecording = false;
+                    IsPaused = true;
 
                     // Signal cancellation and complete channels
                     _videoWriter.Complete();
@@ -161,7 +161,7 @@ namespace InstantReplay
         {
             var realTime = Now;
 
-            if (_disposed || !IsRecording)
+            if (_disposed || IsPaused)
                 return;
 
             var texture = frame.Texture;
@@ -232,7 +232,7 @@ namespace InstantReplay
         {
             var realTime = Now;
 
-            if (_disposed || !IsRecording || samples == null || samples.Length == 0)
+            if (_disposed || IsPaused || samples == null || samples.Length == 0)
                 return;
 
             // adjust timestamp
@@ -332,12 +332,12 @@ namespace InstantReplay
                 if (_disposed)
                     throw new ObjectDisposedException(nameof(RealtimeRecorder));
 
-                if (IsRecording)
+                if (!IsPaused)
                     return;
 
                 _totalPausedDuration += Now - _pauseStartTime;
 
-                IsRecording = true;
+                IsPaused = false;
             }
         }
 
@@ -348,12 +348,12 @@ namespace InstantReplay
         {
             lock (_lock)
             {
-                if (!IsRecording)
+                if (IsPaused)
                     return;
 
                 _pauseStartTime = Now;
 
-                IsRecording = false;
+                IsPaused = true;
             }
         }
 
