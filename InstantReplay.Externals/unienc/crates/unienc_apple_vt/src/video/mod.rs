@@ -103,14 +103,12 @@ impl EncodedData for VideoEncodedData {
 
 unsafe extern "C-unwind" fn handle_video_encode_output(
     output_callback_ref_con: *mut c_void,
-    source_frame_ref_con: *mut c_void,
+    _source_frame_ref_con: *mut c_void,
     _status: i32,
     _info_flags: VTEncodeInfoFlags,
     sample_bufer: *mut CMSampleBuffer,
 ) {
     let tx = unsafe { &*(output_callback_ref_con as *const mpsc::Sender<VideoEncodedData>) };
-
-    drop(unsafe { Retained::from_raw(source_frame_ref_con as *mut CVPixelBuffer) });
 
     if let Some(sample_buffer) = unsafe { Retained::retain(sample_bufer) } {
         _ = tx.try_send(VideoEncodedData::new(sample_buffer.into()));
@@ -140,6 +138,7 @@ impl EncoderInput for VideoToolboxEncoderInput {
     async fn push(&mut self, data: &Self::Data) -> Result<()> {
         let pixel_data = Box::new(data.data.clone());
         let pixel_data_ptr = pixel_data.as_ptr();
+        let pixel_data_raw = Box::into_raw(pixel_data);
 
         let mut buffer: *mut CVPixelBuffer = std::ptr::null_mut();
         unsafe {
@@ -152,27 +151,30 @@ impl EncoderInput for VideoToolboxEncoderInput {
                     .context("Failed to create NonNull from pixel data pointer")?,
                 (data.width * 4) as usize,
                 Some(release_pixel_buffer),
-                Box::into_raw(pixel_data) as *mut _,
+                pixel_data_raw as *mut _,
                 None,
                 NonNull::new(&mut buffer).context("Failed to create CVPixelBuffer")?,
             )
-            .to_result()?;
         }
+        .to_result()
+        .map_err(|err| {
+            // free pixel data if failed
+            _ = unsafe { Box::from_raw(pixel_data_raw) };
+            err
+        })?;
 
         let buffer = unsafe { Retained::from_raw(buffer) }.context("CVPixelBuffer is null")?;
 
-        let buffer_retained = Retained::into_raw(buffer.clone());
-
         let mut retry = 0;
 
-        if let Err(err) = loop {
+        loop {
             let res = unsafe {
                 self.session.inner.encode_frame(
                     &buffer,
                     CMTime::with_seconds(data.timestamp, 720),
                     kCMTimeInvalid,
                     None,
-                    buffer_retained as *mut c_void,
+                    std::ptr::null_mut(),
                     std::ptr::null_mut(),
                 )
             };
@@ -181,15 +183,12 @@ impl EncoderInput for VideoToolboxEncoderInput {
                 // VTCompressionSession turns invalid when the app enters background on iOS
                 // retrying once
                 retry += 1;
-                self.session = CompressionSession::new(self.width, self.height, self.bitrate, &self.tx)?;
+                self.session =
+                    CompressionSession::new(self.width, self.height, self.bitrate, &*self.tx)?;
                 continue;
             }
 
-            break res.to_result();
-        } {
-            // free buffer if failed
-            _ = unsafe { Retained::from_raw(buffer_retained) };
-            return Err(err);
+            break res.to_result()?;
         }
 
         Ok(())
@@ -206,7 +205,6 @@ impl EncoderOutput for VideoToolboxEncoderOutput {
 
 impl Drop for VideoToolboxEncoderInput {
     fn drop(&mut self) {
-        println!("Dropping VideoToolboxEncoderInput");
         unsafe { self.session.inner.complete_frames(kCMTimeInvalid) }
             .to_result()
             .unwrap();
@@ -221,7 +219,7 @@ impl CompressionSession {
         width: u32,
         height: u32,
         bitrate: u32,
-        tx: &Box<mpsc::Sender<VideoEncodedData>>,
+        tx: *const mpsc::Sender<VideoEncodedData>,
     ) -> Result<Self> {
         let mut session: *mut VTCompressionSession = std::ptr::null_mut();
 
@@ -235,7 +233,7 @@ impl CompressionSession {
                 None,
                 None,
                 Some(handle_video_encode_output),
-                &**tx as *const mpsc::Sender<_> as *mut c_void,
+                tx as *mut c_void,
                 NonNull::new(&mut session)
                     .context("Failed to create NonNull from session pointer")?,
             )
@@ -282,7 +280,7 @@ impl VideoToolboxEncoder {
 
         Ok(VideoToolboxEncoder {
             input: VideoToolboxEncoderInput {
-                session: CompressionSession::new(width, height, bitrate, &tx)?,
+                session: CompressionSession::new(width, height, bitrate, &*tx)?,
                 tx,
                 width,
                 height,
