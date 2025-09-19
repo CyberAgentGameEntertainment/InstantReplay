@@ -51,7 +51,7 @@ pub unsafe extern "C" fn unienc_video_encoder_push(
                 Ok(input) => input
                     .push(&sample)
                     .await
-                    .context("Failed to pull video sample")
+                    .context("Failed to push video sample")
                     .map_err(UniencError::from_anyhow),
                 Err(err) => Err(err),
             };
