@@ -14,6 +14,7 @@ namespace InstantReplay.Examples
     {
         #region Serialized Fields
 
+        [SerializeField] private Button pauseButton;
         [SerializeField] private GameObject transcodingPanel;
         [SerializeField] private Text transcodingProgressText;
         [SerializeField] private Image transcodingProgressImage;
@@ -27,6 +28,21 @@ namespace InstantReplay.Examples
         private float? _textExpires;
 
         #region Event Functions
+
+        private void Start()
+        {
+            if (!pauseButton) return;
+            pauseButton.onClick.AddListener(() =>
+            {
+                if (recorder.IsPaused)
+                    recorder.Resume();
+                else
+                    recorder.Pause();
+
+                if (pauseButton.GetComponentInChildren<Text>() is { } text && text)
+                    text.text = recorder.IsPaused ? "Resume" : "Pause";
+            });
+        }
 
         private void Update()
         {
