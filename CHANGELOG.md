@@ -1,3 +1,17 @@
+## [1.0.3] - 2025/09/24
+
+### Added
+
+- Added pausing and resuming support for real-time recording.
+
+### Fixed
+
+- Fixed encoder error and memory leak leading the app to crash after entering background on iOS.
+
+### Changed
+
+- Added `/Brepro` option to compilation of `libunienc` for Windows to suppress unnecessary binary changes.
+
 ## [1.0.2] - 2025/09/12
 
 ### Fixed
