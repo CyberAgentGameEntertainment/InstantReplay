@@ -13,8 +13,8 @@ use objc2_core_media::{
 use objc2_core_video::{kCVPixelFormatType_32BGRA, CVPixelBuffer, CVPixelBufferCreateWithBytes};
 use objc2_video_toolbox::{
     kVTCompressionPropertyKey_AllowFrameReordering, kVTCompressionPropertyKey_AverageBitRate,
-    kVTCompressionPropertyKey_RealTime, VTCompressionSession, VTEncodeInfoFlags,
-    VTSessionSetProperty,
+    kVTCompressionPropertyKey_RealTime, kVTInvalidSessionErr, VTCompressionSession,
+    VTEncodeInfoFlags, VTSessionSetProperty,
 };
 use tokio::sync::mpsc;
 use unienc_common::{EncodedData, Encoder, EncoderInput, EncoderOutput, VideoSample};
@@ -26,8 +26,15 @@ pub struct VideoToolboxEncoder {
     output: VideoToolboxEncoderOutput,
 }
 pub struct VideoToolboxEncoderInput {
-    session: Retained<VTCompressionSession>,
-    _tx: Box<mpsc::Sender<VideoEncodedData>>,
+    session: CompressionSession,
+    tx: Box<mpsc::Sender<VideoEncodedData>>,
+    width: u32,
+    height: u32,
+    bitrate: u32,
+}
+
+struct CompressionSession {
+    inner: Retained<VTCompressionSession>,
 }
 
 unsafe impl Send for VideoToolboxEncoderInput {}
@@ -96,22 +103,23 @@ impl EncodedData for VideoEncodedData {
 
 unsafe extern "C-unwind" fn handle_video_encode_output(
     output_callback_ref_con: *mut c_void,
-    source_frame_ref_con: *mut c_void,
+    _source_frame_ref_con: *mut c_void,
     _status: i32,
     _info_flags: VTEncodeInfoFlags,
     sample_bufer: *mut CMSampleBuffer,
 ) {
     let tx = unsafe { &*(output_callback_ref_con as *const mpsc::Sender<VideoEncodedData>) };
 
-    drop(unsafe { Retained::from_raw(source_frame_ref_con as *mut CVPixelBuffer) });
-
     if let Some(sample_buffer) = unsafe { Retained::retain(sample_bufer) } {
         _ = tx.try_send(VideoEncodedData::new(sample_buffer.into()));
     } // otherwise dropped
 }
 
-unsafe extern "C-unwind" fn release_pixel_buffer(release_ref_con: *mut c_void, _base_address: *const c_void) {
-    drop(Box::<Vec::<u8>>::from_raw(release_ref_con as *mut _));
+unsafe extern "C-unwind" fn release_pixel_buffer(
+    release_ref_con: *mut c_void,
+    _base_address: *const c_void,
+) {
+    drop(Box::<Vec<u8>>::from_raw(release_ref_con as *mut _));
 }
 
 impl Encoder for VideoToolboxEncoder {
@@ -130,6 +138,7 @@ impl EncoderInput for VideoToolboxEncoderInput {
     async fn push(&mut self, data: &Self::Data) -> Result<()> {
         let pixel_data = Box::new(data.data.clone());
         let pixel_data_ptr = pixel_data.as_ptr();
+        let pixel_data_raw = Box::into_raw(pixel_data);
 
         let mut buffer: *mut CVPixelBuffer = std::ptr::null_mut();
         unsafe {
@@ -142,28 +151,44 @@ impl EncoderInput for VideoToolboxEncoderInput {
                     .context("Failed to create NonNull from pixel data pointer")?,
                 (data.width * 4) as usize,
                 Some(release_pixel_buffer),
-                Box::into_raw(pixel_data) as *mut _,
+                pixel_data_raw as *mut _,
                 None,
                 NonNull::new(&mut buffer).context("Failed to create CVPixelBuffer")?,
             )
-            .to_result()?;
         }
+        .to_result()
+        .map_err(|err| {
+            // free pixel data if failed
+            _ = unsafe { Box::from_raw(pixel_data_raw) };
+            err
+        })?;
 
         let buffer = unsafe { Retained::from_raw(buffer) }.context("CVPixelBuffer is null")?;
 
-        let buffer_retained = Retained::into_raw(buffer.clone());
+        let mut retry = 0;
 
-        unsafe {
-            self.session
-                .encode_frame(
+        loop {
+            let res = unsafe {
+                self.session.inner.encode_frame(
                     &buffer,
                     CMTime::with_seconds(data.timestamp, 720),
                     kCMTimeInvalid,
                     None,
-                    buffer_retained as *mut c_void,
+                    std::ptr::null_mut(),
                     std::ptr::null_mut(),
                 )
-                .to_result()?;
+            };
+
+            if res == kVTInvalidSessionErr && retry == 0 {
+                // VTCompressionSession turns invalid when the app enters background on iOS
+                // retrying once
+                retry += 1;
+                self.session =
+                    CompressionSession::new(self.width, self.height, self.bitrate, &*self.tx)?;
+                continue;
+            }
+
+            break res.to_result()?;
         }
 
         Ok(())
@@ -180,33 +205,35 @@ impl EncoderOutput for VideoToolboxEncoderOutput {
 
 impl Drop for VideoToolboxEncoderInput {
     fn drop(&mut self) {
-        unsafe { self.session.complete_frames(kCMTimeInvalid) }
+        unsafe { self.session.inner.complete_frames(kCMTimeInvalid) }
             .to_result()
             .unwrap();
         unsafe {
-            self.session.invalidate();
+            self.session.inner.invalidate();
         }
     }
 }
 
-impl VideoToolboxEncoder {
-    pub fn new(options: &impl unienc_common::VideoEncoderOptions) -> Result<Self> {
+impl CompressionSession {
+    fn new(
+        width: u32,
+        height: u32,
+        bitrate: u32,
+        tx: *const mpsc::Sender<VideoEncodedData>,
+    ) -> Result<Self> {
         let mut session: *mut VTCompressionSession = std::ptr::null_mut();
-        let (tx, rx) = mpsc::channel(32);
-
-        let tx = Box::new(tx);
 
         unsafe {
             VTCompressionSession::create(
                 kCFAllocatorDefault,
-                options.width() as i32,
-                options.height() as i32,
+                width as i32,
+                height as i32,
                 kCMVideoCodecType_H264,
                 None,
                 None,
                 None,
                 Some(handle_video_encode_output),
-                &*tx as *const mpsc::Sender<_> as *mut c_void,
+                tx as *mut c_void,
                 NonNull::new(&mut session)
                     .context("Failed to create NonNull from session pointer")?,
             )
@@ -235,12 +262,30 @@ impl VideoToolboxEncoder {
             VTSessionSetProperty(
                 &session,
                 kVTCompressionPropertyKey_AverageBitRate,
-                Some(&CFNumber::new_i32(options.bitrate() as i32)),
+                Some(&CFNumber::new_i32(bitrate as i32)),
             )
         }
         .to_result()?;
+
+        Ok(CompressionSession { inner: session })
+    }
+}
+
+impl VideoToolboxEncoder {
+    pub fn new(options: &impl unienc_common::VideoEncoderOptions) -> Result<Self> {
+        let (tx, rx) = mpsc::channel(32);
+        let tx = Box::new(tx);
+
+        let (width, height, bitrate) = (options.width(), options.height(), options.bitrate());
+
         Ok(VideoToolboxEncoder {
-            input: VideoToolboxEncoderInput { session, _tx: tx },
+            input: VideoToolboxEncoderInput {
+                session: CompressionSession::new(width, height, bitrate, &*tx)?,
+                tx,
+                width,
+                height,
+                bitrate,
+            },
             output: VideoToolboxEncoderOutput { rx },
         })
     }
