@@ -55,7 +55,7 @@ namespace InstantReplay
         /// <summary>
         ///     Pushes a video frame for encoding.
         /// </summary>
-        public async ValueTask PushVideoFrameAsync(NativeArray<byte> frameData, uint width, uint height,
+        public ValueTask PushVideoFrameAsync(NativeArray<byte> frameData, uint width, uint height,
             double timestamp)
         {
             ThrowIfDisposed();
@@ -63,7 +63,7 @@ namespace InstantReplay
             if (frameData.Length == 0)
                 throw new ArgumentException("Frame data cannot be empty", nameof(frameData));
 
-            await _videoEncoder.PushFrameAsync(frameData, width, height, timestamp).ConfigureAwait(false);
+            return _videoEncoder.PushFrameAsync(frameData, width, height, timestamp);
         }
 
         /// <summary>
