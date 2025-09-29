@@ -10,6 +10,7 @@ namespace InstantReplay
 {
     internal class EventCallbackEntryPoint : MonoBehaviour
     {
+        private static WaitForEndOfFrame _waitForEndOfFrame;
         private bool _endOfFrameCoroutineRunning;
 
         #region Event Functions
@@ -29,7 +30,7 @@ namespace InstantReplay
             {
                 while (EndOfFrameInner != null)
                 {
-                    yield return new WaitForEndOfFrame();
+                    yield return _waitForEndOfFrame ??= new WaitForEndOfFrame();
                     try
                     {
                         EndOfFrameInner?.Invoke();
