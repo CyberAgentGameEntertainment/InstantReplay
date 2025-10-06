@@ -14,8 +14,8 @@ namespace InstantReplay
         private static readonly int MainTexSt = Shader.PropertyToID("_MainTex_ST");
         private static readonly int ScaleAndTiling = Shader.PropertyToID("_ScaleAndTiling");
         private static readonly int Rechannel = Shader.PropertyToID("_Rechannel");
-        private readonly int? _fixedHeight;
         private readonly bool _defaultFlip;
+        private readonly int? _fixedHeight;
         private readonly int? _fixedWidth;
         private readonly int? _maxHeight;
         private readonly int? _maxWidth;
@@ -43,25 +43,33 @@ namespace InstantReplay
         {
             if (Output)
             {
-                Object.Destroy(Output);
+                if (Application.isPlaying)
+                    Object.Destroy(Output);
+                else
+                    Object.DestroyImmediate(Output);
                 Output = default;
             }
 
             if (_material)
             {
-                Object.Destroy(_material);
+                if (Application.isPlaying)
+                    Object.Destroy(_material);
+                else
+                    Object.DestroyImmediate(_material);
                 _material = default;
             }
         }
 
-        public static FramePreprocessor WithMaxSize(int? maxWidth, int? maxHeight, Matrix4x4 rechannelMatrix, bool defaultFlip = false)
+        public static FramePreprocessor WithMaxSize(int? maxWidth, int? maxHeight, Matrix4x4 rechannelMatrix,
+            bool defaultFlip = false)
         {
             if (maxWidth is <= 0 || maxHeight is <= 0)
                 throw new ArgumentException("Max width and height must be greater than zero.");
             return new FramePreprocessor(maxWidth, maxHeight, null, null, rechannelMatrix, defaultFlip);
         }
 
-        public static FramePreprocessor WithFixedSize(int fixedWidth, int fixedHeight, Matrix4x4 rechannelMatrix, bool defaultFlip = false)
+        public static FramePreprocessor WithFixedSize(int fixedWidth, int fixedHeight, Matrix4x4 rechannelMatrix,
+            bool defaultFlip = false)
         {
             if (fixedWidth <= 0 || fixedHeight <= 0)
                 throw new ArgumentException("Fixed width and height must be greater than zero.");

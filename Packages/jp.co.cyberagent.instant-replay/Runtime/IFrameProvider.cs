@@ -12,6 +12,7 @@ namespace InstantReplay
     /// </summary>
     public interface IFrameProvider : IDisposable
     {
+        // ReSharper disable once ArrangeTypeMemberModifiers
         public delegate void ProvideFrame(Frame frame);
 
         /// <summary>
@@ -19,10 +20,11 @@ namespace InstantReplay
         /// </summary>
         event ProvideFrame OnFrameProvided;
 
-        public readonly struct Frame
+        // ReSharper disable once ArrangeTypeMemberModifiers
+        public struct Frame : IDiscreteTemporalData
         {
             public Texture Texture { get; }
-            public double Timestamp { get; }
+            public double Timestamp { get; set; }
             public bool NeedFlipVertically { get; }
 
             public Frame(Texture texture, double timestamp, bool needFlipVertically = false)
