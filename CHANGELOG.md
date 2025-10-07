@@ -1,3 +1,14 @@
+## [1.1.0] - 2025/10/07
+
+### Added
+
+- Added `InstantReplay.Cri.CriAudioSampleProvider` to capture audio from CRIWARE.
+
+### Changed
+
+- Reduced heap allocations by frames.
+
+
 ## [1.0.3] - 2025/09/24
 
 ### Added
