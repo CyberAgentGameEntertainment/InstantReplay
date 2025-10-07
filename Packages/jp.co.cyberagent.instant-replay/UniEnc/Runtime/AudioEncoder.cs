@@ -33,7 +33,6 @@ namespace UniEnc
         ///     Pushes raw audio samples to the encoder.
         /// </summary>
         /// <param name="audioData">Raw audio samples (PCM int16 signed)</param>
-        /// <param name="sampleCount">Number of samples</param>
         /// <param name="timestampInSamples">Timestamp in samples since start</param>
         public ValueTask PushSamplesAsync(ReadOnlyMemory<short> audioData, ulong timestampInSamples)
         {
