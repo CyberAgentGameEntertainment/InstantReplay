@@ -6,6 +6,7 @@ using System;
 using System.Threading;
 using CriWare;
 using UnityEngine;
+using Object = UnityEngine.Object;
 
 namespace InstantReplay.Cri
 {
@@ -18,17 +19,42 @@ namespace InstantReplay.Cri
         private CriAtomExOutputAnalyzer _analyzer;
         private ulong _timestampInSamples;
 
+        /// <summary>
+        /// </summary>
         /// <remarks>
         ///     <see cref="CriAudioSampleProvider" /> will attach <see cref="CriAtomExOutputAnalyzer" /> to specified DSP bus.
         ///     A DSP bus can be attached to by only one analyzer at the same time and use of multiple
         ///     <see cref="CriAtomExOutputAnalyzer" /> may cause unintended behavior.
         /// </remarks>
-        public CriAudioSampleProvider(string dspBusName = "MasterOut")
+        /// <param name="dspBusName"></param>
+        /// <param name="configuredSamplingRate">
+        ///     Sampling rate you specified for CRI initialization. If null,
+        ///     <see cref="CriAudioSampleProvider" /> will try to get the value automatically.
+        /// </param>
+        /// <exception cref="ArgumentException"></exception>
+        public CriAudioSampleProvider(string dspBusName = "MasterOut", int? configuredSamplingRate = null)
         {
-            var sampleRate = CriAtomPlugin.GetOutputSamplingRate();
-
-            if (sampleRate == 0)
-                sampleRate = 48000;
+            int sampleRate;
+            if (configuredSamplingRate is { } value)
+            {
+                sampleRate = value;
+            }
+            else
+            {
+                var initializer = Object.FindObjectOfType<CriWareInitializer>();
+                if (initializer)
+                    sampleRate = initializer.atomConfig.outputSamplingRate;
+                else
+                    try
+                    {
+                        sampleRate = CriAtomPlugin.GetOutputSamplingRate();
+                    }
+                    catch (Exception ex)
+                    {
+                        throw new ArgumentException(
+                            "Failed to get CRI output sampling rate. Specify configuredSamplingRate manually.", ex);
+                    }
+            }
 
             var config = new CriAtomExOutputAnalyzer.Config
             {
