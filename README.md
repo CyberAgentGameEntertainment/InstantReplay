@@ -36,6 +36,7 @@ When a bug occurs, you can export the operations performed up to that point as a
     * [Setting the Video Source](#setting-the-video-source)
     * [Setting the Audio Source](#setting-the-audio-source)
     * [Getting the Recording State](#getting-the-recording-state)
+  * [CRI support](#cri-support)
   * [Legacy Mode](#legacy-mode)
     * [Setting Recording Time and Frame Rate](#setting-recording-time-and-frame-rate)
     * [Setting the Size](#setting-the-size)
@@ -229,6 +230,15 @@ new RealtimeInstantReplaySession(options, audioSampleProvider: new CustomAudioSa
 ### Getting the Recording State
 
 You can get the recording state with the `InstantReplaySession.State` property.
+
+## CRI support
+
+InstantReplay provides the `IAudioSampleProvider` implementation to capture audio from [CRIWARE](https://game.criware.jp/).
+
+1. Install CRIWARE Unity Plug-in
+2. Add scripting define symbol `INSTANTREPLAY_CRI` in player settings
+3. Add `InstantReplay.Cri` assembly reference if necessary
+4. Use `InstantReplay.Cri.CriAudioSampleProvider` as `audioSampleProvider` in `RealtimeInstantReplaySession` constructor
 
 ## Legacy Mode
 
