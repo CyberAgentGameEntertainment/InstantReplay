@@ -99,11 +99,11 @@ namespace InstantReplay.Examples
 
         public async ValueTask<string> StopAndTranscodeAsync(IProgress<float> progress, string directory)
         {
-            using var session = _currentSession;
-            _currentSession = null;
-
             try
             {
+                using var session = _currentSession;
+                _currentSession = null;
+
                 if (!isActiveAndEnabled || session == null)
                 {
                     Debug.LogWarning("Recorder is not enabled");

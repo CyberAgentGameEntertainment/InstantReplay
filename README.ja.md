@@ -36,6 +36,7 @@ Instant Replay は Unity で直近のゲームプレイ動画をいつでも保�
     * [映像ソースの設定](#映像ソースの設定)
     * [音声ソースの設定](#音声ソースの設定)
     * [録画状態を取得する](#録画状態を取得する)
+  * [CRI サポート](#cri-サポート)
   * [レガシーモード](#レガシーモード)
     * [録画時間とフレームレートの設定](#録画時間とフレームレートの設定)
     * [サイズの設定](#サイズの設定)
@@ -223,6 +224,15 @@ new RealtimeInstantReplaySession(options, audioSampleProvider: new CustomAudioSa
 ### 録画状態を取得する
 
 `InstantReplaySession.State` プロパティで録画の状態を取得できます。
+
+## CRI サポート
+
+InstantReplay は [CRIWARE](https://game.criware.jp/) からの音声をキャプチャするための `IAudioSampleProvider` 実装を提供しています。
+
+1. CRIWARE Unity Plug-in をインストールします。
+2. Player Settings でシンボル `INSTANTREPLAY_CRI` を追加します。
+3. 必要な場合は `InstantReplay.Cri` アセンブリ参照を追加します。
+4. `RealtimeInstantReplaySession` コンストラクタの `audioSampleProvider` に `InstantReplay.Cri.CriAudioSampleProvider` を指定します。
 
 ## レガシーモード
 
