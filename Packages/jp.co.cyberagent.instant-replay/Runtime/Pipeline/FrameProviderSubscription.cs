@@ -12,11 +12,11 @@ namespace InstantReplay
     {
         private readonly IFrameProvider _provider;
         private readonly bool _disposeProvider;
-        private readonly IBlockingPipelineInput<IFrameProvider.Frame> _next;
+        private readonly IPipelineInput<IFrameProvider.Frame> _next;
         private IFrameProvider.ProvideFrame _delegate;
 
         public FrameProviderSubscription(IFrameProvider provider, bool disposeProvider,
-            IBlockingPipelineInput<IFrameProvider.Frame> next)
+            IPipelineInput<IFrameProvider.Frame> next)
         {
             _provider = provider;
             _disposeProvider = disposeProvider;

@@ -4,33 +4,32 @@
 
 using System;
 using System.Buffers;
-using System.Diagnostics;
-using System.Threading.Tasks;
 using Debug = UnityEngine.Debug;
 
 namespace InstantReplay
 {
-    internal class AudioTemporalAdjuster : IPipelineTransform<AudioInputData, AudioFrameData>
+    internal class AudioTemporalAdjuster : IPipelineTransform<InputAudioFrame, PcmAudioFrame>
     {
         private const double AllowedLag = 0.1;
-        
-        private readonly IRecordingTimeProvider _recordingTimeProvider;
-        
-        private bool _disposed;
-        private double? _audioTimeDifference;
-        private long? _currentSamplePosition;
-        
-        private readonly double _sampleRateInOption;
         private readonly double _numChannelsInOption;
 
-        public AudioTemporalAdjuster(IRecordingTimeProvider recordingTimeProvider, double sampleRateInOption, double numChannelsInOption)
+        private readonly IRecordingTimeProvider _recordingTimeProvider;
+
+        private readonly double _sampleRateInOption;
+        private double? _audioTimeDifference;
+        private long? _currentSamplePosition;
+
+        private bool _disposed;
+
+        public AudioTemporalAdjuster(IRecordingTimeProvider recordingTimeProvider, double sampleRateInOption,
+            double numChannelsInOption)
         {
             _recordingTimeProvider = recordingTimeProvider;
             _sampleRateInOption = sampleRateInOption;
             _numChannelsInOption = numChannelsInOption;
         }
 
-        public bool Transform(AudioInputData input, out AudioFrameData output)
+        public bool Transform(InputAudioFrame input, out PcmAudioFrame output)
         {
             var realTime = _recordingTimeProvider.Now;
 
@@ -38,7 +37,7 @@ namespace InstantReplay
             var timestamp = input.Timestamp;
             var channels = input.Channels;
             var sampleRate = input.SampleRate;
-            
+
             output = default;
 
             if (_disposed || _recordingTimeProvider.IsPaused || samples.Length == 0)
@@ -77,7 +76,7 @@ namespace InstantReplay
 
             var numScaledSamples = _sampleRateInOption == sampleRate
                 ? numSamples
-                : (long)Math.Round(numSamples * ((double)_sampleRateInOption / sampleRate));
+                : (long)Math.Round(numSamples * (_sampleRateInOption / sampleRate));
             long blankOrSkip;
             if (Math.Abs(lag) > AllowedLag * _sampleRateInOption)
             {
@@ -116,7 +115,7 @@ namespace InstantReplay
                 writeBuffer[i * (int)_numChannelsInOption + j] = scaledSample;
             }
 
-            output = new AudioFrameData(writeBufferArray, writeBufferArray.AsMemory(0, writeLength), timestamp);
+            output = new PcmAudioFrame(writeBufferArray, writeBufferArray.AsMemory(0, writeLength), timestamp);
 
             _currentSamplePosition = currentSamplePosition + numScaledSamples + blankOrSkip;
             return true;

@@ -9,8 +9,8 @@ namespace InstantReplay
 {
     internal class PipelineTransformInput<TIn, TOut> : IPipelineInput<TIn>
     {
-        private readonly IPipelineTransform<TIn, TOut> _pipelineTransform;
         private readonly IPipelineInput<TOut> _next;
+        private readonly IPipelineTransform<TIn, TOut> _pipelineTransform;
 
         public PipelineTransformInput(IPipelineTransform<TIn, TOut> pipelineTransform, IPipelineInput<TOut> next)
         {
@@ -18,10 +18,11 @@ namespace InstantReplay
             _next = next;
         }
 
-        public ValueTask PushAsync(TIn value)
+        public void Push(TIn value)
         {
-            if (!_pipelineTransform.Transform(value, out var output)) return default;
-            return _next.PushAsync(output);
+            if (!_pipelineTransform.Transform(value, out var output)) return;
+
+            _next.Push(output);
         }
 
         public ValueTask CompleteAsync(Exception exception = null)

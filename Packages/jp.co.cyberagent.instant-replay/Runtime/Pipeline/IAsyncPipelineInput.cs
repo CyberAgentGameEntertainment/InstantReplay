@@ -8,17 +8,18 @@ using System.Threading.Tasks;
 namespace InstantReplay
 {
     /// <summary>
-    ///     Represents single pipeline element mainly for use in data flow without back-pressure.
-    ///     <seealso cref="IAsyncPipelineInput{T}" />
+    ///     Represents single pipeline element mainly for use in data flow where back-pressure occurs.
+    ///     <seealso cref="IPipelineInput{T}" />
     /// </summary>
     /// <typeparam name="T"></typeparam>
-    internal interface IPipelineInput<in T> : IDisposable
+    internal interface IAsyncPipelineInput<in T> : IDisposable
     {
         /// <summary>
         ///     Pushes a value to the input. This should be completed immediately.
         /// </summary>
         /// <param name="value"></param>
-        void Push(T value);
+        /// <returns></returns>
+        ValueTask PushAsync(T value);
 
         ValueTask CompleteAsync(Exception exception = null);
     }

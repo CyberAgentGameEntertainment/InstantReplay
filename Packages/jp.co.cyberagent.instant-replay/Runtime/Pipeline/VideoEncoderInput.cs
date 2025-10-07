@@ -9,18 +9,18 @@ using UnityEngine;
 
 namespace InstantReplay
 {
-    internal class VideoEncoderInput : IPipelineInput<LazyVideoFrameData>
+    internal class VideoEncoderInput : IAsyncPipelineInput<LazyVideoFrameData>
     {
         private readonly VideoEncoder _videoEncoder;
         private readonly Task _transferTask;
 
-        internal VideoEncoderInput(VideoEncoder videoEncoder, IPipelineInput<EncodedFrame> next)
+        internal VideoEncoderInput(VideoEncoder videoEncoder, IAsyncPipelineInput<EncodedFrame> next)
         {
             _videoEncoder = videoEncoder ?? throw new ArgumentNullException(nameof(videoEncoder));
             _transferTask = TransferAsync(next);
         }
 
-        private async Task TransferAsync(IPipelineInput<EncodedFrame> next)
+        private async Task TransferAsync(IAsyncPipelineInput<EncodedFrame> next)
         {
             try
             {

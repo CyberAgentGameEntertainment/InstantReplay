@@ -8,7 +8,7 @@ using UniEnc;
 
 namespace InstantReplay
 {
-    internal class BoundedEncodedDataBufferVideoInput : IBlockingPipelineInput<EncodedFrame>
+    internal class BoundedEncodedDataBufferVideoInput : IPipelineInput<EncodedFrame>
     {
         private readonly BoundedEncodedFrameBuffer _buffer;
 
@@ -20,9 +20,7 @@ namespace InstantReplay
         public void Push(EncodedFrame value)
         {
             if (!_buffer.TryAddVideoFrame(value))
-            {
                 value.Dispose();
-            }
         }
 
         public ValueTask CompleteAsync(Exception exception = null)

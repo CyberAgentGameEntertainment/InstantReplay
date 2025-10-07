@@ -9,28 +9,28 @@ namespace InstantReplay
 {
     internal static class PipelineExtensions
     {
-        public static IPipelineInput<TIn> AsInput<TIn, TOut>(this IPipelineTransform<TIn, TOut> transform,
-            IPipelineInput<TOut> next)
+        public static IAsyncPipelineInput<TIn> AsAsyncInput<TIn, TOut>(this IPipelineTransform<TIn, TOut> transform,
+            IAsyncPipelineInput<TOut> next)
+        {
+            return new AsyncPipelineTransformInput<TIn, TOut>(transform, next);
+        }
+
+        public static IPipelineInput<TIn> AsInput<TIn, TOut>(
+            this IPipelineTransform<TIn, TOut> transform, IPipelineInput<TOut> next)
         {
             return new PipelineTransformInput<TIn, TOut>(transform, next);
         }
 
-        public static IBlockingPipelineInput<TIn> AsBlockingInput<TIn, TOut>(
-            this IPipelineTransform<TIn, TOut> transform, IBlockingPipelineInput<TOut> next)
+        public static IAsyncPipelineInput<T> AsNonBlocking<T>(this IPipelineInput<T> source)
         {
-            return new BlockingPipelineTransformInput<TIn, TOut>(transform, next);
+            return new NonBlockingAsyncPipelineInput<T>(source);
         }
 
-        public static IPipelineInput<T> AsNonBlocking<T>(this IBlockingPipelineInput<T> source)
+        private class NonBlockingAsyncPipelineInput<T> : IAsyncPipelineInput<T>
         {
-            return new NonBlockingPipelineInput<T>(source);
-        }
+            private readonly IPipelineInput<T> _source;
 
-        private class NonBlockingPipelineInput<T> : IPipelineInput<T>
-        {
-            private readonly IBlockingPipelineInput<T> _source;
-
-            public NonBlockingPipelineInput(IBlockingPipelineInput<T> source)
+            public NonBlockingAsyncPipelineInput(IPipelineInput<T> source)
             {
                 _source = source;
             }

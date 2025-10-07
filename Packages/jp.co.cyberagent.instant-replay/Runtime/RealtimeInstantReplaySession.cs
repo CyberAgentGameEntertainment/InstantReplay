@@ -64,7 +64,7 @@ namespace InstantReplay
 
             _videoPipeline = new FrameProviderSubscription(frameProvider, disposeFrameProvider,
                 new VideoTemporalAdjuster<IFrameProvider.Frame>(_temporalController, fixedFrameInterval)
-                    .AsBlockingInput(
+                    .AsInput(
                         new FramePreprocessorInput(
                             FramePreprocessor.WithFixedSize(
                                 (int)options.VideoOptions.Width,
@@ -75,9 +75,21 @@ namespace InstantReplay
                                     new Vector4(1, 0, 0, 0),
                                     new Vector4(0, 0, 0, 1)
                                 ),
-                                true)).AsBlockingInput(
-                            new AsyncGPUReadbackTransform().AsBlockingInput(
+                                true)).AsInput(
+                            new AsyncGPUReadbackTransform().AsInput(
                                 new DroppingChannelInput<LazyVideoFrameData>(options.VideoInputQueueSize,
+                                    async static dropped =>
+                                    {
+                                        try
+                                        {
+                                            Debug.LogWarning("Dropped video frame due to full queue.");
+                                            using var _ = await dropped.ReadbackTask;
+                                        }
+                                        catch (Exception ex)
+                                        {
+                                            Debug.LogException(ex);
+                                        }
+                                    },
                                     new VideoEncoderInput(videoEncoder,
                                         new BoundedEncodedDataBufferVideoInput(buffer).AsNonBlocking())))))
             );
@@ -85,8 +97,13 @@ namespace InstantReplay
             _audioPipeline = new AudioSampleProviderSubscription(audioSampleProvider, disposeAudioSampleProvider,
                 new AudioTemporalAdjuster(_temporalController, options.AudioOptions.SampleRate,
                         options.AudioOptions.Channels)
-                    .AsBlockingInput(
-                        new DroppingChannelInput<AudioFrameData>(options.AudioInputQueueSize,
+                    .AsInput(
+                        new DroppingChannelInput<PcmAudioFrame>(options.AudioInputQueueSize,
+                            static dropped =>
+                            {
+                                Debug.LogWarning("Dropped audio frame due to full queue.");
+                                dropped.Dispose();
+                            },
                             new AudioEncoderInput(audioEncoder, options.AudioOptions.SampleRate,
                                 new BoundedEncodedDataBufferAudioInput(buffer).AsNonBlocking()))));
 
@@ -108,14 +125,12 @@ namespace InstantReplay
         {
             lock (_lock)
             {
-                if (!_disposed)
-                {
-                    _disposed = true;
-                    _videoPipeline.Dispose();
-                    _audioPipeline.Dispose();
-                    _encodingSystem.Dispose();
-                    _buffer.Dispose();
-                }
+                if (_disposed) return;
+                _disposed = true;
+                _videoPipeline.Dispose();
+                _audioPipeline.Dispose();
+                _encodingSystem.Dispose();
+                _buffer.Dispose();
             }
         }
 

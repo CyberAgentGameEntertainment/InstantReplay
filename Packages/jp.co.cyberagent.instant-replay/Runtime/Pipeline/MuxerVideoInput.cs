@@ -8,7 +8,7 @@ using UniEnc;
 
 namespace InstantReplay
 {
-    internal class MuxerVideoInput : IPipelineInput<EncodedFrame>
+    internal class MuxerVideoInput : IAsyncPipelineInput<EncodedFrame>
     {
         private readonly Muxer _muxer;
 

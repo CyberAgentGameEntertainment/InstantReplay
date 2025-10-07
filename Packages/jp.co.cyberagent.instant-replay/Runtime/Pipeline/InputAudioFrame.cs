@@ -6,7 +6,7 @@ using System;
 
 namespace InstantReplay
 {
-    internal readonly unsafe struct AudioInputData
+    internal readonly unsafe struct InputAudioFrame
     {
         internal ReadOnlySpan<float> UnsafeSamples => new(Samples, NumSamples);
         private float* Samples { get; }
@@ -15,7 +15,7 @@ namespace InstantReplay
         public int SampleRate { get; }
         public double Timestamp { get; }
 
-        public AudioInputData(float* samples, int numSamples, int channels, int sampleRate, double timestamp)
+        public InputAudioFrame(float* samples, int numSamples, int channels, int sampleRate, double timestamp)
         {
             Samples = samples;
             NumSamples = numSamples;

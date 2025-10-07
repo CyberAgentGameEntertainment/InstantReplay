@@ -9,13 +9,13 @@ namespace InstantReplay
 {
     internal class AudioSampleProviderSubscription
     {
-        private readonly IAudioSampleProvider _provider;
         private readonly bool _disposeProvider;
-        private readonly IBlockingPipelineInput<AudioInputData> _next;
+        private readonly IPipelineInput<InputAudioFrame> _next;
+        private readonly IAudioSampleProvider _provider;
         private IAudioSampleProvider.ProvideAudioSamples _delegate;
 
         public AudioSampleProviderSubscription(IAudioSampleProvider provider, bool disposeProvider,
-            IBlockingPipelineInput<AudioInputData> next)
+            IPipelineInput<InputAudioFrame> next)
         {
             _provider = provider;
             _disposeProvider = disposeProvider;
@@ -26,19 +26,17 @@ namespace InstantReplay
                 {
                     fixed (float* samplesPtr = samples)
                     {
-                        next.Push(new AudioInputData(samplesPtr, samples.Length, channels, sampleRate, timestamp));   
+                        next.Push(new InputAudioFrame(samplesPtr, samples.Length, channels, sampleRate, timestamp));
                     }
                 }
             };
         }
-        
+
         private void Unregister()
         {
             var current = Interlocked.Exchange(ref _delegate, null);
             if (current != null)
-            {
                 _provider.OnProvideAudioSamples -= current;
-            }
         }
 
         public ValueTask CompleteAsync()
@@ -52,9 +50,7 @@ namespace InstantReplay
             Unregister();
 
             if (_disposeProvider)
-            {
                 _provider.Dispose();
-            }
 
             _next?.Dispose();
         }

@@ -9,50 +9,21 @@ using UnityEngine;
 
 namespace InstantReplay
 {
-    internal class AudioEncoderInput : IPipelineInput<AudioFrameData>
+    internal class AudioEncoderInput : IAsyncPipelineInput<PcmAudioFrame>
     {
         private readonly AudioEncoder _audioEncoder;
         private readonly double _sampleRateInOptions;
         private readonly Task _transferTask;
 
-        internal AudioEncoderInput(AudioEncoder audioEncoder, double sampleRateInOptions, IPipelineInput<EncodedFrame> next)
+        internal AudioEncoderInput(AudioEncoder audioEncoder, double sampleRateInOptions,
+            IAsyncPipelineInput<EncodedFrame> next)
         {
             _audioEncoder = audioEncoder ?? throw new ArgumentNullException(nameof(audioEncoder));
             _sampleRateInOptions = sampleRateInOptions;
             _transferTask = TransferAsync(next);
         }
 
-        private async Task TransferAsync(IPipelineInput<EncodedFrame> next)
-        {
-            try
-            {
-                try
-                {
-                    do
-                    {
-                        // Try to pull encoded frame
-                        var encodedFrame = await _audioEncoder.PullFrameAsync().ConfigureAwait(false);
-
-                        if (encodedFrame.Data.IsEmpty)
-                            // end
-                            return;
-
-                        await next.PushAsync(encodedFrame);
-
-                    } while (true);
-                }
-                finally
-                {
-                    await next.CompleteAsync();
-                }
-            }
-            catch (Exception ex)
-            {
-                Debug.LogException(ex);
-            }
-        }
-
-        public async ValueTask PushAsync(AudioFrameData value)
+        public async ValueTask PushAsync(PcmAudioFrame value)
         {
             using var _ = value;
 
@@ -80,6 +51,35 @@ namespace InstantReplay
         public void Dispose()
         {
             _audioEncoder?.Dispose();
+        }
+
+        private async Task TransferAsync(IAsyncPipelineInput<EncodedFrame> next)
+        {
+            try
+            {
+                try
+                {
+                    do
+                    {
+                        // Try to pull encoded frame
+                        var encodedFrame = await _audioEncoder.PullFrameAsync().ConfigureAwait(false);
+
+                        if (encodedFrame.Data.IsEmpty)
+                            // end
+                            return;
+
+                        await next.PushAsync(encodedFrame);
+                    } while (true);
+                }
+                finally
+                {
+                    await next.CompleteAsync();
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.LogException(ex);
+            }
         }
     }
 }

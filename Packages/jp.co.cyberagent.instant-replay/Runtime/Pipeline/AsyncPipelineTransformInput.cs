@@ -7,22 +7,22 @@ using System.Threading.Tasks;
 
 namespace InstantReplay
 {
-    internal class BlockingPipelineTransformInput<TIn, TOut> : IBlockingPipelineInput<TIn>
+    internal class AsyncPipelineTransformInput<TIn, TOut> : IAsyncPipelineInput<TIn>
     {
+        private readonly IAsyncPipelineInput<TOut> _next;
         private readonly IPipelineTransform<TIn, TOut> _pipelineTransform;
-        private readonly IBlockingPipelineInput<TOut> _next;
 
-        public BlockingPipelineTransformInput(IPipelineTransform<TIn, TOut> pipelineTransform, IBlockingPipelineInput<TOut> next)
+        public AsyncPipelineTransformInput(IPipelineTransform<TIn, TOut> pipelineTransform,
+            IAsyncPipelineInput<TOut> next)
         {
             _pipelineTransform = pipelineTransform;
             _next = next;
         }
 
-        public void Push(TIn value)
+        public ValueTask PushAsync(TIn value)
         {
-            if (!_pipelineTransform.Transform(value, out var output)) return;
-            
-            _next.Push(output);
+            if (!_pipelineTransform.Transform(value, out var output)) return default;
+            return _next.PushAsync(output);
         }
 
         public ValueTask CompleteAsync(Exception exception = null)
@@ -34,6 +34,6 @@ namespace InstantReplay
         {
             _pipelineTransform?.Dispose();
             _next?.Dispose();
-        }   
+        }
     }
 }

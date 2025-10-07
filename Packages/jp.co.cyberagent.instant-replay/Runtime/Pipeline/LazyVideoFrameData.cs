@@ -12,7 +12,7 @@ namespace InstantReplay
     /// <summary>
     ///     Represents video frame data for processing.
     /// </summary>
-    internal readonly struct LazyVideoFrameData : IDisposable
+    internal readonly struct LazyVideoFrameData
     {
         public readonly ValueTask<NativeArray<byte>> ReadbackTask;
         public readonly int Width;
@@ -25,18 +25,6 @@ namespace InstantReplay
             Width = width;
             Height = height;
             Timestamp = timestamp;
-        }
-
-        public async void Dispose()
-        {
-            try
-            {
-                using var _ = await ReadbackTask;
-            }
-            catch (Exception ex)
-            {
-                Debug.LogException(ex);
-            }
         }
     }
 }

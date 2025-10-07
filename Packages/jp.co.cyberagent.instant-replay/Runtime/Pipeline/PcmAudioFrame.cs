@@ -10,13 +10,13 @@ namespace InstantReplay
     /// <summary>
     ///     Represents audio frame data for processing.
     /// </summary>
-    internal readonly struct AudioFrameData : IDisposable
+    internal readonly struct PcmAudioFrame : IDisposable
     {
         private readonly short[] _array; // Rented from ArrayPool
         public readonly ReadOnlyMemory<short> Data;
         public readonly double Timestamp;
 
-        public AudioFrameData(short[] rendArray, ReadOnlyMemory<short> data, double timestamp)
+        public PcmAudioFrame(short[] rendArray, ReadOnlyMemory<short> data, double timestamp)
         {
             _array = rendArray;
             Data = data;
@@ -26,9 +26,7 @@ namespace InstantReplay
         public void Dispose()
         {
             if (_array != null)
-            {
                 ArrayPool<short>.Shared.Return(_array);
-            }
         }
     }
 }
