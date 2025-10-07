@@ -25,13 +25,14 @@ namespace InstantReplay
         {
             public Texture Texture { get; }
             public double Timestamp { get; set; }
-            public bool NeedFlipVertically { get; }
+            [Obsolete] public bool NeedFlipVertically => DataStartsAtTop;
+            public bool DataStartsAtTop { get; }
 
-            public Frame(Texture texture, double timestamp, bool needFlipVertically = false)
+            public Frame(Texture texture, double timestamp, bool dataStartsAtTop = false)
             {
                 Texture = texture;
                 Timestamp = timestamp;
-                NeedFlipVertically = needFlipVertically;
+                DataStartsAtTop = dataStartsAtTop;
             }
         }
     }

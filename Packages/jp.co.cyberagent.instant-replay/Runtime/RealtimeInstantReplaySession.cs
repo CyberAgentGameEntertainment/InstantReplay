@@ -74,8 +74,7 @@ namespace InstantReplay
                                     new Vector4(0, 1, 0, 0),
                                     new Vector4(1, 0, 0, 0),
                                     new Vector4(0, 0, 0, 1)
-                                ),
-                                true)).AsInput(
+                                )), true).AsInput(
                             new AsyncGPUReadbackTransform().AsInput(
                                 new DroppingChannelInput<LazyVideoFrameData>(options.VideoInputQueueSize,
                                     async static dropped =>
