@@ -1,3 +1,9 @@
+## [1.1.1] - 2025/10/10
+
+### Fixed
+
+- Fixed `CriAudioSampleProvider` fails if `CriWareInitializer` configures output sample rate with default value.
+
 ## [1.1.0] - 2025/10/07
 
 ### Added
@@ -7,7 +13,6 @@
 ### Changed
 
 - Reduced heap allocations by frames.
-
 
 ## [1.0.3] - 2025/09/24
 
