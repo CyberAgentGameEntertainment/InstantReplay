@@ -38,7 +38,13 @@ namespace InstantReplay
             _receiver.OnProvideAudioSamples -= OnListenerProvideAudioSamples;
             var receiver = _receiver;
             _receiver = null;
-            _synchronization.Post(_ => { Object.Destroy(receiver); }, null);
+            _synchronization.Post(_ =>
+            {
+                if (receiver)
+                {
+                    Object.Destroy(receiver);
+                }
+            }, null);
         }
 
         private static AudioListener SelectAudioListener()
