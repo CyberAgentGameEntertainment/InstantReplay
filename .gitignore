@@ -83,3 +83,5 @@ Assets/Plugins/Editor/JetBrains*
 ProjectSettings/RiderScriptEditorPersistedState.asset
 /Assets/Packages
 Assets/Packages.meta
+/Assets/Cri*
+/Assets/StreamingAssets*
