@@ -15,20 +15,18 @@ namespace InstantReplay
         private static readonly int ScaleAndTiling = Shader.PropertyToID("_ScaleAndTiling");
         private static readonly int Rechannel = Shader.PropertyToID("_Rechannel");
         private readonly int? _fixedHeight;
-        private readonly bool _defaultFlip;
         private readonly int? _fixedWidth;
         private readonly int? _maxHeight;
         private readonly int? _maxWidth;
         private Material _material;
 
         private FramePreprocessor(int? maxWidth, int? maxHeight, int? fixedWidth, int? fixedHeight,
-            Matrix4x4 rechannelMatrix, bool defaultFlip)
+            Matrix4x4 rechannelMatrix)
         {
             _maxWidth = maxWidth;
             _maxHeight = maxHeight;
             _fixedWidth = fixedWidth;
             _fixedHeight = fixedHeight;
-            _defaultFlip = defaultFlip;
             var shader = Resources.Load<Shader>("InstantReplayPreprocess");
             if (shader == null)
                 throw new InvalidOperationException("Shader 'InstantReplayPreprocess' not found in Resources.");
@@ -43,29 +41,35 @@ namespace InstantReplay
         {
             if (Output)
             {
-                Object.Destroy(Output);
+                if (Application.isPlaying)
+                    Object.Destroy(Output);
+                else
+                    Object.DestroyImmediate(Output);
                 Output = default;
             }
 
             if (_material)
             {
-                Object.Destroy(_material);
+                if (Application.isPlaying)
+                    Object.Destroy(_material);
+                else
+                    Object.DestroyImmediate(_material);
                 _material = default;
             }
         }
 
-        public static FramePreprocessor WithMaxSize(int? maxWidth, int? maxHeight, Matrix4x4 rechannelMatrix, bool defaultFlip = false)
+        public static FramePreprocessor WithMaxSize(int? maxWidth, int? maxHeight, Matrix4x4 rechannelMatrix)
         {
             if (maxWidth is <= 0 || maxHeight is <= 0)
                 throw new ArgumentException("Max width and height must be greater than zero.");
-            return new FramePreprocessor(maxWidth, maxHeight, null, null, rechannelMatrix, defaultFlip);
+            return new FramePreprocessor(maxWidth, maxHeight, null, null, rechannelMatrix);
         }
 
-        public static FramePreprocessor WithFixedSize(int fixedWidth, int fixedHeight, Matrix4x4 rechannelMatrix, bool defaultFlip = false)
+        public static FramePreprocessor WithFixedSize(int fixedWidth, int fixedHeight, Matrix4x4 rechannelMatrix)
         {
             if (fixedWidth <= 0 || fixedHeight <= 0)
                 throw new ArgumentException("Fixed width and height must be greater than zero.");
-            return new FramePreprocessor(null, null, fixedWidth, fixedHeight, rechannelMatrix, defaultFlip);
+            return new FramePreprocessor(null, null, fixedWidth, fixedHeight, rechannelMatrix);
         }
 
         public RenderTexture Process(Texture source, bool needFlipVertically)
@@ -102,7 +106,7 @@ namespace InstantReplay
             // Debug.Log($"source: {source.width}x{source.height}, dest: {width}x{height}, pixelScale: {pixelScale}, renderScale: {renderScale.x}x{renderScale.y}, needFlipVertically: {needFlipVertically}");
 
             var active = RenderTexture.active;
-            if (needFlipVertically ^ _defaultFlip)
+            if (needFlipVertically)
                 _material.SetVector(ScaleAndTiling, new Vector4(1f / renderScale.x, -1f / renderScale.y, 0f, 1f));
             else
                 _material.SetVector(ScaleAndTiling, new Vector4(1f / renderScale.x, 1f / renderScale.y, 0f, 0f));
