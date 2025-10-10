@@ -43,7 +43,15 @@ namespace InstantReplay.Cri
             {
                 var initializer = Object.FindObjectOfType<CriWareInitializer>();
                 if (initializer)
+                {
                     sampleRate = initializer.atomConfig.outputSamplingRate;
+                    // If the sampling rate is 0, CRI defaults to 48000.
+                    // See: https://game.criware.jp/manual/unity_plugin/latest/contents/cri4u_component_initializer.html
+                    if (sampleRate == 0)
+                    {
+                        sampleRate = 48000;
+                    }
+                }
                 else
                     try
                     {
