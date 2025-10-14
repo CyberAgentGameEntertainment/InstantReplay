@@ -3,21 +3,20 @@
 // --------------------------------------------------------------
 
 using System;
-using System.Diagnostics;
-using System.Threading.Tasks;
+using UnityEngine;
 
 namespace InstantReplay
 {
     internal class VideoTemporalAdjuster<T> : IPipelineTransform<T, T> where T : struct, IDiscreteTemporalData
     {
+        private const double AllowedLag = 0.1;
+        private readonly double? _fixedFrameInterval;
         private readonly IRecordingTimeProvider _recordingTimeProvider;
         private bool _disposed;
-        private double _prevFrameTime;
-        private readonly double? _fixedFrameInterval;
         private double _frameTimer;
+        private double _prevFrameTime;
         private double? _videoTimeDifference;
-        private const double AllowedLag = 0.1;
-        
+
         public VideoTemporalAdjuster(IRecordingTimeProvider recordingTimeProvider, double? fixedFrameInterval)
         {
             _recordingTimeProvider = recordingTimeProvider;
@@ -32,7 +31,7 @@ namespace InstantReplay
 
             if (_disposed || _recordingTimeProvider.IsPaused)
                 return false;
-            
+
             var time = input.Timestamp;
 
             var deltaTime = time - _prevFrameTime;
@@ -60,7 +59,7 @@ namespace InstantReplay
                 var diff = time - expectedTime;
                 if (Math.Abs(diff) >= AllowedLag)
                 {
-                    UnityEngine.Debug.LogWarning(
+                    Debug.LogWarning(
                         "Video timestamp adjusted. The timestamp IFrameProvider provided may not be realtime.");
                     _videoTimeDifference = time - realTime;
                     time = realTime;
@@ -70,7 +69,7 @@ namespace InstantReplay
                     time -= _videoTimeDifference.Value;
                 }
             }
-            
+
             time -= _recordingTimeProvider.TotalPausedDuration;
             output = input;
             output.Timestamp = time;

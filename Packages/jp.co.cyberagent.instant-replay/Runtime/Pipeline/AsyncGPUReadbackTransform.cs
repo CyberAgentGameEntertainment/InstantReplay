@@ -2,8 +2,6 @@
 // Copyright 2025 CyberAgent, Inc.
 // --------------------------------------------------------------
 
-using System.Threading.Tasks;
-
 namespace InstantReplay
 {
     internal class AsyncGPUReadbackTransform : IPipelineTransform<IFrameProvider.Frame, LazyVideoFrameData>

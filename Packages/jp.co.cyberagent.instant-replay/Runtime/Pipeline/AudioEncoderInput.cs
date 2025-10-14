@@ -57,28 +57,33 @@ namespace InstantReplay
         {
             try
             {
-                try
-                {
-                    do
-                    {
-                        // Try to pull encoded frame
-                        var encodedFrame = await _audioEncoder.PullFrameAsync().ConfigureAwait(false);
-
-                        if (encodedFrame.Data.IsEmpty)
-                            // end
-                            return;
-
-                        await next.PushAsync(encodedFrame);
-                    } while (true);
-                }
-                finally
-                {
-                    await next.CompleteAsync();
-                }
+                await TransformAsyncCore(next);
             }
             catch (Exception ex)
             {
                 Debug.LogException(ex);
+            }
+        }
+
+        private async Task TransformAsyncCore(IAsyncPipelineInput<EncodedFrame> next)
+        {
+            try
+            {
+                do
+                {
+                    // Try to pull encoded frame
+                    var encodedFrame = await _audioEncoder.PullFrameAsync().ConfigureAwait(false);
+
+                    if (encodedFrame.Data.IsEmpty)
+                        // end
+                        return;
+
+                    await next.PushAsync(encodedFrame);
+                } while (true);
+            }
+            finally
+            {
+                await next.CompleteAsync();
             }
         }
     }

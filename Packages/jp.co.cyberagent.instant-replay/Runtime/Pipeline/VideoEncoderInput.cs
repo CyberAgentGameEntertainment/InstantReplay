@@ -11,51 +11,13 @@ namespace InstantReplay
 {
     internal class VideoEncoderInput : IAsyncPipelineInput<LazyVideoFrameData>
     {
-        private readonly VideoEncoder _videoEncoder;
         private readonly Task _transferTask;
+        private readonly VideoEncoder _videoEncoder;
 
         internal VideoEncoderInput(VideoEncoder videoEncoder, IAsyncPipelineInput<EncodedFrame> next)
         {
             _videoEncoder = videoEncoder ?? throw new ArgumentNullException(nameof(videoEncoder));
             _transferTask = TransferAsync(next);
-        }
-
-        private async Task TransferAsync(IAsyncPipelineInput<EncodedFrame> next)
-        {
-            try
-            {
-                try
-                {
-                    do
-                    {
-                        // Try to pull encoded frame
-                        var encodedFrame = await _videoEncoder.PullFrameAsync().ConfigureAwait(false);
-
-                        if (encodedFrame.Data.IsEmpty)
-                            // end
-                            return;
-
-                        try
-                        {
-                            await next.PushAsync(encodedFrame);
-                        }
-                        catch
-                        {
-                            encodedFrame.Dispose();
-                            throw;
-                        }
-
-                    } while (true);
-                }
-                finally
-                {
-                    await next.CompleteAsync();
-                }
-            }
-            catch (Exception ex)
-            {
-                Debug.LogException(ex);
-            }
         }
 
         public async ValueTask PushAsync(LazyVideoFrameData value)
@@ -84,6 +46,48 @@ namespace InstantReplay
         public void Dispose()
         {
             _videoEncoder?.Dispose();
+        }
+
+        private async Task TransferAsync(IAsyncPipelineInput<EncodedFrame> next)
+        {
+            try
+            {
+                await TransferAsyncCore(next);
+            }
+            catch (Exception ex)
+            {
+                Debug.LogException(ex);
+            }
+        }
+
+        private async Task TransferAsyncCore(IAsyncPipelineInput<EncodedFrame> next)
+        {
+            try
+            {
+                do
+                {
+                    // Try to pull encoded frame
+                    var encodedFrame = await _videoEncoder.PullFrameAsync().ConfigureAwait(false);
+
+                    if (encodedFrame.Data.IsEmpty)
+                        // end
+                        return;
+
+                    try
+                    {
+                        await next.PushAsync(encodedFrame);
+                    }
+                    catch
+                    {
+                        encodedFrame.Dispose();
+                        throw;
+                    }
+                } while (true);
+            }
+            finally
+            {
+                await next.CompleteAsync();
+            }
         }
     }
 }

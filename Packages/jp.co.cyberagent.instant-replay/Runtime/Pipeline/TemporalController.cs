@@ -9,10 +9,10 @@ namespace InstantReplay
     internal class TemporalController : IRecordingTimeProvider
     {
         private readonly object _lock = new();
-        double IRecordingTimeProvider.Now => (double)Stopwatch.GetTimestamp() / Stopwatch.Frequency;
-        public bool IsPaused { get; private set; } = true;
         private double _pauseStartTime;
         private double _totalPausedDuration;
+        double IRecordingTimeProvider.Now => (double)Stopwatch.GetTimestamp() / Stopwatch.Frequency;
+        public bool IsPaused { get; private set; } = true;
 
         double IRecordingTimeProvider.TotalPausedDuration => _totalPausedDuration;
 

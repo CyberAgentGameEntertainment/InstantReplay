@@ -20,9 +20,7 @@ namespace InstantReplay
         public void Push(EncodedFrame value)
         {
             if (!_buffer.TryAddAudioFrame(value))
-            {
                 value.Dispose();
-            }
         }
 
         public ValueTask CompleteAsync(Exception exception = null)
