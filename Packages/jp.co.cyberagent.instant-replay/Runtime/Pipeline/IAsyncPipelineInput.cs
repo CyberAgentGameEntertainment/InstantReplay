@@ -21,6 +21,11 @@ namespace InstantReplay
         /// <returns></returns>
         ValueTask PushAsync(T value);
 
+        /// <summary>
+        ///     Marks the input as completed and waits for subsequent processing to finish.
+        /// </summary>
+        /// <param name="exception"></param>
+        /// <returns></returns>
         ValueTask CompleteAsync(Exception exception = null);
     }
 }
