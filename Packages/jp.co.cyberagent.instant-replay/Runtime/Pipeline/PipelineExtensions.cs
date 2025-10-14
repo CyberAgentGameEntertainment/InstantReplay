@@ -21,7 +21,7 @@ namespace InstantReplay
             return new PipelineTransformInput<TIn, TOut>(transform, next);
         }
 
-        public static IAsyncPipelineInput<T> AsNonBlocking<T>(this IPipelineInput<T> source)
+        public static IAsyncPipelineInput<T> AsAsync<T>(this IPipelineInput<T> source)
         {
             return new NonBlockingAsyncPipelineInput<T>(source);
         }

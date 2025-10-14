@@ -62,49 +62,55 @@ namespace InstantReplay
             var audioEncoder = encodingSystem.CreateAudioEncoder();
             var buffer = _buffer = new BoundedEncodedFrameBuffer(options.MaxMemoryUsageBytes);
 
+            var preprocessor = FramePreprocessor.WithFixedSize(
+                (int)options.VideoOptions.Width,
+                (int)options.VideoOptions.Height,
+                // RGBA to BGRA
+                new Matrix4x4(new Vector4(0, 0, 1, 0),
+                    new Vector4(0, 1, 0, 0),
+                    new Vector4(1, 0, 0, 0),
+                    new Vector4(0, 0, 0, 1)
+                ));
+
+            // ReSharper disable once ConvertToLocalFunction
+            Action<LazyVideoFrameData> onLazyVideoFrameDataDropped = async static dropped =>
+            {
+                try
+                {
+                    Debug.LogWarning("Dropped video frame due to full queue.");
+                    using var _ = await dropped.ReadbackTask;
+                }
+                catch (Exception ex)
+                {
+                    Debug.LogException(ex);
+                }
+            };
+
+            // ReSharper disable once ConvertToLocalFunction
+            Action<PcmAudioFrame> onPcmAudioFrameDropped = static dropped =>
+            {
+                Debug.LogWarning("Dropped audio frame due to full queue.");
+                dropped.Dispose();
+            };
+
             _videoPipeline = new FrameProviderSubscription(frameProvider, disposeFrameProvider,
-                new VideoTemporalAdjuster<IFrameProvider.Frame>(_temporalController, fixedFrameInterval)
-                    .AsInput(
-                        new FramePreprocessorInput(
-                            FramePreprocessor.WithFixedSize(
-                                (int)options.VideoOptions.Width,
-                                (int)options.VideoOptions.Height,
-                                // RGBA to BGRA
-                                new Matrix4x4(new Vector4(0, 0, 1, 0),
-                                    new Vector4(0, 1, 0, 0),
-                                    new Vector4(1, 0, 0, 0),
-                                    new Vector4(0, 0, 0, 1)
-                                )), true).AsInput(
-                            new AsyncGPUReadbackTransform().AsInput(
-                                new DroppingChannelInput<LazyVideoFrameData>(options.VideoInputQueueSize,
-                                    async static dropped =>
-                                    {
-                                        try
-                                        {
-                                            Debug.LogWarning("Dropped video frame due to full queue.");
-                                            using var _ = await dropped.ReadbackTask;
-                                        }
-                                        catch (Exception ex)
-                                        {
-                                            Debug.LogException(ex);
-                                        }
-                                    },
-                                    new VideoEncoderInput(videoEncoder,
-                                        new BoundedEncodedDataBufferVideoInput(buffer).AsNonBlocking())))))
-            );
+                new VideoTemporalAdjuster<IFrameProvider.Frame>(_temporalController, fixedFrameInterval).AsInput(
+                    new FramePreprocessorInput(preprocessor, true).AsInput(
+                        new AsyncGPUReadbackTransform().AsInput(
+                            new DroppingChannelInput<LazyVideoFrameData>(
+                                options.VideoInputQueueSize,
+                                onLazyVideoFrameDataDropped,
+                                new VideoEncoderInput(videoEncoder,
+                                    new BoundedEncodedDataBufferVideoInput(buffer).AsAsync()))))));
 
             _audioPipeline = new AudioSampleProviderSubscription(audioSampleProvider, disposeAudioSampleProvider,
-                new AudioTemporalAdjuster(_temporalController, options.AudioOptions.SampleRate,
-                        options.AudioOptions.Channels)
-                    .AsInput(
-                        new DroppingChannelInput<PcmAudioFrame>(options.AudioInputQueueSize,
-                            static dropped =>
-                            {
-                                Debug.LogWarning("Dropped audio frame due to full queue.");
-                                dropped.Dispose();
-                            },
-                            new AudioEncoderInput(audioEncoder, options.AudioOptions.SampleRate,
-                                new BoundedEncodedDataBufferAudioInput(buffer).AsNonBlocking()))));
+                new AudioTemporalAdjuster(
+                    _temporalController,
+                    options.AudioOptions.SampleRate,
+                    options.AudioOptions.Channels).AsInput(
+                    new DroppingChannelInput<PcmAudioFrame>(options.AudioInputQueueSize, onPcmAudioFrameDropped,
+                        new AudioEncoderInput(audioEncoder, options.AudioOptions.SampleRate,
+                            new BoundedEncodedDataBufferAudioInput(buffer).AsAsync()))));
 
             _temporalController.Resume();
             State = SessionState.Recording;
