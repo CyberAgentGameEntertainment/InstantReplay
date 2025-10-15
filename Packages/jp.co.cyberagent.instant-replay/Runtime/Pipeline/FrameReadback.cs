@@ -1,3 +1,7 @@
+// --------------------------------------------------------------
+// Copyright 2025 CyberAgent, Inc.
+// --------------------------------------------------------------
+
 using System;
 using System.Collections.Concurrent;
 using System.Threading.Tasks;
@@ -12,7 +16,7 @@ namespace InstantReplay
     /// <summary>
     ///     Handles GPU frame readback operations for realtime encoding.
     /// </summary>
-    internal static class RealtimeFrameReadback
+    internal static class FrameReadback
     {
         private static readonly Action<AsyncGPUReadbackRequest, ReadbackContext>
             OnAsyncGPUReadbackCompletedDelegate = OnAsyncGPUReadbackCompleted;
@@ -20,10 +24,10 @@ namespace InstantReplay
         /// <summary>
         ///     Reads back frame data from a RenderTexture asynchronously.
         /// </summary>
-        public static ValueTask<NativeArray<byte>> ReadbackFrameAsync(RenderTexture renderTexture)
+        public static ValueTask<NativeArray<byte>> ReadbackFrameAsync(Texture texture)
         {
-            if (renderTexture == null)
-                throw new ArgumentNullException(nameof(renderTexture));
+            if (texture == null)
+                throw new ArgumentNullException(nameof(texture));
 
             // Get pooled context for zero allocation
             var context = ReadbackContext.Rent();
@@ -31,17 +35,17 @@ namespace InstantReplay
             try
             {
                 // Check if format is supported
-                if (!SystemInfo.IsFormatSupported(renderTexture.graphicsFormat, FormatUsage.ReadPixels))
+                if (!SystemInfo.IsFormatSupported(texture.graphicsFormat, FormatUsage.ReadPixels))
                 {
                     context.SetException(
                         new ArgumentException(
-                            $"GraphicsFormat {renderTexture.graphicsFormat} not supported for readback"));
+                            $"GraphicsFormat {texture.graphicsFormat} not supported for readback"));
                     return context.Task;
                 }
 
                 // Calculate expected size
-                var size = GraphicsFormatUtility.ComputeMipmapSize(renderTexture.width, renderTexture.height,
-                    renderTexture.graphicsFormat);
+                var size = GraphicsFormatUtility.ComputeMipmapSize(texture.width, texture.height,
+                    texture.graphicsFormat);
                 var nativeArray = new NativeArray<byte>(checked((int)size), Allocator.Persistent,
                     NativeArrayOptions.UninitializedMemory);
 
@@ -53,7 +57,7 @@ namespace InstantReplay
                     OnAsyncGPUReadbackCompletedDelegate, context);
 
                 // Request asynchronous GPU readback
-                AsyncGPUReadback.RequestIntoNativeArray(ref nativeArray, renderTexture, 0, callback.Wrapper);
+                AsyncGPUReadback.RequestIntoNativeArray(ref nativeArray, texture, 0, callback.Wrapper);
             }
             catch (Exception ex)
             {

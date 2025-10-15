@@ -99,7 +99,7 @@ namespace InstantReplay
         {
             var texture = frame.Texture;
             var time = frame.Timestamp;
-            var needFlipVertically = frame.NeedFlipVertically;
+            var dataStartsAtTop = frame.DataStartsAtTop;
 
             var deltaTime = time - _prevFrameTime;
 
@@ -127,7 +127,7 @@ namespace InstantReplay
 
             Interlocked.Increment(ref _numBusySlots);
 
-            var renderTexture = _framePreprocessor.Process(texture, needFlipVertically);
+            var renderTexture = _framePreprocessor.Process(texture, dataStartsAtTop);
 
             // Notify the audio recorder to the old frames are discarded.
             if (slot._time > 0)
