@@ -1,6 +1,6 @@
 
 use unienc_common::{
-    AudioSample, CompletionHandle, EncodedData, Encoder, EncoderInput, EncoderOutput, EncodingSystem, Muxer, MuxerInput, VideoSample
+    buffer::SharedBuffer, AudioSample, CompletionHandle, EncodedData, Encoder, EncoderInput, EncoderOutput, EncodingSystem, Muxer, MuxerInput, VideoSample
 };
 
 use unienc::PlatformEncodingSystem;
@@ -49,8 +49,8 @@ async fn test_e2e_typed<T: EncodingSystem + Send>(encoding_system: T) {
             }
 
             video_input
-                .push(&VideoSample {
-                    data,
+                .push(VideoSample {
+                    buffer: SharedBuffer::new_unmanaged(data),
                     width: 1280,
                     height: 720,
                     timestamp: (i as f64) / 10.0 + 100.0,
@@ -75,7 +75,7 @@ async fn test_e2e_typed<T: EncodingSystem + Send>(encoding_system: T) {
             }
 
             audio_input
-                .push(&AudioSample {
+                .push(AudioSample {
                     data,
                     timestamp_in_samples: i * 48000,
                 })

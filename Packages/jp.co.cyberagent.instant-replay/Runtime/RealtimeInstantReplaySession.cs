@@ -60,7 +60,7 @@ namespace InstantReplay
             var encodingSystem = _encodingSystem = new EncodingSystem(options.VideoOptions, options.AudioOptions);
             var videoEncoder = encodingSystem.CreateVideoEncoder();
             var audioEncoder = encodingSystem.CreateAudioEncoder();
-            var buffer = _buffer = new BoundedEncodedFrameBuffer(options.MaxMemoryUsageBytes);
+            var buffer = _buffer = new BoundedEncodedFrameBuffer(options.MaxMemoryUsageBytesForCompressedFrames);
 
             var preprocessor = FramePreprocessor.WithFixedSize(
                 (int)options.VideoOptions.Width,
@@ -93,10 +93,16 @@ namespace InstantReplay
                 dropped.Dispose();
             };
 
+            var uncompressedLimit = options.MaxMemoryUsageBytesForUncompressedFrames switch
+            {
+                { } value => Math.Max(options.VideoOptions.Width * options.VideoOptions.Height * 4, value), // 32bpp
+                null => 0
+            };
+
             _videoPipeline = new FrameProviderSubscription(frameProvider, disposeFrameProvider,
                 new VideoTemporalAdjuster<IFrameProvider.Frame>(_temporalController, fixedFrameInterval).AsInput(
                     new FramePreprocessorInput(preprocessor, true).AsInput(
-                        new AsyncGPUReadbackTransform().AsInput(
+                        new AsyncGPUReadbackTransform(new SharedBufferPool((nuint)uncompressedLimit)).AsInput(
                             new DroppingChannelInput<LazyVideoFrameData>(
                                 options.VideoInputQueueSize,
                                 onLazyVideoFrameDataDropped,
@@ -160,7 +166,7 @@ namespace InstantReplay
                     Channels = 2,
                     Bitrate = 128000 // 128 kbps
                 },
-                MaxMemoryUsageBytes = 20 * 1024 * 1024, // 20 MiB
+                MaxMemoryUsageBytesForCompressedFrames = 20 * 1024 * 1024, // 20 MiB
                 FixedFrameRate = 30.0,
                 VideoInputQueueSize = 5,
                 AudioInputQueueSize = 60

@@ -43,7 +43,7 @@ pub unsafe extern "C" fn unienc_audio_encoder_push(
                 .ok_or(UniencError::resource_allocation_error("Resource is None"))
             {
                 Ok(input) => input
-                    .push(&sample)
+                    .push(sample)
                     .await
                     .context("Failed to push audio sample")
                     .map_err(UniencError::from_anyhow),

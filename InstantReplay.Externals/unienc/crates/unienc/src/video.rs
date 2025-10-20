@@ -2,7 +2,7 @@ use std::ffi::c_void;
 
 use anyhow::Context;
 use tokio::sync::Mutex;
-use unienc_common::{EncoderInput, EncoderOutput, VideoSample};
+use unienc_common::{buffer::SharedBuffer, EncoderInput, EncoderOutput, VideoSample};
 
 use crate::{
     arc_from_raw, arc_from_raw_retained,
@@ -15,8 +15,7 @@ use crate::{
 pub unsafe extern "C" fn unienc_video_encoder_push(
     runtime: *mut Runtime,
     input: SendPtr<Mutex<Option<VideoEncoderInput>>>,
-    data: SendPtr<u8>,
-    data_size: usize,
+    buffer: SendPtr<SharedBuffer>,
     width: u32,
     height: u32,
     timestamp: f64,
@@ -25,7 +24,7 @@ pub unsafe extern "C" fn unienc_video_encoder_push(
 ) {
     let _guard = (*runtime).enter();
     let callback: UniencCallback = std::mem::transmute(callback);
-    if input.is_null() || data.is_null() {
+    if input.is_null() || buffer.is_null() {
         UniencError::invalid_input_error("Invalid input parameters")
             .apply_callback(callback, user_data);
         return;
@@ -36,9 +35,9 @@ pub unsafe extern "C" fn unienc_video_encoder_push(
     unsafe {
         tokio::spawn(async move {
             let mut input = input.lock().await;
-            let data_slice = std::slice::from_raw_parts(*data, data_size);
+            let buffer = Box::from_raw(*buffer);
             let sample = VideoSample {
-                data: data_slice.to_vec(),
+                buffer: *buffer,
                 width,
                 height,
                 timestamp,
@@ -49,7 +48,7 @@ pub unsafe extern "C" fn unienc_video_encoder_push(
                 .ok_or(UniencError::resource_allocation_error("Resource is None"))
             {
                 Ok(input) => input
-                    .push(&sample)
+                    .push(sample)
                     .await
                     .context("Failed to push video sample")
                     .map_err(UniencError::from_anyhow),

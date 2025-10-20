@@ -2,7 +2,7 @@
 // Copyright 2025 CyberAgent, Inc.
 // --------------------------------------------------------------
 
-namespace UniEnc
+namespace UniEnc.Native
 {
     internal partial struct SendPtr
     {
@@ -31,6 +31,14 @@ namespace UniEnc
     {
     }
 
+    // opaque
+    internal struct SharedBuffer
+    {
+    }
+}
+
+namespace UniEnc
+{
     public enum DataKind : byte
     {
         Interpolated,

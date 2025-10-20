@@ -5,6 +5,10 @@ use std::path::Path;
 use anyhow::Result;
 use bincode::{Decode, Encode};
 
+use crate::buffer::SharedBuffer;
+
+pub mod buffer;
+
 pub trait Encoder {
     type InputType: EncoderInput + 'static;
     type OutputType: EncoderOutput + 'static;
@@ -71,9 +75,9 @@ pub trait AudioEncoderOptions: Clone + Copy {
     fn bitrate(&self) -> u32;
 }
 
-#[derive(Clone)]
+// #[derive(Clone)]
 pub struct VideoSample {
-    pub data: Vec<u8>, // BGRA32 input data
+    pub buffer: SharedBuffer, // BGRA32 input data
     pub width: u32,
     pub height: u32,
     pub timestamp: f64,
@@ -84,6 +88,7 @@ impl VideoSample {
         &self,
         padded_size: Option<(u32, u32)>,
     ) -> Result<(Vec<u8>, Vec<u8>, Vec<u8>)> {
+        let data = self.buffer.data();
         let w = padded_size.map_or(self.width, |(w, _)| w);
         let h = padded_size.map_or(self.height, |(_, h)| h);
         let padded_y_size = (w * h) as usize;
@@ -98,11 +103,9 @@ impl VideoSample {
         for y in 0..self.height {
             for x in 0..self.width {
                 let bgra_idx = ((y * self.width + x) * 4) as usize;
-                if bgra_idx >= self.data.len() {
-                }
-                let r = self.data[bgra_idx + 2] as i32;
-                let g = self.data[bgra_idx + 1] as i32;
-                let b = self.data[bgra_idx] as i32;
+                let r = data[bgra_idx + 2] as i32;
+                let g = data[bgra_idx + 1] as i32;
+                let b = data[bgra_idx] as i32;
 
                 let y_val = (((66 * r + 129 * g + 25 * b + 128) >> 8) + 16) as u8;
 
@@ -147,7 +150,7 @@ pub enum UniencDataKind {
 
 pub trait EncoderInput: Send + 'static {
     type Data: Send;
-    fn push(&mut self, data: &Self::Data) -> impl Future<Output = Result<()>> + Send;
+    fn push(&mut self, data: Self::Data) -> impl Future<Output = Result<()>> + Send;
 }
 
 pub trait EncoderOutput: Send {

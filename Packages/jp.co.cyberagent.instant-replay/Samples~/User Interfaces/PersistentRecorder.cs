@@ -90,7 +90,7 @@ namespace InstantReplay.Examples
                     SampleRate = (uint)AudioSettings.outputSampleRate,
                     Bitrate = 128000
                 },
-                MaxMemoryUsageBytes = maxMemoryUsageMb * 1024 * 1024, // 20 MiB
+                MaxMemoryUsageBytesForCompressedFrames = maxMemoryUsageMb * 1024 * 1024, // 20 MiB
                 FixedFrameRate = 30.0, // null if not using fixed frame rate
                 VideoInputQueueSize = 5, // Maximum number of raw frames to keep before encoding
                 AudioInputQueueSize = 60 // Maximum number of raw audio sample frames to keep before encoding

@@ -6,7 +6,6 @@ using System.Threading;
 using System.Threading.Channels;
 using System.Threading.Tasks;
 using UniEnc;
-using Unity.Collections;
 using UnityEngine;
 
 namespace InstantReplay
@@ -16,13 +15,14 @@ namespace InstantReplay
         private readonly AudioEncoder _audioEncoder;
         private readonly int _channels;
         private readonly EncodingSystem _encodingSystem;
-        private readonly ChannelWriter<Task<(NativeArray<byte>, nint, nint, double)>> _jpegDecoderWriter;
+        private readonly ChannelWriter<Task<(SharedBuffer, nint, nint, double)>> _jpegDecoderWriter;
         private readonly Task _muxAudioTask;
         private readonly Muxer _muxer;
         private readonly Task _muxVideoTask;
         private readonly VideoEncoder _videoEncoder;
         private ulong _audioTimestampInSamples;
         private int _disposed;
+        private readonly SharedBufferPool _sharedBufferPool;
 
         public UniEncTranscoder(int width, int height, int sampleRate, int channels, string outputFilename)
         {
@@ -46,6 +46,7 @@ namespace InstantReplay
             _videoEncoder = _encodingSystem.CreateVideoEncoder();
             _audioEncoder = _encodingSystem.CreateAudioEncoder();
             _muxer = _encodingSystem.CreateMuxer(outputFilename);
+            _sharedBufferPool = new SharedBufferPool(0);
 
             _muxVideoTask = Task.Run(async () =>
             {
@@ -102,7 +103,7 @@ namespace InstantReplay
             // jpeg decoder channel
             ThreadPool.GetMinThreads(out var numWorkerThread, out _);
 
-            var channel = Channel.CreateBounded<Task<(NativeArray<byte>, nint, nint, double)>>(
+            var channel = Channel.CreateBounded<Task<(SharedBuffer, nint, nint, double)>>(
                 new BoundedChannelOptions(numWorkerThread)
                 {
                     FullMode = BoundedChannelFullMode.Wait,
@@ -128,7 +129,8 @@ namespace InstantReplay
                                 using (data)
                                 {
                                     if (exception == null)
-                                        await _videoEncoder.PushFrameAsync(data, (uint)width, (uint)height, timestamp);
+                                        await _videoEncoder.PushFrameAsync(ref data, (uint)width, (uint)height,
+                                            timestamp);
                                 }
                             }
                             catch (Exception ex)
@@ -168,21 +170,24 @@ namespace InstantReplay
             {
                 var bytes = await File.ReadAllBytesAsync(path, ct);
                 var (data, width, height, _) = UniEnc.Utils.DecodeJpeg(bytes,
-                    static (data, width, height, pitch, _) =>
+                    static (data, width, height, pitch, sharedBufferPool) =>
                     {
                         var expectedLength = width * height * 4;
 
-                        var array = new NativeArray<byte>(data.Length, Allocator.Persistent);
+                        if (!sharedBufferPool.TryAlloc((nuint)data.Length, out var buffer))
+                            throw new InvalidOperationException("Shared buffer pool exhausted.");
+
+                        var span = buffer.Span;
 
                         if (data.Length == expectedLength)
-                            data.CopyTo(array.AsSpan());
+                            data.CopyTo(span);
                         else
                             for (var y = 0; y < height; y++)
                                 data.Slice((int)(y * pitch), (int)(width * 4))
-                                    .CopyTo(array.AsSpan().Slice((int)(y * width * 4), (int)(width * 4)));
+                                    .CopyTo(span.Slice((int)(y * width * 4), (int)(width * 4)));
 
-                        return (array, width, height, pitch);
-                    }, 0);
+                        return (buffer, width, height, pitch);
+                    }, _sharedBufferPool);
 
                 return (data, width, height, timestamp);
             }, ct), ct);
@@ -223,6 +228,7 @@ namespace InstantReplay
             await _muxVideoTask;
             await _muxAudioTask;
             await _muxer.CompleteAsync();
+            _sharedBufferPool.Dispose();
         }
     }
 }
