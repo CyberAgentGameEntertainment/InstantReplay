@@ -20,6 +20,7 @@ namespace InstantReplay
         public ScreenshotFrameProvider()
         {
             _renderTexture = new RenderTexture(Screen.width, Screen.height, 0, RenderTextureFormat.ARGB32);
+            _renderTexture.name = "InstantReplay ScreenshotFrameProvider"; // for profiling
 
 #if UNITY_2023_1_OR_NEWER
             _ = EndOfFrameLoop();
@@ -54,8 +55,15 @@ namespace InstantReplay
 
             if (_renderTexture)
             {
-                Object.Destroy(_renderTexture);
-                _renderTexture = default;
+                if (Application.isPlaying)
+                {
+                    Object.Destroy(_renderTexture);
+                }
+                else
+                {
+                    Object.DestroyImmediate(_renderTexture);
+                }
+                _renderTexture = null;
             }
         }
 
