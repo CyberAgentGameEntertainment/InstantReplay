@@ -29,7 +29,9 @@ namespace InstantReplay
             _numChannelsInOption = numChannelsInOption;
         }
 
-        public bool Transform(InputAudioFrame input, out PcmAudioFrame output)
+        public bool WillAcceptWhenNextWont => true; // we need to keep advancing position even if next won't accept
+
+        public bool Transform(InputAudioFrame input, out PcmAudioFrame output, bool willAcceptedByNextInput)
         {
             var realTime = _recordingTimeProvider.Now;
 
@@ -95,6 +97,14 @@ namespace InstantReplay
             if (writeLength <= 0)
                 return false;
 
+            _currentSamplePosition = currentSamplePosition + numScaledSamples + blankOrSkip;
+            if (!willAcceptedByNextInput)
+            {
+                // advance _currentSamplePosition even if we cannot output
+                output = default;
+                return false;
+            }
+
             var writeBufferArray = ArrayPool<short>.Shared.Rent(writeLength);
             var writeBuffer = writeBufferArray.AsSpan(0, writeLength);
 
@@ -117,7 +127,6 @@ namespace InstantReplay
 
             output = new PcmAudioFrame(writeBufferArray, writeBufferArray.AsMemory(0, writeLength), timestamp);
 
-            _currentSamplePosition = currentSamplePosition + numScaledSamples + blankOrSkip;
             return true;
         }
 

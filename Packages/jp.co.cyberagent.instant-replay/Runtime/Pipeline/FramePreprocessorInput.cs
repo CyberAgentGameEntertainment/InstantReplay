@@ -15,8 +15,16 @@ namespace InstantReplay
             _outputDataStartsAtTop = outputDataStartsAtTop;
         }
 
-        public bool Transform(IFrameProvider.Frame input, out IFrameProvider.Frame output)
+        public bool WillAcceptWhenNextWont => false;
+
+        public bool Transform(IFrameProvider.Frame input, out IFrameProvider.Frame output, bool willAcceptedByNextInput)
         {
+            if (!willAcceptedByNextInput)
+            {
+                output = default;
+                return false;
+            }
+
             var outTex = _preprocessor.Process(input.Texture, input.DataStartsAtTop ^ _outputDataStartsAtTop);
             output = new IFrameProvider.Frame(outTex, input.Timestamp, _outputDataStartsAtTop);
             return true;

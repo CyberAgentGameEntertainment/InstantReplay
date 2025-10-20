@@ -21,7 +21,7 @@ namespace InstantReplay
 
         public ValueTask PushAsync(TIn value)
         {
-            if (!_pipelineTransform.Transform(value, out var output)) return default;
+            if (!_pipelineTransform.Transform(value, out var output, true)) return default;
             return _next.PushAsync(output);
         }
 
