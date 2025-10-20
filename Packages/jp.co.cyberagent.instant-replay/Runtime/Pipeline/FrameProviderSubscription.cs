@@ -21,7 +21,11 @@ namespace InstantReplay
             _provider = provider;
             _disposeProvider = disposeProvider;
             _next = next;
-            provider.OnFrameProvided += _delegate = frame => next.Push(frame);
+            provider.OnFrameProvided += _delegate = frame =>
+            {
+                if (!next.WillAccept()) return;
+                next.Push(frame);
+            };
         }
 
         public void Dispose()

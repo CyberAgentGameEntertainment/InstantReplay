@@ -15,6 +15,12 @@ namespace InstantReplay
     internal interface IPipelineInput<in T> : IDisposable
     {
         /// <summary>
+        ///     Whether the input will accept a new value now.
+        /// </summary>
+        /// <returns></returns>
+        bool WillAccept();
+
+        /// <summary>
         ///     Pushes a value to the input. This should be completed immediately.
         /// </summary>
         /// <param name="value"></param>

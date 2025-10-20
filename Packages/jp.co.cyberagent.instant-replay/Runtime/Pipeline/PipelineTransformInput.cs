@@ -18,9 +18,14 @@ namespace InstantReplay
             _next = next;
         }
 
+        public bool WillAccept()
+        {
+            return _pipelineTransform.WillAcceptWhenNextWont || _next.WillAccept();
+        }
+
         public void Push(TIn value)
         {
-            if (!_pipelineTransform.Transform(value, out var output)) return;
+            if (!_pipelineTransform.Transform(value, out var output, _next.WillAccept())) return;
 
             _next.Push(output);
         }

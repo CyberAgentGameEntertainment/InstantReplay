@@ -3,6 +3,7 @@
 // --------------------------------------------------------------
 
 using System;
+using System.Runtime.CompilerServices;
 using System.Threading.Channels;
 using System.Threading.Tasks;
 using UnityEngine;
@@ -30,6 +31,19 @@ namespace InstantReplay
 
             _inner = channel.Writer;
             _processVideoFramesTask = ProcessVideoFramesAsync(channel.Reader);
+        }
+
+        public bool WillAccept()
+        {
+            var waitToWriteAsync = _inner.WaitToWriteAsync();
+            if (waitToWriteAsync.IsCompleted)
+                return waitToWriteAsync.Result;
+
+            // forget
+            var awaiter = waitToWriteAsync.GetAwaiter();
+            awaiter.UnsafeOnCompleted(PooledActionOnce<ValueTaskAwaiter<bool>>
+                .Get(static awaiter => { awaiter.GetResult(); }, awaiter).Wrapper);
+            return false;
         }
 
         public void Push(T value)

@@ -22,6 +22,8 @@ namespace InstantReplay
             _next = next;
             provider.OnProvideAudioSamples += _delegate = (samples, channels, sampleRate, timestamp) =>
             {
+                if (!next.WillAccept()) return;
+
                 unsafe
                 {
                     fixed (float* samplesPtr = samples)

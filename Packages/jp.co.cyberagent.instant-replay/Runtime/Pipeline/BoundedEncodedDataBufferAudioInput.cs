@@ -17,6 +17,11 @@ namespace InstantReplay
             _buffer = buffer;
         }
 
+        public bool WillAccept()
+        {
+            return true;
+        }
+
         public void Push(EncodedFrame value)
         {
             if (!_buffer.TryAddAudioFrame(value))

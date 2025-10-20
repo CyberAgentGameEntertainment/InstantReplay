@@ -23,8 +23,16 @@ namespace InstantReplay
             _fixedFrameInterval = fixedFrameInterval;
         }
 
-        public bool Transform(T input, out T output)
+        public bool WillAcceptWhenNextWont => false;
+
+        public bool Transform(T input, out T output, bool willAcceptedByNextInput)
         {
+            if (!willAcceptedByNextInput)
+            {
+                output = default;
+                return false;
+            }
+
             var realTime = _recordingTimeProvider.Now;
 
             output = default;
