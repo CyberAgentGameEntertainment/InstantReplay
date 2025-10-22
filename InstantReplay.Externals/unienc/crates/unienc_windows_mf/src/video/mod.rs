@@ -102,7 +102,7 @@ pub struct VideoEncoderOutputImpl {
 impl EncoderInput for VideoEncoderInputImpl {
     type Data = VideoSample;
 
-    async fn push(&mut self, data: &Self::Data) -> Result<()> {
+    async fn push(&mut self, data: Self::Data) -> Result<()> {
         let sample = UnsafeSend(unsafe { MFCreateSample()? });
 
         // BGRA to NV12

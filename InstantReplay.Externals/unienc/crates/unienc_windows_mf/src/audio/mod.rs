@@ -97,7 +97,7 @@ pub struct AudioEncoderOutputImpl {
 impl EncoderInput for AudioEncoderInputImpl {
     type Data = AudioSample;
 
-    async fn push(&mut self, data: &Self::Data) -> Result<()> {
+    async fn push(&mut self, data: Self::Data) -> Result<()> {
         let sample = UnsafeSend(unsafe { MFCreateSample()? });
 
         // BGRA to NV12
