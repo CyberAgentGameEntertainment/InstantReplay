@@ -120,7 +120,7 @@ namespace InstantReplay
 
             if (Interlocked.CompareExchange(ref slot._isBusy, 1, 0) != 0)
             {
-                Debug.LogWarning(
+                ILogger.LogWarningCore(
                     "InstantReplay: Skipping a frame because the preserved slots have run out. Increasing the number of frames may help.");
                 return;
             }
@@ -151,7 +151,7 @@ namespace InstantReplay
 
                         if (exception != null)
                         {
-                            Debug.LogException(exception);
+                            ILogger.LogExceptionCore(exception);
                             return;
                         }
 
@@ -160,7 +160,7 @@ namespace InstantReplay
             }
             catch (Exception ex)
             {
-                Debug.LogException(ex);
+                ILogger.LogExceptionCore(ex);
             }
 
             _currentSlot++;

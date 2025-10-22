@@ -6,7 +6,6 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using UniEnc;
-using UnityEngine;
 
 namespace InstantReplay
 {
@@ -245,7 +244,7 @@ namespace InstantReplay
                     }
                     catch (Exception ex)
                     {
-                        Debug.LogException(ex);
+                        ILogger.LogExceptionCore(ex);
                     }
 
                 foreach (var frame in unprocessedAudioFrames.Span)
@@ -255,7 +254,7 @@ namespace InstantReplay
                     }
                     catch (Exception ex)
                     {
-                        Debug.LogException(ex);
+                        ILogger.LogExceptionCore(ex);
                     }
             }
         }
@@ -315,7 +314,7 @@ namespace InstantReplay
                 }
                 catch (Exception ex)
                 {
-                    Debug.LogException(ex);
+                    ILogger.LogExceptionCore(ex);
                 }
 
             framesToDispose.Clear();

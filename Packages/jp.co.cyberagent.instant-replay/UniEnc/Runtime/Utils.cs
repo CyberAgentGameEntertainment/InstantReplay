@@ -89,17 +89,18 @@ namespace UniEnc
         {
             public IntPtr Handle { get; }
             private readonly SafeHandle _safeHandle;
-            
+
             public SafeHandleScope(SafeHandle safeHandle)
             {
                 var success = false;
                 safeHandle.DangerousAddRef(ref success);
                 if (!success)
                     throw new ObjectDisposedException(nameof(safeHandle));
-            
+
                 Handle = safeHandle.DangerousGetHandle();
                 _safeHandle = safeHandle;
             }
+
             public void Dispose()
             {
                 _safeHandle.DangerousRelease();

@@ -4,7 +4,6 @@
 
 using System;
 using System.Buffers;
-using Debug = UnityEngine.Debug;
 
 namespace InstantReplay
 {
@@ -57,7 +56,7 @@ namespace InstantReplay
                 var diff = timestamp - expectedTime;
                 if (Math.Abs(diff) >= AllowedLag)
                 {
-                    Debug.LogWarning(
+                    ILogger.LogWarningCore(
                         "Audio timestamp adjusted. The timestamp IAudioSampleProvider provided may not be realtime.");
                     _audioTimeDifference = timestamp - realTime;
                     timestamp = realTime;

@@ -37,7 +37,7 @@ namespace InstantReplay
                     }
                     catch (Exception ex)
                     {
-                        Debug.LogException(ex);
+                        ILogger.LogExceptionCore(ex);
                     }
                 }
             }

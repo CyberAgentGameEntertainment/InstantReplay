@@ -19,10 +19,10 @@ namespace InstantReplay
         private readonly Task _muxAudioTask;
         private readonly Muxer _muxer;
         private readonly Task _muxVideoTask;
+        private readonly SharedBufferPool _sharedBufferPool;
         private readonly VideoEncoder _videoEncoder;
         private ulong _audioTimestampInSamples;
         private int _disposed;
-        private readonly SharedBufferPool _sharedBufferPool;
 
         public UniEncTranscoder(int width, int height, int sampleRate, int channels, string outputFilename)
         {
@@ -70,7 +70,7 @@ namespace InstantReplay
                 }
                 catch (Exception ex)
                 {
-                    Debug.LogException(ex);
+                    ILogger.LogExceptionCore(ex);
                 }
             });
 
@@ -96,7 +96,7 @@ namespace InstantReplay
                 }
                 catch (Exception ex)
                 {
-                    Debug.LogException(ex);
+                    ILogger.LogExceptionCore(ex);
                 }
             });
 
@@ -148,7 +148,7 @@ namespace InstantReplay
                 }
                 catch (Exception ex)
                 {
-                    Debug.LogException(ex);
+                    ILogger.LogExceptionCore(ex);
                 }
             });
         }

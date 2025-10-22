@@ -7,8 +7,6 @@ using System.Collections.Concurrent;
 using System.Threading.Tasks;
 using System.Threading.Tasks.Sources;
 using UniEnc;
-using Unity.Collections;
-using Unity.Collections.LowLevel.Unsafe;
 using UnityEngine;
 using UnityEngine.Experimental.Rendering;
 using UnityEngine.Rendering;
@@ -26,17 +24,16 @@ namespace InstantReplay
         /// <summary>
         ///     Reads back frame data from a RenderTexture asynchronously.
         /// </summary>
-        public static bool TryReadbackFrameAsync(Texture texture, ref SharedBufferPool bufferPool, out ValueTask<SharedBuffer> task)
+        public static bool TryReadbackFrameAsync(Texture texture, ref SharedBufferPool bufferPool,
+            out ValueTask<SharedBuffer> task)
         {
             if (texture == null)
                 throw new ArgumentNullException(nameof(texture));
-            
+
             // Check if format is supported
             if (!SystemInfo.IsFormatSupported(texture.graphicsFormat, FormatUsage.ReadPixels))
-            {
                 throw new ArgumentException(
                     $"GraphicsFormat {texture.graphicsFormat} not supported for readback");
-            }
 
             // Get pooled context for zero allocation
             var context = ReadbackContext.Rent();
@@ -105,10 +102,10 @@ namespace InstantReplay
         private sealed class ReadbackContext : IValueTaskSource<SharedBuffer>
         {
             private static readonly ConcurrentQueue<ReadbackContext> Pool = new();
+            private SharedBuffer _buffer;
 
             private ManualResetValueTaskSourceCore<SharedBuffer> _core;
             private bool _ownsBuffer;
-            private SharedBuffer _buffer;
 
             public ValueTask<SharedBuffer> Task => new(this, _core.Version);
 

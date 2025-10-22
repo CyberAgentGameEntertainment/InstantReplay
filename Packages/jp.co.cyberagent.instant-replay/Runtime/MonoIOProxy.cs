@@ -6,7 +6,6 @@ using System;
 using System.IO;
 using System.Reflection;
 using System.Runtime.InteropServices;
-using UnityEngine;
 
 namespace InstantReplay
 {
@@ -84,7 +83,7 @@ namespace InstantReplay
             }
             catch (Exception ex)
             {
-                Debug.LogException(ex);
+                ILogger.LogExceptionCore(ex);
                 IsSupported = false;
             }
         }

@@ -57,6 +57,14 @@ namespace InstantReplay
                 fixedFrameInterval = 1.0 / fixedFrameRate;
             }
 
+            var uncompressedLimit = options.MaxNumberOfRawFrameBuffer switch
+            {
+                <= 0 => throw new ArgumentOutOfRangeException(nameof(options.MaxNumberOfRawFrameBuffer),
+                    "MaxNumberOfRawFrameBuffer must be positive if specified."),
+                { } value => options.VideoOptions.Width * options.VideoOptions.Height * 4 * value, // 32bpp
+                null => 0
+            };
+
             var encodingSystem = _encodingSystem = new EncodingSystem(options.VideoOptions, options.AudioOptions);
             var videoEncoder = encodingSystem.CreateVideoEncoder();
             var audioEncoder = encodingSystem.CreateAudioEncoder();
@@ -77,26 +85,20 @@ namespace InstantReplay
             {
                 try
                 {
-                    Debug.LogWarning("Dropped video frame due to full queue.");
+                    ILogger.LogWarningCore("Dropped video frame due to full queue.");
                     using var _ = await dropped.ReadbackTask;
                 }
                 catch (Exception ex)
                 {
-                    Debug.LogException(ex);
+                    ILogger.LogExceptionCore(ex);
                 }
             };
 
             // ReSharper disable once ConvertToLocalFunction
             Action<PcmAudioFrame> onPcmAudioFrameDropped = static dropped =>
             {
-                Debug.LogWarning("Dropped audio frame due to full queue.");
+                ILogger.LogWarningCore("Dropped audio frame due to full queue.");
                 dropped.Dispose();
-            };
-
-            var uncompressedLimit = options.MaxMemoryUsageBytesForUncompressedFrames switch
-            {
-                { } value => Math.Max(options.VideoOptions.Width * options.VideoOptions.Height * 4, value), // 32bpp
-                null => 0
             };
 
             _videoPipeline = new FrameProviderSubscription(frameProvider, disposeFrameProvider,

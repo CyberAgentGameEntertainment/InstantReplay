@@ -6,7 +6,6 @@ using System;
 using System.Runtime.CompilerServices;
 using System.Threading.Channels;
 using System.Threading.Tasks;
-using UnityEngine;
 
 namespace InstantReplay
 {
@@ -88,7 +87,7 @@ namespace InstantReplay
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                Debug.LogException(ex);
+                ILogger.LogExceptionCore(ex);
             }
         }
     }

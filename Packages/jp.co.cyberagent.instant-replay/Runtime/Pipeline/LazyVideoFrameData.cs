@@ -4,7 +4,6 @@
 
 using System.Threading.Tasks;
 using UniEnc;
-using Unity.Collections;
 
 namespace InstantReplay
 {

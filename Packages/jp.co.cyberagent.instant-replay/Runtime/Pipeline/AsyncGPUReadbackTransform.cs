@@ -8,13 +8,14 @@ namespace InstantReplay
 {
     internal class AsyncGPUReadbackTransform : IPipelineTransform<IFrameProvider.Frame, LazyVideoFrameData>
     {
-        public bool WillAcceptWhenNextWont => false;
         private SharedBufferPool _bufferPool;
-        
+
         public AsyncGPUReadbackTransform(SharedBufferPool bufferPool)
         {
             _bufferPool = bufferPool;
         }
+
+        public bool WillAcceptWhenNextWont => false;
 
         public bool Transform(IFrameProvider.Frame input, out LazyVideoFrameData output, bool willAcceptedByNextInput)
         {
@@ -27,8 +28,9 @@ namespace InstantReplay
             if (!FrameReadback.TryReadbackFrameAsync(input.Texture, ref _bufferPool, out var task))
             {
                 // buffer pool exhausted
+                ILogger.LogWarningCore("AsyncGPUReadbackTransform: Buffer pool exhausted.");
                 output = default;
-                return false;   
+                return false;
             }
 
             output = new LazyVideoFrameData(task, input.Texture.width,

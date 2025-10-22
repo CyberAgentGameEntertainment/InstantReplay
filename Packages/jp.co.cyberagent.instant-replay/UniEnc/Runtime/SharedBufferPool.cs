@@ -29,9 +29,7 @@ namespace UniEnc
             get
             {
                 if (_onError == null)
-                {
                     _onErrorPtr = (nuint)(nint)Marshal.GetFunctionPointerForDelegate(_onError = OnError);
-                }
 
                 return _onErrorPtr;
             }
@@ -46,16 +44,14 @@ namespace UniEnc
         /// </summary>
         /// <param name="limit">Limit in bytes. 0 means no limit.</param>
         /// <exception cref="Exception"></exception>
-        public unsafe SharedBufferPool(nuint limit = 0)
+        public unsafe SharedBufferPool(nuint limit)
         {
             Mutex* poolPtr = null;
             _lastException = null;
             var success = NativeMethods.unienc_new_shared_buffer_pool(limit, &poolPtr, OnErrorPtr, null);
 
             if (!success || poolPtr == null)
-            {
                 throw _lastException ?? new UniEncException(UniencErrorKind.Error, "Failed to create SharedBufferPool");
-            }
 
             _handle = new Handle((nint)poolPtr);
         }
@@ -86,9 +82,7 @@ namespace UniEnc
             try
             {
                 if (_lastException != null)
-                {
                     return;
-                }
 
                 throw new UniEncException(error.kind, Marshal.PtrToStringAnsi((nint)error.message));
             }
@@ -152,9 +146,7 @@ namespace UniEnc
         private void ThrowIfInvalid()
         {
             if (!IsValid)
-            {
                 throw new ObjectDisposedException("SharedBuffer has already been moved out or disposed.");
-            }
         }
 
         public IntPtr MoveOut()
@@ -169,9 +161,7 @@ namespace UniEnc
         public unsafe void Dispose()
         {
             if (!IsValid)
-            {
                 return;
-            }
 
             try
             {
@@ -188,7 +178,19 @@ namespace UniEnc
     {
         private static readonly ConcurrentBag<SharedBufferHandle> Pool = new();
 
+#if ENABLE_UNITY_COLLECTIONS_CHECKS
         private AtomicSafetyHandle? _ash;
+#endif
+        private nint _length;
+
+        // 0: normal, 1: pooled, 2: released
+        private int _pooled;
+        private byte* _ptr;
+
+        private SharedBufferHandle(IntPtr handle) : base(IntPtr.Zero, true)
+        {
+            SetHandle(handle);
+        }
 
         public NativeArray<byte> NativeArray
         {
@@ -214,15 +216,17 @@ namespace UniEnc
             }
         }
 
+        public ushort Token { get; private set; }
+
+        public override bool IsInvalid => handle == IntPtr.Zero && _pooled == 0;
+
         public static SharedBufferHandle GetHandle(IntPtr handle, byte* ptr, nint length)
         {
             if (Pool.TryTake(out var bufferHandle))
             {
                 bufferHandle.SetHandle(handle);
                 if (Interlocked.CompareExchange(ref bufferHandle._pooled, 0, 1) != 1)
-                {
                     throw new InvalidOperationException();
-                }
             }
             else
             {
@@ -235,37 +239,24 @@ namespace UniEnc
             return bufferHandle;
         }
 
-        // 0: normal, 1: pooled, 2: released
-        private int _pooled;
-        private byte* _ptr;
-        private nint _length;
-        public ushort Token { get; private set; }
-
-        private SharedBufferHandle(IntPtr handle) : base(IntPtr.Zero, true)
-        {
-            SetHandle(handle);
-        }
-
         public IntPtr MoveOut()
         {
             if (Interlocked.CompareExchange(ref _pooled, 1, 0) != 0)
-            {
                 throw new InvalidOperationException();
-            }
 
             _ptr = null;
             _length = 0;
 
+#if ENABLE_UNITY_COLLECTIONS_CHECKS
             if (_ash is { } ash)
             {
                 _ash = null;
                 AtomicSafetyHandle.Release(ash);
             }
+#endif
 
             if (++Token < ushort.MaxValue)
-            {
                 Pool.Add(this);
-            }
 
             return handle;
         }
@@ -275,22 +266,20 @@ namespace UniEnc
             Token++;
 
             if (Interlocked.CompareExchange(ref _pooled, 2, 0) == 0)
-            {
                 NativeMethods.unienc_free_shared_buffer((Native.SharedBuffer*)handle);
-            }
 
             _ptr = null;
             _length = 0;
 
+#if ENABLE_UNITY_COLLECTIONS_CHECKS
             if (_ash is { } ash)
             {
                 _ash = null;
                 AtomicSafetyHandle.Release(ash);
             }
+#endif
 
             return true;
         }
-
-        public override bool IsInvalid => handle == IntPtr.Zero && _pooled == 0;
     }
 }

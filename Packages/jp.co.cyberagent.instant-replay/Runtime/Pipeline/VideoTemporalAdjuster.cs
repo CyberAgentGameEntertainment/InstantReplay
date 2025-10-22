@@ -3,7 +3,6 @@
 // --------------------------------------------------------------
 
 using System;
-using UnityEngine;
 
 namespace InstantReplay
 {
@@ -67,7 +66,7 @@ namespace InstantReplay
                 var diff = time - expectedTime;
                 if (Math.Abs(diff) >= AllowedLag)
                 {
-                    Debug.LogWarning(
+                    ILogger.LogWarningCore(
                         "Video timestamp adjusted. The timestamp IFrameProvider provided may not be realtime.");
                     _videoTimeDifference = time - realTime;
                     time = realTime;

@@ -199,7 +199,7 @@ namespace InstantReplay
                                 ? frames.Span[^1].Time - frames.Span[0].Time
                                 : 1f / 30f /* single frame with 30FPS */;
 
-                            Debug.Log($"{frames.Length} frames, {duration} seconds");
+                            ILogger.LogCore($"{frames.Length} frames, {duration} seconds");
                         }
                     }
 
