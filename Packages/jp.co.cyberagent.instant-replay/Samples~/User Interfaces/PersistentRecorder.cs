@@ -23,7 +23,7 @@ namespace InstantReplay.Examples
         [FormerlySerializedAs("maxWidth")] [SerializeField] public int width = 640;
         [FormerlySerializedAs("maxHeight")] [SerializeField] public int height = 640;
         [FormerlySerializedAs("maxMemoryUsageMb")] [SerializeField] public int maxMemoryUsageForCompressedMb = 20;
-        [SerializeField] public int maxNumberOfRawFrameBuffer = 1;
+        [SerializeField] public int maxNumberOfRawFrameBuffer = 4;
         [SerializeField] public int fixedFrameRate = 30;
 
         #endregion
