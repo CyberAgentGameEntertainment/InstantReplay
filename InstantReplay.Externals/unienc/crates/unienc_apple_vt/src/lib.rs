@@ -9,6 +9,7 @@ pub mod audio;
 mod common;
 pub mod mux;
 pub mod video;
+mod metal;
 
 pub struct VideoToolboxEncodingSystem<V: unienc_common::VideoEncoderOptions, A: unienc_common::AudioEncoderOptions> {
     video_options: V,
