@@ -1,4 +1,5 @@
 using System;
+using UniEnc.Native;
 
 namespace UniEnc
 {

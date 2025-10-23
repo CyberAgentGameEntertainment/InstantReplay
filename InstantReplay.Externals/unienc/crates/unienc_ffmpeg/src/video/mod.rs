@@ -12,8 +12,7 @@ use tokio::{
     process::ChildStdout,
 };
 use unienc_common::{
-    EncodedData, Encoder, EncoderInput, EncoderOutput, UniencDataKind, VideoEncoderOptions,
-    VideoSample,
+    buffer::SharedBuffer, EncodedData, Encoder, EncoderInput, EncoderOutput, UniencDataKind, VideoEncoderOptions, VideoSample
 };
 
 use crate::{
@@ -208,11 +207,11 @@ impl Encoder for FFmpegVideoEncoder {
 impl EncoderInput for FFmpegVideoEncoderInput {
     type Data = VideoSample;
 
-    async fn push(&mut self, data: &Self::Data) -> Result<()> {
+    async fn push(&mut self, data: Self::Data) -> Result<()> {
         let timestamp = data.timestamp;
         let data = if data.width != self.width || data.height != self.height {
             // resize (crop or trim)
-            let bgra = &data.data;
+            let bgra = data.buffer.data();
             let mut resized = vec![0u8; (self.width * self.height * 4) as usize];
 
             let w = u32::min(self.width, data.width);
@@ -230,11 +229,11 @@ impl EncoderInput for FFmpegVideoEncoderInput {
             Self::Data {
                 width: self.width,
                 height: self.height,
-                data: resized,
+                buffer: SharedBuffer::new_unmanaged(resized),
                 timestamp: data.timestamp,
             }
         } else {
-            data.clone()
+            data
         };
 
         // raw H.264 frames cannot have timestamps, so we need to assume CFR
@@ -244,8 +243,9 @@ impl EncoderInput for FFmpegVideoEncoderInput {
         };
 
         for _i in 0..count {
-            self.input.write_all(&data.data).await?;
+            self.input.write_all(data.buffer.data()).await?;
         }
+        drop(data);
 
         self.input.flush().await?;
 

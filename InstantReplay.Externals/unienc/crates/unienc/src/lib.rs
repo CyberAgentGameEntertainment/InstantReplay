@@ -13,6 +13,7 @@ mod jpeg;
 mod mux;
 mod public_types;
 mod video;
+mod buffer;
 
 #[cfg(target_os = "android")]
 mod android;

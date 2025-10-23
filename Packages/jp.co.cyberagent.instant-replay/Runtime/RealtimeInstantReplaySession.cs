@@ -57,10 +57,18 @@ namespace InstantReplay
                 fixedFrameInterval = 1.0 / fixedFrameRate;
             }
 
+            var uncompressedLimit = options.MaxNumberOfRawFrameBuffer switch
+            {
+                <= 0 => throw new ArgumentOutOfRangeException(nameof(options.MaxNumberOfRawFrameBuffer),
+                    "MaxNumberOfRawFrameBuffer must be positive if specified."),
+                { } value => options.VideoOptions.Width * options.VideoOptions.Height * 4 * value, // 32bpp
+                null => 0
+            };
+
             var encodingSystem = _encodingSystem = new EncodingSystem(options.VideoOptions, options.AudioOptions);
             var videoEncoder = encodingSystem.CreateVideoEncoder();
             var audioEncoder = encodingSystem.CreateAudioEncoder();
-            var buffer = _buffer = new BoundedEncodedFrameBuffer(options.MaxMemoryUsageBytes);
+            var buffer = _buffer = new BoundedEncodedFrameBuffer(options.MaxMemoryUsageBytesForCompressedFrames);
 
             var preprocessor = FramePreprocessor.WithFixedSize(
                 (int)options.VideoOptions.Width,
@@ -77,26 +85,26 @@ namespace InstantReplay
             {
                 try
                 {
-                    Debug.LogWarning("Dropped video frame due to full queue.");
+                    ILogger.LogWarningCore("Dropped video frame due to full queue.");
                     using var _ = await dropped.ReadbackTask;
                 }
                 catch (Exception ex)
                 {
-                    Debug.LogException(ex);
+                    ILogger.LogExceptionCore(ex);
                 }
             };
 
             // ReSharper disable once ConvertToLocalFunction
             Action<PcmAudioFrame> onPcmAudioFrameDropped = static dropped =>
             {
-                Debug.LogWarning("Dropped audio frame due to full queue.");
+                ILogger.LogWarningCore("Dropped audio frame due to full queue.");
                 dropped.Dispose();
             };
 
             _videoPipeline = new FrameProviderSubscription(frameProvider, disposeFrameProvider,
                 new VideoTemporalAdjuster<IFrameProvider.Frame>(_temporalController, fixedFrameInterval).AsInput(
                     new FramePreprocessorInput(preprocessor, true).AsInput(
-                        new AsyncGPUReadbackTransform().AsInput(
+                        new AsyncGPUReadbackTransform(new SharedBufferPool((nuint)uncompressedLimit)).AsInput(
                             new DroppingChannelInput<LazyVideoFrameData>(
                                 options.VideoInputQueueSize,
                                 onLazyVideoFrameDataDropped,
@@ -160,7 +168,7 @@ namespace InstantReplay
                     Channels = 2,
                     Bitrate = 128000 // 128 kbps
                 },
-                MaxMemoryUsageBytes = 20 * 1024 * 1024, // 20 MiB
+                MaxMemoryUsageBytesForCompressedFrames = 20 * 1024 * 1024, // 20 MiB
                 FixedFrameRate = 30.0,
                 VideoInputQueueSize = 5,
                 AudioInputQueueSize = 60

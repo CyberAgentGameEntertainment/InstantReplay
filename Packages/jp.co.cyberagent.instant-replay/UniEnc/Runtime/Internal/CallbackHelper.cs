@@ -4,6 +4,7 @@ using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using System.Threading.Tasks.Sources;
 using AOT;
+using UniEnc.Native;
 
 namespace UniEnc.Internal
 {
@@ -12,6 +13,8 @@ namespace UniEnc.Internal
     /// </summary>
     internal static class CallbackHelper
     {
+        public unsafe delegate void SimpleCallbackDelegate(void* userData, UniencErrorNative errorKind);
+
         private static readonly unsafe SimpleCallbackDelegate SSimpleCallbackDelegate = SimpleCallback;
         private static readonly unsafe DataCallbackDelegate SDataCallbackDelegate = DataCallback;
 
@@ -235,8 +238,6 @@ namespace UniEnc.Internal
                 _core.SetException(exception);
             }
         }
-
-        private unsafe delegate void SimpleCallbackDelegate(void* userData, UniencErrorNative errorKind);
 
         private unsafe delegate void DataCallbackDelegate(void* userData, byte* data, nuint size, double timestamp,
             DataKind kind, UniencErrorNative error);

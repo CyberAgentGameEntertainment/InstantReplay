@@ -5,7 +5,6 @@
 using System;
 using System.Threading.Tasks;
 using UniEnc;
-using UnityEngine;
 
 namespace InstantReplay
 {
@@ -61,7 +60,7 @@ namespace InstantReplay
             }
             catch (Exception ex)
             {
-                Debug.LogException(ex);
+                ILogger.LogExceptionCore(ex);
             }
         }
 

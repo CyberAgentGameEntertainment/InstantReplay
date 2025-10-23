@@ -103,7 +103,7 @@ impl Drop for MediaCodecAudioEncoderInput {
 impl EncoderInput for MediaCodecAudioEncoderInput {
     type Data = AudioSample;
 
-    async fn push(&mut self, data: &Self::Data) -> Result<()> {
+    async fn push(&mut self, data: Self::Data) -> Result<()> {
         // Convert i16 samples to byte array
         let byte_data_vec = i16_to_bytes(&data.data);
         let mut byte_data = byte_data_vec.as_slice();

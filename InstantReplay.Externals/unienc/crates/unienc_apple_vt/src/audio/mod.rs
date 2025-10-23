@@ -60,7 +60,7 @@ impl Encoder for AudioToolboxEncoder {
 impl EncoderInput for AudioToolboxEncoderInput {
     type Data = AudioSample;
 
-    async fn push(&mut self, data: &Self::Data) -> anyhow::Result<()> {
+    async fn push(&mut self, data: Self::Data) -> anyhow::Result<()> {
         let mut output_buffer_data = vec![0; self.max_output_packet_size as usize];
 
         let max_output_packets = 1;
@@ -68,9 +68,7 @@ impl EncoderInput for AudioToolboxEncoderInput {
         let mut packet_descs =
             vec![unsafe { std::mem::zeroed::<AudioStreamPacketDescription>() }; max_output_packets];
 
-        let data_cloned = data.clone();
-
-        let mut sample = Some(&data_cloned);
+        let mut sample = Some(&data);
 
         while {
             let num_output_packets = self.converter.fill_complex_buffer(
@@ -101,7 +99,7 @@ impl EncoderInput for AudioToolboxEncoderInput {
         } {}
 
         // we need to keep the data until next fill_complex_buffer call
-        self.last_data = Some(data_cloned);
+        self.last_data = Some(data);
         Ok(())
     }
 }

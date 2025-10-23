@@ -66,7 +66,7 @@ namespace InstantReplay.Examples
             {
                 try
                 {
-                    await StopAndTranscodeAsync();
+                    await StopAndExportAsync();
                 }
                 catch (Exception ex)
                 {

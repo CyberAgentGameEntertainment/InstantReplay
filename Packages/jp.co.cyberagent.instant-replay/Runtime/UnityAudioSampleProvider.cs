@@ -14,10 +14,10 @@ namespace InstantReplay
     /// </summary>
     public class UnityAudioSampleProvider : IAudioSampleProvider
     {
+        private readonly SynchronizationContext _synchronization;
         // NOTE: keep it public to make UnityAudioSampleProvider(AudioListener) available for users
 
         private UnityAudioSampleProviderReceiver _receiver;
-        private readonly SynchronizationContext _synchronization;
 
         public UnityAudioSampleProvider() : this(SelectAudioListener())
         {
@@ -41,9 +41,7 @@ namespace InstantReplay
             _synchronization.Post(_ =>
             {
                 if (receiver)
-                {
                     Object.Destroy(receiver);
-                }
             }, null);
         }
 
@@ -57,9 +55,8 @@ namespace InstantReplay
             var listener = listeners[0];
 
             if (listeners.Length != 1)
-                Debug.LogWarning(
-                    $"Multiple active AudioListeners found in the scene. Using the first one: {listener.gameObject.name}",
-                    listener);
+                ILogger.LogWarningCore(
+                    $"Multiple active AudioListeners found in the scene. Using the first one: {listener.gameObject.name}");
 
             return listener;
         }

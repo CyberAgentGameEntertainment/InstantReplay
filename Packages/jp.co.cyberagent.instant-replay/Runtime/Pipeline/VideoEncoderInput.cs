@@ -5,7 +5,6 @@
 using System;
 using System.Threading.Tasks;
 using UniEnc;
-using UnityEngine;
 
 namespace InstantReplay
 {
@@ -22,18 +21,26 @@ namespace InstantReplay
 
         public async ValueTask PushAsync(LazyVideoFrameData value)
         {
-            using var frameData = await value.ReadbackTask;
-
-            if (frameData.Length == 0)
-                throw new ArgumentException("Frame data cannot be empty", nameof(value));
-
+            var frameData = await value.ReadbackTask;
             try
             {
-                await _videoEncoder.PushFrameAsync(frameData, (uint)value.Width, (uint)value.Height, value.Timestamp);
+                if (!frameData.IsValid)
+                    throw new ArgumentException("Frame data is invalid", nameof(value));
+
+                try
+                {
+                    await _videoEncoder.PushFrameAsync(ref frameData, (uint)value.Width, (uint)value.Height,
+                        value.Timestamp);
+                }
+                catch (ObjectDisposedException)
+                {
+                    // ignore
+                }
             }
-            catch (ObjectDisposedException)
+            finally
             {
-                // ignore
+                // If frame data is moved out by encoder, this will be no-op
+                frameData.Dispose();
             }
         }
 
@@ -56,7 +63,7 @@ namespace InstantReplay
             }
             catch (Exception ex)
             {
-                Debug.LogException(ex);
+                ILogger.LogExceptionCore(ex);
             }
         }
 

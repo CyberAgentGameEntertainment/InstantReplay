@@ -5,6 +5,7 @@
 using System;
 using System.Runtime.InteropServices;
 using System.Threading;
+using UniEnc.Native;
 
 namespace UniEnc
 {
@@ -18,7 +19,7 @@ namespace UniEnc
         // For example if we keep lifetime of the runtime object by reference counting and release it in Dispose() of other native handles, and it happens to be called from an async callback, it will crash.
         // It means we cannot use the runtime to drop native resources.
 
-        private static RuntimeWrapper _instance = new((nint)NativeMethods.unienc_new_runtime());
+        private static readonly RuntimeWrapper _instance = new((nint)NativeMethods.unienc_new_runtime());
 
         private readonly ReaderWriterLockSlim _lock = new(LockRecursionPolicy.NoRecursion);
 

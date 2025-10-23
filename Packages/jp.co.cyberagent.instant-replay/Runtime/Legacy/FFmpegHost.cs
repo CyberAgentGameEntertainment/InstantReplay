@@ -6,7 +6,6 @@ using System;
 using System.Diagnostics;
 using System.IO;
 using System.Threading.Tasks;
-using Debug = UnityEngine.Debug;
 
 namespace InstantReplay
 {
@@ -59,7 +58,8 @@ namespace InstantReplay
                 throw new Exception($"FFmpeg process exited ({code}). stdout:\n{results[0]}\n\nstderr:\n{results[1]}");
 
             if (string.IsNullOrEmpty(results[1]))
-                Debug.LogWarning($"FFmpeg process exited ({code}). stdout:\n{results[0]}\n\nstderr:\n{results[1]}");
+                ILogger.LogWarningCore(
+                    $"FFmpeg process exited ({code}). stdout:\n{results[0]}\n\nstderr:\n{results[1]}");
         }
 
         ~FFmpegHost()

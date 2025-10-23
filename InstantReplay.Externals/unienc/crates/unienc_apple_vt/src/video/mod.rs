@@ -17,7 +17,7 @@ use objc2_video_toolbox::{
     VTEncodeInfoFlags, VTSessionSetProperty,
 };
 use tokio::sync::mpsc;
-use unienc_common::{EncodedData, Encoder, EncoderInput, EncoderOutput, VideoSample};
+use unienc_common::{buffer::SharedBuffer, EncodedData, Encoder, EncoderInput, EncoderOutput, VideoSample};
 
 use crate::{common::UnsafeSendRetained, OsStatus};
 
@@ -106,11 +106,11 @@ unsafe extern "C-unwind" fn handle_video_encode_output(
     _source_frame_ref_con: *mut c_void,
     _status: i32,
     _info_flags: VTEncodeInfoFlags,
-    sample_bufer: *mut CMSampleBuffer,
+    sample_buffer: *mut CMSampleBuffer,
 ) {
     let tx = unsafe { &*(output_callback_ref_con as *const mpsc::Sender<VideoEncodedData>) };
 
-    if let Some(sample_buffer) = unsafe { Retained::retain(sample_bufer) } {
+    if let Some(sample_buffer) = unsafe { Retained::retain(sample_buffer) } {
         _ = tx.try_send(VideoEncodedData::new(sample_buffer.into()));
     } // otherwise dropped
 }
@@ -119,7 +119,7 @@ unsafe extern "C-unwind" fn release_pixel_buffer(
     release_ref_con: *mut c_void,
     _base_address: *const c_void,
 ) {
-    drop(Box::<Vec<u8>>::from_raw(release_ref_con as *mut _));
+    drop(Box::<SharedBuffer>::from_raw(release_ref_con as *mut _));
 }
 
 impl Encoder for VideoToolboxEncoder {
@@ -135,10 +135,12 @@ impl Encoder for VideoToolboxEncoder {
 impl EncoderInput for VideoToolboxEncoderInput {
     type Data = VideoSample;
 
-    async fn push(&mut self, data: &Self::Data) -> Result<()> {
-        let pixel_data = Box::new(data.data.clone());
-        let pixel_data_ptr = pixel_data.as_ptr();
-        let pixel_data_raw = Box::into_raw(pixel_data);
+    async fn push(&mut self, data: Self::Data) -> Result<()> {
+
+        let buffer = data.buffer;
+        let buffer_boxed = Box::new(buffer);
+        let pixel_data_ptr = buffer_boxed.data().as_ptr();
+        let buffer_boxed_raw = Box::into_raw(buffer_boxed);
 
         let mut buffer: *mut CVPixelBuffer = std::ptr::null_mut();
         unsafe {
@@ -151,7 +153,7 @@ impl EncoderInput for VideoToolboxEncoderInput {
                     .context("Failed to create NonNull from pixel data pointer")?,
                 (data.width * 4) as usize,
                 Some(release_pixel_buffer),
-                pixel_data_raw as *mut _,
+                buffer_boxed_raw as *mut _,
                 None,
                 NonNull::new(&mut buffer).context("Failed to create CVPixelBuffer")?,
             )
@@ -159,7 +161,7 @@ impl EncoderInput for VideoToolboxEncoderInput {
         .to_result()
         .map_err(|err| {
             // free pixel data if failed
-            _ = unsafe { Box::from_raw(pixel_data_raw) };
+            _ = unsafe { Box::from_raw(buffer_boxed_raw) };
             err
         })?;
 

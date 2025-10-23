@@ -8,7 +8,7 @@ using System;
 using System.Runtime.InteropServices;
 
 
-namespace UniEnc
+namespace UniEnc.Native
 {
     internal static unsafe partial class NativeMethods
     {
@@ -82,7 +82,7 @@ namespace UniEnc
         internal static extern void unienc_free_muxer_completion_handle(SendPtr completion_handle);
 
         [DllImport(__DllName, EntryPoint = "unienc_video_encoder_push", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
-        internal static extern void unienc_video_encoder_push(Runtime* runtime, SendPtr input, SendPtr data, nuint data_size, uint width, uint height, double timestamp, nuint callback, SendPtr user_data);
+        internal static extern void unienc_video_encoder_push(Runtime* runtime, SendPtr input, SendPtr buffer, uint width, uint height, double timestamp, nuint callback, SendPtr user_data);
 
         [DllImport(__DllName, EntryPoint = "unienc_video_encoder_pull", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
         internal static extern void unienc_video_encoder_pull(Runtime* runtime, SendPtr output, nuint callback, SendPtr user_data);
@@ -103,6 +103,20 @@ namespace UniEnc
 
         [DllImport(__DllName, EntryPoint = "unienc_jpeg_decode", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
         internal static extern void unienc_jpeg_decode(byte* data, nuint size, nuint callback, void* user_data);
+
+        [DllImport(__DllName, EntryPoint = "unienc_new_shared_buffer_pool", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        [return: MarshalAs(UnmanagedType.U1)]
+        internal static extern bool unienc_new_shared_buffer_pool(nuint limit, Mutex** pool_out, nuint _on_error, void* _user_data);
+
+        [DllImport(__DllName, EntryPoint = "unienc_shared_buffer_pool_alloc", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        [return: MarshalAs(UnmanagedType.U1)]
+        internal static extern bool unienc_shared_buffer_pool_alloc(Mutex* pool, nuint size, SharedBuffer** buffer_out, byte** ptr_out, nuint on_error, SendPtr user_data);
+
+        [DllImport(__DllName, EntryPoint = "unienc_free_shared_buffer_pool", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        internal static extern void unienc_free_shared_buffer_pool(Mutex* pool);
+
+        [DllImport(__DllName, EntryPoint = "unienc_free_shared_buffer", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        internal static extern void unienc_free_shared_buffer(SharedBuffer* buffer);
 
 
     }

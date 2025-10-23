@@ -3,7 +3,7 @@
 // --------------------------------------------------------------
 
 using System.Threading.Tasks;
-using Unity.Collections;
+using UniEnc;
 
 namespace InstantReplay
 {
@@ -12,12 +12,12 @@ namespace InstantReplay
     /// </summary>
     internal readonly struct LazyVideoFrameData
     {
-        public readonly ValueTask<NativeArray<byte>> ReadbackTask;
+        public readonly ValueTask<SharedBuffer> ReadbackTask;
         public readonly int Width;
         public readonly int Height;
         public readonly double Timestamp;
 
-        public LazyVideoFrameData(ValueTask<NativeArray<byte>> readbackTask, int width, int height, double timestamp)
+        public LazyVideoFrameData(ValueTask<SharedBuffer> readbackTask, int width, int height, double timestamp)
         {
             ReadbackTask = readbackTask;
             Width = width;

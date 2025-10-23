@@ -2,6 +2,7 @@
 // Copyright 2025 CyberAgent, Inc.
 // --------------------------------------------------------------
 
+using System;
 using UniEnc;
 
 namespace InstantReplay
@@ -11,7 +12,15 @@ namespace InstantReplay
     /// </summary>
     public struct RealtimeEncodingOptions
     {
-        public long MaxMemoryUsageBytes { get; set; }
+        [Obsolete("Use MaxMemoryUsageBytesForCompressedFrames instead.")]
+        public long MaxMemoryUsageBytes
+        {
+            get => MaxMemoryUsageBytesForCompressedFrames;
+            set => MaxMemoryUsageBytesForCompressedFrames = value;
+        }
+
+        public long MaxMemoryUsageBytesForCompressedFrames { get; set; }
+        public int? MaxNumberOfRawFrameBuffer { get; set; }
 
         public VideoEncoderOptions VideoOptions { get; set; }
         public AudioEncoderOptions AudioOptions { get; set; }

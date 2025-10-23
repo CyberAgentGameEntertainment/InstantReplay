@@ -14,3 +14,6 @@ unienc_ffmpeg = { path = "./crates/unienc_ffmpeg" }
 
 [workspace.package]
 edition = "2021"
+
+[profile.release]
+panic = "abort" # It helps making crash stacktraces readable

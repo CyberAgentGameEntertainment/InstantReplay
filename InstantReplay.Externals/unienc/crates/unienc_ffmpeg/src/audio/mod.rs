@@ -76,7 +76,7 @@ impl Encoder for FFmpegAudioEncoder {
 impl EncoderInput for FFmpegAudioEncoderInput {
     type Data = AudioSample;
 
-    async fn push(&mut self, data: &Self::Data) -> Result<()> {
+    async fn push(&mut self, data: Self::Data) -> Result<()> {
         let data = unsafe {
             std::slice::from_raw_parts::<u8>(
                 data.data.as_ptr() as *const u8,

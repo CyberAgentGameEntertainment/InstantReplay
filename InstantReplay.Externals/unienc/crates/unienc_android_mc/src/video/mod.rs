@@ -119,7 +119,7 @@ impl MediaCodecVideoEncoder {
 impl EncoderInput for MediaCodecVideoEncoderInput {
     type Data = VideoSample;
 
-    async fn push(&mut self, data: &Self::Data) -> Result<()> {
+    async fn push(&mut self, data: Self::Data) -> Result<()> {
         let mut buffer_index;
         loop {
             let sleep;

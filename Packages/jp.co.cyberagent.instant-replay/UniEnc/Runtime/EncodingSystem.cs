@@ -1,6 +1,7 @@
 using System;
 using System.Text;
 using UniEnc.Internal;
+using UniEnc.Native;
 
 namespace UniEnc
 {

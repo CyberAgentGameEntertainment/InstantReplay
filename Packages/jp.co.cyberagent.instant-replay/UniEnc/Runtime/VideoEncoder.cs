@@ -1,8 +1,7 @@
 using System;
 using System.Threading.Tasks;
 using UniEnc.Internal;
-using Unity.Collections;
-using Unity.Collections.LowLevel.Unsafe;
+using UniEnc.Native;
 
 namespace UniEnc
 {
@@ -37,7 +36,7 @@ namespace UniEnc
         /// <param name="width">Frame width in pixels</param>
         /// <param name="height">Frame height in pixels</param>
         /// <param name="timestamp">Frame timestamp in seconds</param>
-        public ValueTask PushFrameAsync(NativeArray<byte> frameData, uint width, uint height, double timestamp)
+        public ValueTask PushFrameAsync(ref SharedBuffer frameData, uint width, uint height, double timestamp)
         {
             lock (_lock)
             {
@@ -56,8 +55,7 @@ namespace UniEnc
                         NativeMethods.unienc_video_encoder_push(
                             runtime.Runtime,
                             _inputHandle.DangerousGetHandle(),
-                            (nint)frameData.GetUnsafeReadOnlyPtr(),
-                            (nuint)frameData.Length,
+                            frameData.MoveOut(),
                             width,
                             height,
                             timestamp,
