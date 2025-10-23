@@ -159,10 +159,9 @@ impl EncoderInput for VideoToolboxEncoderInput {
             )
         }
         .to_result()
-        .map_err(|err| {
+        .inspect_err(|err| {
             // free pixel data if failed
             _ = unsafe { Box::from_raw(buffer_boxed_raw) };
-            err
         })?;
 
         let buffer = unsafe { Retained::from_raw(buffer) }.context("CVPixelBuffer is null")?;
