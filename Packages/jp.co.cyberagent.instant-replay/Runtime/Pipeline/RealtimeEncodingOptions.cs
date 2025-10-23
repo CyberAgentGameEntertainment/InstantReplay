@@ -20,7 +20,7 @@ namespace InstantReplay
         }
 
         public long MaxMemoryUsageBytesForCompressedFrames { get; set; }
-        public int? MaxNumberOfRawFrameBuffer { get; set; }
+        public int? MaxNumberOfRawFrameBuffers { get; set; }
 
         public VideoEncoderOptions VideoOptions { get; set; }
         public AudioEncoderOptions AudioOptions { get; set; }

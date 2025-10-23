@@ -1,3 +1,21 @@
+## [1.2.0] - 2025/10/23
+
+### Added
+
+- Added `RealtimeEncodingOptions.MaxNumberOfRawFrameBuffers`, which restricts the maximum concurrent number of raw frame buffers to be encoded.
+- Added `InstantReplay.ILogger` enabling users to redirect log messages.
+
+### Fixed
+
+- Fixed trying to destroy `UnityAudioSampleProviderReceiver` that has already been destroyed.
+- Fixed iOS app crashes when disposing encoder after entering background.
+
+### Changed
+
+- RenderTextures are now named clearly for easier debugging.
+- `AsyncGPUReadback` and related memory allocations are reduced when encoding pipeline stalls.
+- Internal improvements on code structure of encoding pipelines.
+
 ## [1.1.1] - 2025/10/10
 
 ### Fixed

@@ -23,7 +23,7 @@ namespace InstantReplay.Examples
         [FormerlySerializedAs("maxWidth")] [SerializeField] public int width = 640;
         [FormerlySerializedAs("maxHeight")] [SerializeField] public int height = 640;
         [FormerlySerializedAs("maxMemoryUsageMb")] [SerializeField] public int maxMemoryUsageForCompressedMb = 20;
-        [SerializeField] public int maxNumberOfRawFrameBuffer = 4;
+        [SerializeField] public int maxNumberOfRawFrameBuffers = 4;
         [SerializeField] public int fixedFrameRate = 30;
 
         #endregion
@@ -91,7 +91,7 @@ namespace InstantReplay.Examples
                     SampleRate = (uint)AudioSettings.outputSampleRate,
                     Bitrate = 128000
                 },
-                MaxNumberOfRawFrameBuffer = maxNumberOfRawFrameBuffer,
+                MaxNumberOfRawFrameBuffers = maxNumberOfRawFrameBuffers,
                 MaxMemoryUsageBytesForCompressedFrames = maxMemoryUsageForCompressedMb * 1024 * 1024,
                 FixedFrameRate = 30.0, // null if not using fixed frame rate
                 VideoInputQueueSize = 5, // Maximum number of raw frames to keep before encoding
