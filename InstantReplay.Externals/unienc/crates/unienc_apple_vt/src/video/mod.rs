@@ -207,9 +207,14 @@ impl EncoderOutput for VideoToolboxEncoderOutput {
 
 impl Drop for VideoToolboxEncoderInput {
     fn drop(&mut self) {
-        unsafe { self.session.inner.complete_frames(kCMTimeInvalid) }
-            .to_result()
-            .unwrap();
+        let res = unsafe { self.session.inner.complete_frames(kCMTimeInvalid) };
+
+        if res == kVTInvalidSessionErr {
+            // already invalid (e.g., app in background)
+            return;
+        }
+
+        res.to_result().unwrap();
         unsafe {
             self.session.inner.invalidate();
         }
