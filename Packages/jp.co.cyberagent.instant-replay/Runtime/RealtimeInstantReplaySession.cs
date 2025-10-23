@@ -57,9 +57,9 @@ namespace InstantReplay
                 fixedFrameInterval = 1.0 / fixedFrameRate;
             }
 
-            var uncompressedLimit = options.MaxNumberOfRawFrameBuffer switch
+            var uncompressedLimit = options.MaxNumberOfRawFrameBuffers switch
             {
-                <= 0 => throw new ArgumentOutOfRangeException(nameof(options.MaxNumberOfRawFrameBuffer),
+                <= 0 => throw new ArgumentOutOfRangeException(nameof(options.MaxNumberOfRawFrameBuffers),
                     "MaxNumberOfRawFrameBuffer must be positive if specified."),
                 { } value => options.VideoOptions.Width * options.VideoOptions.Height * 4 * value, // 32bpp
                 null => 0
