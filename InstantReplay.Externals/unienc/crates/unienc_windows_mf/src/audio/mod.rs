@@ -3,7 +3,7 @@ use bincode::{Decode, Encode};
 use tokio::sync::mpsc;
 use unienc_common::{
     AudioEncoderOptions, AudioSample, EncodedData, Encoder, EncoderInput, EncoderOutput,
-    UniencDataKind,
+    UniencSampleKind,
 };
 use windows::Win32::Media::MediaFoundation::*;
 
@@ -180,10 +180,10 @@ impl EncodedData for AudioEncodedData {
         };
     }
 
-    fn kind(&self) -> UniencDataKind {
+    fn kind(&self) -> UniencSampleKind {
         match &self.payload {
-            Payload::Sample(_sample) => UniencDataKind::Interpolated,
-            Payload::Format(_media_type) => UniencDataKind::Metadata,
+            Payload::Sample(_sample) => UniencSampleKind::Interpolated,
+            Payload::Format(_media_type) => UniencSampleKind::Metadata,
         }
     }
 }

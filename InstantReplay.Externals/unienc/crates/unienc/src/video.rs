@@ -2,12 +2,12 @@ use std::ffi::c_void;
 
 use anyhow::Context;
 use tokio::sync::Mutex;
-use unienc_common::{buffer::SharedBuffer, EncoderInput, EncoderOutput, VideoSample};
+use unienc_common::{
+    buffer::SharedBuffer, EncoderInput, EncoderOutput, VideoFrame, VideoFrameBgra32, VideoSample,
+};
 
 use crate::{
-    arc_from_raw, arc_from_raw_retained,
-    platform_types::{VideoEncoderInput, VideoEncoderOutput},
-    ApplyCallback, Runtime, SendPtr, UniencCallback, UniencDataCallback, UniencError,
+    ApplyCallback, Runtime, SendPtr, UniencCallback, UniencDataCallback, UniencError, UniencSampleData, arc_from_raw, arc_from_raw_retained, platform_types::{VideoEncoderInput, VideoEncoderOutput}
 };
 
 // Video encoder input/output functions
@@ -37,9 +37,11 @@ pub unsafe extern "C" fn unienc_video_encoder_push(
             let mut input = input.lock().await;
             let buffer = Box::from_raw(*buffer);
             let sample = VideoSample {
-                buffer: *buffer,
-                width,
-                height,
+                frame: VideoFrame::Bgra32(VideoFrameBgra32 {
+                    buffer: *buffer,
+                    width,
+                    height,
+                }),
                 timestamp,
             };
 
@@ -64,11 +66,11 @@ pub unsafe extern "C" fn unienc_video_encoder_push(
 pub unsafe extern "C" fn unienc_video_encoder_pull(
     runtime: *mut Runtime,
     output: SendPtr<Mutex<Option<VideoEncoderOutput>>>,
-    callback: usize, /*UniencDataCallback*/
+    callback: usize, /*UniencDataCallback<UniencSampleData>*/
     user_data: SendPtr<c_void>,
 ) {
     let _guard = (*runtime).enter();
-    let callback: UniencDataCallback = std::mem::transmute(callback);
+    let callback: UniencDataCallback<UniencSampleData> = std::mem::transmute(callback);
     if output.is_null() {
         UniencError::invalid_input_error("Invalid input parameters")
             .apply_callback(callback, user_data);

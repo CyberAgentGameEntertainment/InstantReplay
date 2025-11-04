@@ -13,6 +13,7 @@ bincode = { version = "2.0.1", features = ["serde"] }
 rand = "0.9.1"
 tokio = { version = "1.45.1", features = ["rt", "macros", "rt-multi-thread"] }
 unienc_common = { workspace = true }
+unity-native-plugin = "0.8.0"
 
 [target.'cfg(all(target_family = "unix", not(target_vendor = "apple"), not(target_os = "android")))'.dependencies]
 unienc_ffmpeg = { workspace = true }

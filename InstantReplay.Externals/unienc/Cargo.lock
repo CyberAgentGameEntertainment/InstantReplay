@@ -718,6 +718,7 @@ dependencies = [
  "unienc_common",
  "unienc_ffmpeg",
  "unienc_windows_mf",
+ "unity-native-plugin",
 ]
 
 [[package]]

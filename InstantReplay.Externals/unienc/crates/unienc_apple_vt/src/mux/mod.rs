@@ -142,7 +142,7 @@ impl AVFMuxer {
         let path = output_path.as_ref();
         _ = fs::remove_file(path);
         let url =
-            unsafe { NSURL::fileURLWithPath(&NSString::from_str(path.to_string_lossy().as_ref())) };
+            NSURL::fileURLWithPath(&NSString::from_str(path.to_string_lossy().as_ref()));
 
         let file_type = unsafe { AVFileTypeMPEG4.unwrap() };
         let writer = unsafe {

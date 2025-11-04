@@ -1,18 +1,19 @@
 use std::ffi::{c_char, c_void, CStr, CString};
 use std::ops::Deref;
 use std::path::Path;
-use std::sync::Arc;
+use std::sync::{Arc, Weak};
 
 use anyhow::{Context, Result};
 use tokio::runtime::EnterGuard;
 use tokio::sync::Mutex;
-use unienc_common::{EncodedData, Encoder, EncodingSystem, Muxer, UniencDataKind};
+use unienc_common::{EncodedData, Encoder, EncodingSystem, Muxer, UniencSampleKind};
 
 mod audio;
+mod blit;
+mod buffer;
 mod mux;
 mod public_types;
 mod video;
-mod buffer;
 
 #[cfg(target_os = "android")]
 mod android;
@@ -175,18 +176,39 @@ impl UniencError {
 
 // Callback types for async operations
 pub type UniencCallback = unsafe extern "C" fn(user_data: *mut c_void, error: UniencErrorNative);
-pub type UniencDataCallback = unsafe extern "C" fn(
-    user_data: *mut c_void,
+pub type UniencDataCallback<Data> =
+    unsafe extern "C" fn(data: Data, user_data: *mut c_void, error: UniencErrorNative);
+
+#[repr(C)]
+pub struct UniencSampleData {
     data: *const u8,
     size: usize,
     timestamp: f64,
-    kind: UniencDataKind,
-    error: UniencErrorNative,
-);
+    kind: UniencSampleKind,
+}
+
+impl Default for UniencSampleData {
+    fn default() -> Self {
+        Self {
+            data: std::ptr::null(),
+            size: 0,
+            timestamp: 0.0,
+            kind: UniencSampleKind::Interpolated,
+        }
+    }
+}
 
 // Send-safe wrappers for raw pointers
 #[repr(transparent)]
 pub struct SendPtr<T>(*mut T);
+
+impl<T> Clone for SendPtr<T> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+impl<T> Copy for SendPtr<T> {}
+
 unsafe impl<T> Send for SendPtr<T> {}
 
 impl<T> From<*mut T> for SendPtr<T> {
@@ -279,11 +301,12 @@ pub type PlatformEncodingSystem = unienc_windows_mf::MediaFoundationEncodingSyst
     AudioEncoderOptionsNative,
 >;
 
-#[cfg(all(unix, not(any(target_vendor = "apple", target_os = "android", windows))))]
-pub type PlatformEncodingSystem = unienc_ffmpeg::FFmpegEncodingSystem<
-    VideoEncoderOptionsNative,
-    AudioEncoderOptionsNative,
->;
+#[cfg(all(
+    unix,
+    not(any(target_vendor = "apple", target_os = "android", windows))
+))]
+pub type PlatformEncodingSystem =
+    unienc_ffmpeg::FFmpegEncodingSystem<VideoEncoderOptionsNative, AudioEncoderOptionsNative>;
 
 #[cfg(not(any(target_vendor = "apple", target_os = "android", windows, unix)))]
 pub type PlatformEncodingSystem = ();
@@ -316,17 +339,31 @@ use platform_types::*;
 pub use unienc_common::{AudioEncoderOptions, VideoEncoderOptions};
 
 pub struct Runtime {
-    tokio_runtime: tokio::runtime::Runtime,
+    tokio_runtime: Arc<tokio::runtime::Runtime>,
 }
 
 impl Runtime {
     pub fn new() -> Result<Runtime> {
-        let tokio_runtime = tokio::runtime::Runtime::new()?;
+        let tokio_runtime = Arc::new(tokio::runtime::Runtime::new()?);
         Ok(Self { tokio_runtime })
     }
 
     pub fn enter(&self) -> EnterGuard<'_> {
         self.tokio_runtime.enter()
+    }
+
+    pub fn weak(&self) -> WeakRuntime {
+        WeakRuntime(Arc::downgrade(&self.tokio_runtime))
+    }
+}
+
+pub struct WeakRuntime(Weak<tokio::runtime::Runtime>);
+
+impl WeakRuntime {
+    pub fn upgrade(&self) -> Option<Runtime> {
+        self.0
+            .upgrade()
+            .map(|tokio_runtime| Runtime { tokio_runtime })
     }
 }
 
@@ -355,9 +392,7 @@ pub unsafe extern "C" fn unienc_new_encoding_system(
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn unienc_free_encoding_system(
-    system: *mut PlatformEncodingSystem,
-) {
+pub unsafe extern "C" fn unienc_free_encoding_system(system: *mut PlatformEncodingSystem) {
     if !system.is_null() {
         unsafe {
             let _ = Box::from_raw(system);
@@ -530,22 +565,19 @@ impl ApplyCallback<UniencCallback> for Result<(), UniencError> {
     }
 }
 
-impl ApplyCallback<UniencDataCallback> for UniencError {
-    fn apply_callback(&self, callback: UniencDataCallback, user_data: SendPtr<c_void>) {
-        self.with_native(|native| unsafe {
-            callback(
-                user_data.into(),
-                std::ptr::null_mut(),
-                0,
-                0.0,
-                UniencDataKind::Interpolated,
-                *native,
-            )
-        });
+impl<Data: Default> ApplyCallback<UniencDataCallback<Data>> for UniencError {
+    fn apply_callback(&self, callback: UniencDataCallback<Data>, user_data: SendPtr<c_void>) {
+        self.with_native(|native| unsafe { callback(Data::default(), user_data.into(), *native) });
     }
 }
-impl<T: EncodedData> ApplyCallback<UniencDataCallback> for Result<Option<T>, UniencError> {
-    fn apply_callback(&self, callback: UniencDataCallback, user_data: SendPtr<c_void>) {
+impl<T: EncodedData> ApplyCallback<UniencDataCallback<UniencSampleData>>
+    for Result<Option<T>, UniencError>
+{
+    fn apply_callback(
+        &self,
+        callback: UniencDataCallback<UniencSampleData>,
+        user_data: SendPtr<c_void>,
+    ) {
         let result = match self {
             Ok(Some(data)) => {
                 let timestamp = data.timestamp();
@@ -557,7 +589,7 @@ impl<T: EncodedData> ApplyCallback<UniencDataCallback> for Result<Option<T>, Uni
                     )),
                 }
             }
-            Ok(None) => Ok((vec![], 0.0, UniencDataKind::Interpolated)),
+            Ok(None) => Ok((vec![], 0.0, UniencSampleKind::Interpolated)),
             Err(e) => Err(e.clone()),
         };
 
@@ -566,21 +598,20 @@ impl<T: EncodedData> ApplyCallback<UniencDataCallback> for Result<Option<T>, Uni
                 let (serialized, timestamp, kind) = data;
 
                 callback(
+                    UniencSampleData {
+                        data: serialized.as_ptr(),
+                        size: serialized.len(),
+                        timestamp,
+                        kind,
+                    },
                     user_data.into(),
-                    serialized.as_ptr(),
-                    serialized.len(),
-                    timestamp,
-                    kind,
                     UniencErrorNative::SUCCESS,
                 )
             },
             Err(err) => err.with_native(|native| unsafe {
                 callback(
+                    UniencSampleData::default(),
                     user_data.into(),
-                    std::ptr::null_mut(),
-                    0,
-                    0.0,
-                    UniencDataKind::Interpolated,
                     *native,
                 )
             }),

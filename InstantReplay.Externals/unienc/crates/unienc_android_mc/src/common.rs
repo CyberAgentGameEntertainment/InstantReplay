@@ -5,7 +5,7 @@ use jni::{
     sys::{jboolean, jint, jlong}, JNIEnv,
 };
 use std::{collections::HashMap, fmt::Display, sync::Arc, time::Duration};
-use unienc_common::{EncodedData, UniencDataKind, VideoSample};
+use unienc_common::{EncodedData, UniencSampleKind, VideoSample};
 
 use crate::java::*;
 
@@ -564,18 +564,18 @@ impl EncodedData for CommonEncodedData {
         self.timestamp = timestamp;
     }
 
-    fn kind(&self) -> UniencDataKind {
+    fn kind(&self) -> UniencSampleKind {
         match self.content {
             CommonEncodedDataContent::Buffer { buffer_flag, .. } => {
                 if (buffer_flag & media_codec_buffer_flag::BUFFER_FLAG_KEY_FRAME) != 0 {
-                    UniencDataKind::Key
+                    UniencSampleKind::Key
                 } else if (buffer_flag & media_codec_buffer_flag::BUFFER_FLAG_CODEC_CONFIG) != 0 {
-                    UniencDataKind::Metadata
+                    UniencSampleKind::Metadata
                 } else {
-                    UniencDataKind::Interpolated
+                    UniencSampleKind::Interpolated
                 }
             }
-            CommonEncodedDataContent::FormatInfo(_) => UniencDataKind::Metadata,
+            CommonEncodedDataContent::FormatInfo(_) => UniencSampleKind::Metadata,
         }
     }
 }

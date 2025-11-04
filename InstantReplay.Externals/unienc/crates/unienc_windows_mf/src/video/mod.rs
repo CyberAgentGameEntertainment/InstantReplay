@@ -2,7 +2,7 @@ use anyhow::Result;
 use bincode::{Decode, Encode};
 use tokio::sync::mpsc;
 use unienc_common::{
-    EncodedData, Encoder, EncoderInput, EncoderOutput, UniencDataKind, VideoEncoderOptions,
+    EncodedData, Encoder, EncoderInput, EncoderOutput, UniencSampleKind, VideoEncoderOptions,
     VideoSample,
 };
 use windows::Win32::Media::MediaFoundation::*;
@@ -187,16 +187,16 @@ impl EncodedData for VideoEncodedData {
         };
     }
 
-    fn kind(&self) -> UniencDataKind {
+    fn kind(&self) -> UniencSampleKind {
         match &self.payload {
             Payload::Sample(sample) => {
                 if unsafe { sample.GetUINT32(&MFSampleExtension_CleanPoint).unwrap() } != 0 {
-                    UniencDataKind::Key
+                    UniencSampleKind::Key
                 } else {
-                    UniencDataKind::Interpolated
+                    UniencSampleKind::Interpolated
                 }
             }
-            Payload::Format(_media_type) => UniencDataKind::Metadata,
+            Payload::Format(_media_type) => UniencSampleKind::Metadata,
         }
     }
 }

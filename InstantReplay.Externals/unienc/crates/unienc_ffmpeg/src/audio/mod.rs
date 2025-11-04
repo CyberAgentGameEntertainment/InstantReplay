@@ -8,7 +8,7 @@ use tokio::{
 };
 use unienc_common::{
     AudioEncoderOptions, AudioSample, EncodedData, Encoder, EncoderInput, EncoderOutput,
-    UniencDataKind,
+    UniencSampleKind,
 };
 
 use crate::ffmpeg;
@@ -142,7 +142,7 @@ impl EncodedData for AudioEncodedData {
         self.timestamp_in_samples = (value * self.sample_rate as f64) as u64;
     }
 
-    fn kind(&self) -> UniencDataKind {
-        UniencDataKind::Interpolated
+    fn kind(&self) -> UniencSampleKind {
+        UniencSampleKind::Interpolated
     }
 }

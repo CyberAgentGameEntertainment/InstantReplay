@@ -1,12 +1,9 @@
 use std::{
-    cell::{Cell, RefCell},
-    ffi::c_void,
-    ptr::NonNull,
-    sync::{Arc, Mutex, OnceLock},
+    cell::{Cell, RefCell}, ffi::c_void, future::Future, ptr::NonNull, sync::{Arc, Mutex, OnceLock}
 };
 
 use block2::RcBlock;
-use objc2::{rc::Retained, runtime::ProtocolObject};
+use objc2::{rc::Retained, runtime::{ProtocolObject}};
 use objc2_core_foundation::{kCFAllocatorDefault, kCFBooleanTrue, CFDictionary};
 use objc2_core_video::{
     kCVPixelBufferMetalCompatibilityKey, kCVPixelFormatType_32BGRA, CVMetalTexture,
@@ -14,15 +11,17 @@ use objc2_core_video::{
 };
 use objc2_foundation::NSString;
 use objc2_metal::{
-    MTLBuffer, MTLCommandBuffer, MTLCommandEncoder, MTLCullMode, MTLDevice, MTLIndexType, MTLLibrary, MTLPixelFormat, MTLPrimitiveType, MTLRenderCommandEncoder,
+    MTLBuffer, MTLCommandBuffer, MTLCommandEncoder, MTLCullMode, MTLDevice, MTLIndexType,
+    MTLLibrary, MTLPixelFormat, MTLPrimitiveType, MTLRenderCommandEncoder,
     MTLRenderPassColorAttachmentDescriptor, MTLRenderPipelineColorAttachmentDescriptor,
     MTLRenderPipelineDescriptor, MTLRenderPipelineState, MTLResourceOptions, MTLSamplerAddressMode,
     MTLSamplerDescriptor, MTLSamplerMinMagFilter, MTLSamplerMipFilter, MTLTexture,
     MTLVertexAttributeDescriptor, MTLVertexBufferLayoutDescriptor, MTLVertexDescriptor,
     MTLVertexFormat, MTLVertexStepFunction,
 };
+use tokio::sync::oneshot;
+use unienc_common::{IntoRaw, TryFromRaw};
 use unity_native_plugin::{
-    enums::RenderingExtEventType,
     graphics::{GfxDeviceEventType, UnityGraphics},
     metal::objc2::{UnityGraphicsMetalV1, UnityGraphicsMetalV1Interface},
 };
@@ -34,10 +33,13 @@ use crate::{common::UnsafeSendRetained, OsStatus};
 static GRAPHICS: OnceLock<Mutex<UnityGraphics>> = OnceLock::new();
 static CONTEXT: OnceLock<Mutex<GlobalContext>> = OnceLock::new();
 
+pub(crate) fn is_initialized() -> bool {
+    CONTEXT.get().is_some()
+}
+
 struct GlobalContext {
     metal: UnityGraphicsMetalV1,
     device: Retained<ProtocolObject<dyn MTLDevice>>,
-    library: Retained<ProtocolObject<dyn MTLLibrary>>,
     pipeline_state: Retained<ProtocolObject<dyn MTLRenderPipelineState>>,
     vertices: UnsafeSendRetained<ProtocolObject<dyn MTLBuffer>>,
     indices: UnsafeSendRetained<ProtocolObject<dyn MTLBuffer>>,
@@ -59,7 +61,7 @@ fn unity_plugin_load(interfaces: &unity_native_plugin::interface::UnityInterface
 
     GRAPHICS
         .set(Mutex::new(graphics))
-        .map_err(|e| anyhow!("Failed to set graphics"))
+        .map_err(|_e| anyhow!("Failed to set graphics"))
         .unwrap();
     graphics.register_device_event_callback(Some(on_device_event));
 }
@@ -214,12 +216,11 @@ fragment FShaderOutput fragment_main(VertexOut in [[stage_in]],
                     .set(Mutex::new(GlobalContext {
                         metal,
                         device,
-                        library,
                         pipeline_state,
                         vertices: vertices.into(),
                         indices: indices.into(),
                     }))
-                    .map_err(|e| anyhow!("Failed to set metal"))
+                    .map_err(|_e| anyhow!("Failed to set metal"))
                     .unwrap();
             }
         }
@@ -229,141 +230,157 @@ fragment FShaderOutput fragment_main(VertexOut in [[stage_in]],
     }
 }
 
-extern "C" fn unienc_get_custom_blit(event: RenderingExtEventType, data: *mut c_void) {
-    if event == RenderingExtEventType::UserEventsStart {
-        // custom blit;
-        let Some(source) =
-            (unsafe { Retained::<ProtocolObject<dyn MTLTexture>>::retain(data as *mut _) })
-        else {
-            return;
-        };
+pub(crate) fn custom_blit(source: Retained<ProtocolObject<dyn MTLTexture>>, dst_width: u32, dst_height: u32) -> Result<impl Future<Output = Result<SharedTexture>> + Send> {
+    // custom blit;
+    /*
+    let Some(source) =
+        (unsafe { Retained::<ProtocolObject<dyn MTLTexture>>::retain(data as *mut _) })
+    else {
+        return;
+    };
+     */
 
-        let context = CONTEXT.get().unwrap().lock().unwrap();
-        let metal = &context.metal;
-        let device = &context.device;
+    let context = CONTEXT.get().context("Context is not initialized")?.lock().map_err(|e| anyhow!(e.to_string()))?;
+    let metal = context.metal;
+    let device = &context.device;
 
-        let mut cache: *mut CVMetalTextureCache = std::ptr::null_mut();
-        unsafe {
-            CVMetalTextureCache::create(
-                kCFAllocatorDefault,
-                None,
-                device,
-                None,
-                NonNull::new(&mut cache).unwrap(),
-            )
-            .to_result()
-            .unwrap()
-        };
+    let mut cache: *mut CVMetalTextureCache = std::ptr::null_mut();
+    unsafe {
+        CVMetalTextureCache::create(
+            kCFAllocatorDefault,
+            None,
+            device,
+            None,
+            NonNull::new(&mut cache).context("Failed to get NonNull for CVMetalTextureCache")?,
+        )
+        .to_result()
+        ?
+    };
 
-        let cache = unsafe { Retained::from_raw(cache).unwrap() };
+    let cache = unsafe { Retained::from_raw(cache).context("Failed to create Retained for CVMetalTextureCache")? };
 
-        let width = source.width();
-        let height = source.height();
+    let width = dst_width;//source.width();
+    let height = dst_height;//source.height();
 
-        let shared_texture = SharedTexture::new(&cache, width, height).unwrap();
+    let shared_texture = SharedTexture::new(&cache, width as usize, height as usize)?;
 
-        let command_buffer = metal.current_command_buffer().unwrap();
-        metal.end_current_command_encoder();
+    let command_buffer = metal.current_command_buffer().context("Failed to get current command buffer")?;
+    metal.end_current_command_encoder();
 
-        let color_attachment_desc = MTLRenderPassColorAttachmentDescriptor::new();
-        color_attachment_desc.setTexture(Some(&shared_texture.metal_texture()));
-        color_attachment_desc.setLoadAction(objc2_metal::MTLLoadAction::DontCare);
-        color_attachment_desc.setStoreAction(objc2_metal::MTLStoreAction::Store);
+    let color_attachment_desc = MTLRenderPassColorAttachmentDescriptor::new();
+    color_attachment_desc.setTexture(Some(&shared_texture.metal_texture()));
+    color_attachment_desc.setLoadAction(objc2_metal::MTLLoadAction::DontCare);
+    color_attachment_desc.setStoreAction(objc2_metal::MTLStoreAction::Store);
 
-        let render_pass_descriptor = objc2_metal::MTLRenderPassDescriptor::new();
-        unsafe {
-            render_pass_descriptor
-                .colorAttachments()
-                .setObject_atIndexedSubscript(Some(&color_attachment_desc), 0)
-        };
+    let render_pass_descriptor = objc2_metal::MTLRenderPassDescriptor::new();
+    unsafe {
+        render_pass_descriptor
+            .colorAttachments()
+            .setObject_atIndexedSubscript(Some(&color_attachment_desc), 0)
+    };
 
-        let encoder = command_buffer
-            .renderCommandEncoderWithDescriptor(&render_pass_descriptor)
-            .unwrap();
+    let encoder = command_buffer
+        .renderCommandEncoderWithDescriptor(&render_pass_descriptor)
+        .context("Failed to create render command encoder")?;
 
-        let color_desc = MTLRenderPipelineColorAttachmentDescriptor::new();
-        color_desc.setPixelFormat(MTLPixelFormat::BGRA8Unorm);
+    let color_desc = MTLRenderPipelineColorAttachmentDescriptor::new();
+    color_desc.setPixelFormat(MTLPixelFormat::BGRA8Unorm);
 
-        let sampler_desc = MTLSamplerDescriptor::new();
-        sampler_desc.setSAddressMode(MTLSamplerAddressMode::ClampToEdge);
-        sampler_desc.setTAddressMode(MTLSamplerAddressMode::ClampToEdge);
-        sampler_desc.setMinFilter(MTLSamplerMinMagFilter::Linear);
-        sampler_desc.setMagFilter(MTLSamplerMinMagFilter::Linear);
-        sampler_desc.setMipFilter(MTLSamplerMipFilter::NotMipmapped);
+    let sampler_desc = MTLSamplerDescriptor::new();
+    sampler_desc.setSAddressMode(MTLSamplerAddressMode::ClampToEdge);
+    sampler_desc.setTAddressMode(MTLSamplerAddressMode::ClampToEdge);
+    sampler_desc.setMinFilter(MTLSamplerMinMagFilter::Linear);
+    sampler_desc.setMagFilter(MTLSamplerMinMagFilter::Linear);
+    sampler_desc.setMipFilter(MTLSamplerMipFilter::NotMipmapped);
 
-        let sampler_state = device.newSamplerStateWithDescriptor(&sampler_desc).unwrap();
+    let sampler_state = device.newSamplerStateWithDescriptor(&sampler_desc).context("Failed to create sampler state")?;
 
-        encoder.setRenderPipelineState(&context.pipeline_state);
-        encoder.setCullMode(MTLCullMode::None);
+    encoder.setRenderPipelineState(&context.pipeline_state);
+    encoder.setCullMode(MTLCullMode::None);
 
-        // vertex
-        unsafe { encoder.setVertexBuffer_offset_atIndex(Some(&*context.vertices), 0, 0) };
+    // vertex
+    unsafe { encoder.setVertexBuffer_offset_atIndex(Some(&*context.vertices), 0, 0) };
 
-        let mut vert_uniforms = VertexUniforms {
-            scale_and_tiling: [1.0, 1.0, 0.0, 0.0],
-        };
-        let vert_uniforms = unsafe {
-            device.newBufferWithBytes_length_options(
-                NonNull::new(&mut vert_uniforms as *mut VertexUniforms as *mut _).unwrap(),
-                std::mem::size_of::<VertexUniforms>(),
-                MTLResourceOptions::CPUCacheModeWriteCombined,
-            )
+    let mut vert_uniforms = VertexUniforms {
+        scale_and_tiling: [1.0, 1.0, 0.0, 0.0],
+    };
+    let vert_uniforms = unsafe {
+        device.newBufferWithBytes_length_options(
+            NonNull::new(&mut vert_uniforms as *mut VertexUniforms as *mut _).context("Failed to create NonNull for vertex uniforms")?,
+            std::mem::size_of::<VertexUniforms>(),
+            MTLResourceOptions::CPUCacheModeWriteCombined,
+        )
+    }
+    .context("Failed to create vertex uniforms buffer")?;
+
+    unsafe { encoder.setVertexBuffer_offset_atIndex(Some(&vert_uniforms), 0, 1) };
+
+    // fragment
+
+    unsafe { encoder.setFragmentTexture_atIndex(Some(&source), 0) };
+    unsafe { encoder.setFragmentSamplerState_atIndex(Some(&sampler_state), 0) };
+
+    unsafe {
+        encoder.drawIndexedPrimitives_indexCount_indexType_indexBuffer_indexBufferOffset(
+            MTLPrimitiveType::Triangle,
+            3,
+            MTLIndexType::UInt16,
+            &context.indices,
+            0,
+        )
+    };
+
+    encoder.endEncoding();
+
+    let (tx, rx) = oneshot::channel();
+
+    let cell = Arc::new(RefCell::new(None));
+    let cell_clone = cell.clone();
+
+    fn fnonce_to_fn<Args>(closure: impl FnOnce(Args)) -> impl Fn(Args) {
+        let cell = Cell::new(Some(closure));
+        move |args| {
+            let closure = cell.take().expect("called twice");
+            closure(args)
         }
-        .unwrap();
+    }
 
-        unsafe { encoder.setVertexBuffer_offset_atIndex(Some(&vert_uniforms), 0, 1) };
+    let block = RcBlock::new(fnonce_to_fn(
+        move |_command_buffer: NonNull<ProtocolObject<dyn MTLCommandBuffer>>| {
+            tx.send(shared_texture).unwrap();
 
-        // fragment
+            drop(cell_clone.borrow_mut().take()); // drop self
+        },
+    ));
 
-        unsafe { encoder.setFragmentTexture_atIndex(Some(&source), 0) };
-        unsafe { encoder.setFragmentSamplerState_atIndex(Some(&sampler_state), 0) };
+    cell.borrow_mut().replace(block.clone());
+    let block_ptr = RcBlock::into_raw(block);
 
-        unsafe {
-            encoder.drawIndexedPrimitives_indexCount_indexType_indexBuffer_indexBufferOffset(
-                MTLPrimitiveType::Triangle,
-                3,
-                MTLIndexType::UInt16,
-                &context.indices,
-                0,
-            )
-        };
+    unsafe { command_buffer.addCompletedHandler(block_ptr) };
+    Ok(async move { rx.await.map_err(|e| anyhow!(e)) })
+}
 
-        encoder.endEncoding();
+#[derive(Debug)]
+pub struct SharedTexture {
+    inner: Arc<Mutex<SharedTextureInner>>,
+}
 
-        let cell = Arc::new(RefCell::new(None));
-        let cell_clone = cell.clone();
+#[derive(Debug)]
+struct SharedTextureInner {
+    texture: UnsafeSendRetained<CVMetalTexture>,
+    pixel_buffer: UnsafeSendRetained<CVPixelBuffer>,
+}
 
-        fn fnonce_to_fn<Args>(closure: impl FnOnce(Args)) -> impl Fn(Args) {
-            let cell = Cell::new(Some(closure));
-            move |args| {
-                let closure = cell.take().expect("called twice");
-                closure(args)
-            }
-        }
-
-        let block = RcBlock::new(fnonce_to_fn(
-            move |_command_buffer: NonNull<ProtocolObject<dyn MTLCommandBuffer>>| {
-                drop(shared_texture);
-
-                drop(cell_clone.borrow_mut().take()); // drop self
-            },
-        ));
-
-        cell.borrow_mut().replace(block.clone());
-        let block_ptr = RcBlock::into_raw(block);
-
-        unsafe { command_buffer.addCompletedHandler(block_ptr) };
+impl TryFromRaw for SharedTexture {
+    unsafe fn try_from_raw(ptr: *mut c_void) -> Result<Self> {
+        Ok(SharedTexture { inner: Arc::from_raw(ptr as *mut Mutex<SharedTextureInner>) })
     }
 }
 
-#[no_mangle]
-pub extern "C" fn unienc_get_custom_blit_ptr() -> usize {
-    unienc_get_custom_blit as usize
-}
-
-struct SharedTexture {
-    texture: Retained<CVMetalTexture>,
-    pixel_buffer: Retained<CVPixelBuffer>,
+impl IntoRaw for SharedTexture {
+    fn into_raw(self) -> *mut c_void {
+        Arc::into_raw(self.inner) as *mut c_void
+    }
 }
 
 impl SharedTexture {
@@ -411,13 +428,17 @@ impl SharedTexture {
         let texture = unsafe { Retained::from_raw(texture) }
             .context("Failed to get MTLTexture from CVMetalTexture")?;
 
-        Ok(Self {
-            texture,
-            pixel_buffer: buffer,
-        })
+        Ok(Self { inner: Arc::new(Mutex::new(SharedTextureInner {
+            texture: texture.into(),
+            pixel_buffer: buffer.into(),
+        })) })
     }
 
     pub fn metal_texture(&self) -> Retained<ProtocolObject<dyn MTLTexture>> {
-        unsafe { CVMetalTextureGetTexture(&self.texture).unwrap() }
+        unsafe { CVMetalTextureGetTexture(&self.inner.lock().unwrap().texture).unwrap() }
+    }
+
+    pub fn pixel_buffer(&self) -> Retained<CVPixelBuffer> {
+        self.inner.lock().unwrap().pixel_buffer.clone()
     }
 }

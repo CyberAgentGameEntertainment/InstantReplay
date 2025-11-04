@@ -115,6 +115,10 @@ namespace UniEnc.Native
         [DllImport(__DllName, EntryPoint = "unienc_free_shared_buffer", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
         internal static extern void unienc_free_shared_buffer(SharedBuffer* buffer);
 
+        [DllImport(__DllName, EntryPoint = "unienc_new_blit_closure", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        [return: MarshalAs(UnmanagedType.U1)]
+        internal static extern bool unienc_new_blit_closure(Runtime* runtime, void* system, void* source_native_texture_ptr, uint dst_width, uint dst_height, void** event_function_ptr_out, uint* event_id_out, void** event_data_out, nuint callback, SendPtr user_data);
+
 
     }
 
