@@ -12,7 +12,7 @@ use tokio::{
     process::ChildStdout,
 };
 use unienc_common::{
-    buffer::SharedBuffer, EncodedData, Encoder, EncoderInput, EncoderOutput, UniencSampleKind, VideoEncoderOptions, VideoSample
+    EncodedData, Encoder, EncoderInput, EncoderOutput, UniencSampleKind, UnsupportedBlitData, VideoEncoderOptions, VideoFrame, VideoFrameBgra32, VideoSample, buffer::SharedBuffer
 };
 
 use crate::{
@@ -31,7 +31,7 @@ pub struct FFmpegVideoEncoder {
 pub struct FFmpegVideoEncoderInput {
     _ffmpeg: Arc<ffmpeg::FFmpeg>,
     input: ffmpeg::Input,
-    cfr: Cfr<VideoSample>,
+    cfr: Cfr<VideoFrameBgra32>,
     width: u32,
     height: u32,
 }
@@ -205,20 +205,26 @@ impl Encoder for FFmpegVideoEncoder {
 }
 
 impl EncoderInput for FFmpegVideoEncoderInput {
-    type Data = VideoSample;
+    type Data = VideoSample<UnsupportedBlitData>;
 
     async fn push(&mut self, data: Self::Data) -> Result<()> {
+        let VideoFrame::Bgra32(frame) = data.frame else {
+            return Err(anyhow::anyhow!(
+                "FFmpegVideoEncoderInput only supports Bgra32 frames"
+            ));
+        };
+
         let timestamp = data.timestamp;
-        let data = if data.width != self.width || data.height != self.height {
+        let frame = if frame.width != self.width || frame.height != self.height {
             // resize (crop or trim)
-            let bgra = data.buffer.data();
+            let bgra = frame.buffer.data();
             let mut resized = vec![0u8; (self.width * self.height * 4) as usize];
 
-            let w = u32::min(self.width, data.width);
-            let h = u32::min(self.height, data.height);
+            let w = u32::min(self.width, frame.width);
+            let h = u32::min(self.height, frame.height);
 
             for y in 0..h {
-                let src_start = (y * data.width * 4) as usize;
+                let src_start = (y * frame.width * 4) as usize;
                 let src_end = src_start + (w * 4) as usize;
                 let dst_start = (y * self.width * 4) as usize;
                 let dst_end = dst_start + (w * 4) as usize;
@@ -226,26 +232,25 @@ impl EncoderInput for FFmpegVideoEncoderInput {
                 resized[dst_start..dst_end].copy_from_slice(&bgra[src_start..src_end]);
             }
 
-            Self::Data {
+            VideoFrameBgra32 {
                 width: self.width,
                 height: self.height,
                 buffer: SharedBuffer::new_unmanaged(resized),
-                timestamp: data.timestamp,
             }
         } else {
-            data
+            frame
         };
 
         // raw H.264 frames cannot have timestamps, so we need to assume CFR
         // we need to repeat or discard frames to match frame rate specified as fps_hint
-        let Some((data, count)) = self.cfr.push(data, timestamp)? else {
+        let Some((frame, count)) = self.cfr.push(frame, timestamp)? else {
             return Ok(());
         };
 
         for _i in 0..count {
-            self.input.write_all(data.buffer.data()).await?;
+            self.input.write_all(frame.buffer.data()).await?;
         }
-        drop(data);
+        drop(frame);
 
         self.input.flush().await?;
 

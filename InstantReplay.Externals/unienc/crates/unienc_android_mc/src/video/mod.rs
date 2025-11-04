@@ -1,7 +1,7 @@
 use anyhow::Result;
 use jni::{objects::JValue, signature::ReturnType, sys::jint, JNIEnv};
 use std::time::Duration;
-use unienc_common::{Encoder, EncoderInput, EncoderOutput, VideoSample};
+use unienc_common::{Encoder, EncoderInput, EncoderOutput, UnsupportedBlitData, VideoFrame, VideoSample};
 
 use crate::java::*;
 
@@ -117,9 +117,14 @@ impl MediaCodecVideoEncoder {
 }
 
 impl EncoderInput for MediaCodecVideoEncoderInput {
-    type Data = VideoSample;
+    type Data = VideoSample<UnsupportedBlitData>;
 
     async fn push(&mut self, data: Self::Data) -> Result<()> {
+        let VideoFrame::Bgra32(frame) = data.frame else {
+            return Err(anyhow::anyhow!(
+                "MediaCodecVideoEncoderInput only supports Bgra32 frames"
+            ));
+        };
         let mut buffer_index;
         loop {
             let sleep;
@@ -151,7 +156,7 @@ impl EncoderInput for MediaCodecVideoEncoderInput {
         // Use Image-based approach with dynamic plane layout and padding
         let planes = image.get_planes()?;
         crate::common::write_bgra_to_yuv_planes_with_padding(
-            &data,
+            &frame,
             self.padded_width,
             self.padded_height,
             &planes,

@@ -5,7 +5,7 @@ use jni::{
     sys::{jboolean, jint, jlong}, JNIEnv,
 };
 use std::{collections::HashMap, fmt::Display, sync::Arc, time::Duration};
-use unienc_common::{EncodedData, UniencSampleKind, VideoSample};
+use unienc_common::{EncodedData, UniencSampleKind, UnsupportedBlitData, VideoFrameBgra32, VideoSample};
 
 use crate::java::*;
 
@@ -732,7 +732,7 @@ pub(crate) fn format_to_map(
 
 /// Write ARGB data to YUV image planes with padding for 16-byte alignment
 pub fn write_bgra_to_yuv_planes_with_padding(
-    sample: &VideoSample,
+    sample: &VideoFrameBgra32,
     padded_width: u32,
     padded_height: u32,
     planes: &[ImagePlane],

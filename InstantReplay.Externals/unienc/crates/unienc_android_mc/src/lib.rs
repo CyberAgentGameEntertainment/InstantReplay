@@ -1,8 +1,9 @@
 use std::ffi::{c_int, c_void};
+use std::future::Future;
 use std::path::Path;
 use std::sync::OnceLock;
 use jni::JavaVM;
-use unienc_common::EncodingSystem;
+use unienc_common::{EncodingSystem, UnsupportedBlitData};
 use anyhow::Result;
 
 pub mod audio;
@@ -35,6 +36,8 @@ impl<V: unienc_common::VideoEncoderOptions, A: unienc_common::AudioEncoderOption
     type VideoEncoderType = MediaCodecVideoEncoder;
     type AudioEncoderType = MediaCodecAudioEncoder;
     type MuxerType = MediaMuxer;
+    type BlitSourceType = UnsupportedBlitData;
+    type BlitTargetType = UnsupportedBlitData;
 
     fn new(video_options: &V, audio_options: &A) -> Self {
         Self {
@@ -53,5 +56,22 @@ impl<V: unienc_common::VideoEncoderOptions, A: unienc_common::AudioEncoderOption
 
     fn new_muxer(&self, output_path: &Path) -> Result<Self::MuxerType> {
         MediaMuxer::new(output_path, &self.video_options, &self.audio_options)
+    }
+
+    fn new_blit_closure(
+        &self,
+        source: Self::BlitSourceType,
+        dst_width: u32,
+        dst_height: u32,
+    ) -> Result<
+        Box<
+            dyn FnOnce() -> std::pin::Pin<
+                    Box<dyn Future<Output = Result<Self::BlitTargetType>> + Send>,
+                > + Send,
+        >,
+    > {
+        Err(anyhow::anyhow!(
+            "Blit not supported in MediaCodec encoding system"
+        ))
     }
 }

@@ -1,12 +1,12 @@
 use anyhow::Result;
-use std::path::Path;
-use unienc_common::EncodingSystem;
+use std::{future::Future, path::Path};
+use unienc_common::{EncodingSystem, UnsupportedBlitData};
 
 pub mod audio;
-pub mod mux;
-pub mod video;
 mod ffmpeg;
+pub mod mux;
 mod utils;
+pub mod video;
 
 use audio::FFmpegAudioEncoder;
 use mux::FFmpegMuxer;
@@ -28,9 +28,10 @@ impl<V: unienc_common::VideoEncoderOptions, A: unienc_common::AudioEncoderOption
     type VideoEncoderType = FFmpegVideoEncoder;
     type AudioEncoderType = FFmpegAudioEncoder;
     type MuxerType = FFmpegMuxer;
+    type BlitSourceType = UnsupportedBlitData;
+    type BlitTargetType = UnsupportedBlitData;
 
     fn new(video_options: &V, audio_options: &A) -> Self {
-
         Self {
             video_options: *video_options,
             audio_options: *audio_options,
@@ -47,5 +48,22 @@ impl<V: unienc_common::VideoEncoderOptions, A: unienc_common::AudioEncoderOption
 
     fn new_muxer(&self, output_path: &Path) -> Result<Self::MuxerType> {
         FFmpegMuxer::new(output_path, &self.video_options, &self.audio_options)
+    }
+
+    fn new_blit_closure(
+        &self,
+        source: Self::BlitSourceType,
+        dst_width: u32,
+        dst_height: u32,
+    ) -> Result<
+        Box<
+            dyn FnOnce() -> std::pin::Pin<
+                    Box<dyn Future<Output = Result<Self::BlitTargetType>> + Send>,
+                > + Send,
+        >,
+    > {
+        Err(anyhow::anyhow!(
+            "Blit not supported in FFmpeg encoding system"
+        ))
     }
 }
