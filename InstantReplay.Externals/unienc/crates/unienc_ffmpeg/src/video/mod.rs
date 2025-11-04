@@ -12,7 +12,7 @@ use tokio::{
     process::ChildStdout,
 };
 use unienc_common::{
-    buffer::SharedBuffer, EncodedData, Encoder, EncoderInput, EncoderOutput, UniencDataKind, VideoEncoderOptions, VideoSample
+    buffer::SharedBuffer, EncodedData, Encoder, EncoderInput, EncoderOutput, UniencSampleKind, VideoEncoderOptions, VideoSample
 };
 
 use crate::{
@@ -370,19 +370,19 @@ impl EncodedData for VideoEncodedData {
         }
     }
 
-    fn kind(&self) -> UniencDataKind {
+    fn kind(&self) -> UniencSampleKind {
         match self {
-            VideoEncodedData::ParameterSet(_items) => UniencDataKind::Metadata,
+            VideoEncodedData::ParameterSet(_items) => UniencSampleKind::Metadata,
             VideoEncodedData::Slice {
                 payload: _,
                 timestamp: _,
                 is_idr: true,
-            } => UniencDataKind::Key,
+            } => UniencSampleKind::Key,
             VideoEncodedData::Slice {
                 payload: _,
                 timestamp: _,
                 is_idr: false,
-            } => UniencDataKind::Interpolated,
+            } => UniencSampleKind::Interpolated,
         }
     }
 }

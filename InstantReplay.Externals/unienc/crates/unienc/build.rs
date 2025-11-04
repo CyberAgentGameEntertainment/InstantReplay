@@ -9,6 +9,7 @@ fn main() {
         .input_extern_file("src/public_types.rs")
         .input_extern_file("src/jpeg.rs")
         .input_extern_file("src/buffer.rs")
+        .input_extern_file("src/blit.rs")
         .generate_csharp_file("../../../../Packages/jp.co.cyberagent.instant-replay/UniEnc/Runtime/Generated/NativeMethods.g.cs")
         .unwrap();
 }
