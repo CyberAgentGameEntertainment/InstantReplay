@@ -79,6 +79,25 @@ pub trait IntoRaw {
     fn into_raw(self) -> *mut c_void;
 }
 
+pub struct UnsupportedBlitData;
+
+impl TryFromUnityNativeTexturePointer for UnsupportedBlitData {
+    fn try_from_unity_native_texture_ptr(_ptr: *mut c_void) -> Result<Self> {
+        Err(anyhow::anyhow!("Blit not supported in this encoding system"))
+    }
+}
+impl TryFromRaw for UnsupportedBlitData {
+    unsafe fn try_from_raw(_ptr: *mut c_void) -> Result<Self> {
+        Err(anyhow::anyhow!("Blit not supported in this encoding system"))
+    }
+}
+
+impl IntoRaw for UnsupportedBlitData {
+    fn into_raw(self) -> *mut c_void {
+        std::ptr::null_mut()
+    }
+}
+
 pub trait VideoEncoderOptions: Clone + Copy {
     fn width(&self) -> u32;
     fn height(&self) -> u32;
