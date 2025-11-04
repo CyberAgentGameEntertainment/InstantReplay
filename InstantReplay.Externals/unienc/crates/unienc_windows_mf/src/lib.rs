@@ -1,6 +1,6 @@
 use anyhow::Result;
-use std::path::Path;
-use unienc_common::EncodingSystem;
+use std::{future::Future, path::Path};
+use unienc_common::{EncodingSystem, UnsupportedBlitData};
 
 pub mod audio;
 mod common;
@@ -28,6 +28,8 @@ impl<V: unienc_common::VideoEncoderOptions, A: unienc_common::AudioEncoderOption
     type VideoEncoderType = MediaFoundationVideoEncoder;
     type AudioEncoderType = MediaFoundationAudioEncoder;
     type MuxerType = MediaFoundationMuxer;
+    type BlitSourceType = UnsupportedBlitData;
+    type BlitTargetType = UnsupportedBlitData;
 
     fn new(video_options: &V, audio_options: &A) -> Self {
         // Initialize Media Foundation
@@ -54,6 +56,10 @@ impl<V: unienc_common::VideoEncoderOptions, A: unienc_common::AudioEncoderOption
 
     fn new_muxer(&self, output_path: &Path) -> Result<Self::MuxerType> {
         MediaFoundationMuxer::new(output_path, &self.video_options, &self.audio_options)
+    }
+
+    fn new_blit_closure(&self, source: Self::BlitSourceType, dst_width: u32, dst_height: u32) -> Result<Box<dyn FnOnce() -> std::pin::Pin<Box<dyn Future<Output = Result<Self::BlitTargetType>> + Send>> + Send>> {
+        Err(anyhow::anyhow!("Media Foundation Encoding System does not support blitting"))
     }
 }
 
