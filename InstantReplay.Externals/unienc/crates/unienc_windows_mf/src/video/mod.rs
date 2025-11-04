@@ -2,8 +2,7 @@ use anyhow::Result;
 use bincode::{Decode, Encode};
 use tokio::sync::mpsc;
 use unienc_common::{
-    EncodedData, Encoder, EncoderInput, EncoderOutput, UniencSampleKind, VideoEncoderOptions,
-    VideoSample,
+    EncodedData, Encoder, EncoderInput, EncoderOutput, UniencSampleKind, UnsupportedBlitData, VideoEncoderOptions, VideoFrame, VideoSample
 };
 use windows::Win32::Media::MediaFoundation::*;
 
@@ -100,14 +99,19 @@ pub struct VideoEncoderOutputImpl {
 }
 
 impl EncoderInput for VideoEncoderInputImpl {
-    type Data = VideoSample;
+    type Data = VideoSample<UnsupportedBlitData>;
 
     async fn push(&mut self, data: Self::Data) -> Result<()> {
+        let VideoFrame::Bgra32(frame) = data.frame else {
+            return Err(anyhow::anyhow!(
+                "MediaFoundationVideoEncoder only supports Bgra32 frames"
+            ));
+        };
         let sample = UnsafeSend(unsafe { MFCreateSample()? });
 
         // BGRA to NV12
         {
-            let (y, u, v) = data.to_yuv420_planes(None)?;
+            let (y, u, v) = frame.to_yuv420_planes(None)?;
             let length = (y.len() + u.len() + v.len()) as u32;
             let buffer = unsafe { MFCreateMemoryBuffer(length)? };
 
