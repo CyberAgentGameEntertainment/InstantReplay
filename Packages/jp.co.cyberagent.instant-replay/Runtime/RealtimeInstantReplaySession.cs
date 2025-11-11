@@ -94,15 +94,11 @@ namespace InstantReplay
                 }
             };
 
-            // ReSharper disable once ConvertToLocalFunction
-            Action<PcmAudioFrame> onPcmAudioFrameDropped = static dropped =>
-            {
-                ILogger.LogWarningCore("Dropped audio frame due to full queue.");
-                dropped.Dispose();
-            };
-
             _videoPipeline = new FrameProviderSubscription(frameProvider, disposeFrameProvider,
-                new VideoTemporalAdjuster<IFrameProvider.Frame>(_temporalController, fixedFrameInterval).AsInput(
+                new VideoTemporalAdjuster<IFrameProvider.Frame>(
+                    _temporalController,
+                    fixedFrameInterval,
+                    options.VideoLagAdjustmentThreshold).AsInput(
                     new FramePreprocessorInput(preprocessor, true).AsInput(
                         new AsyncGPUReadbackTransform(new SharedBufferPool((nuint)uncompressedLimit)).AsInput(
                             new DroppingChannelInput<LazyVideoFrameData>(
@@ -111,12 +107,17 @@ namespace InstantReplay
                                 new VideoEncoderInput(videoEncoder,
                                     new BoundedEncodedDataBufferVideoInput(buffer).AsAsync()))))));
 
+            var audioInputQueueSizeSeconds = options.AudioInputQueueSizeSeconds ?? 1.0;
+            var audioInputQueueSizeSamples = (int)(options.AudioOptions.SampleRate * options.AudioOptions.Channels *
+                                                   audioInputQueueSizeSeconds);
+
             _audioPipeline = new AudioSampleProviderSubscription(audioSampleProvider, disposeAudioSampleProvider,
                 new AudioTemporalAdjuster(
                     _temporalController,
                     options.AudioOptions.SampleRate,
-                    options.AudioOptions.Channels).AsInput(
-                    new DroppingChannelInput<PcmAudioFrame>(options.AudioInputQueueSize, onPcmAudioFrameDropped,
+                    options.AudioOptions.Channels,
+                    options.AudioLagAdjustmentThreshold).AsInput(
+                    new PcmAudioFrameDroppingChannelInput(audioInputQueueSizeSamples,
                         new AudioEncoderInput(audioEncoder, options.AudioOptions.SampleRate,
                             new BoundedEncodedDataBufferAudioInput(buffer).AsAsync()))));
 
@@ -171,7 +172,7 @@ namespace InstantReplay
                 MaxMemoryUsageBytesForCompressedFrames = 20 * 1024 * 1024, // 20 MiB
                 FixedFrameRate = 30.0,
                 VideoInputQueueSize = 5,
-                AudioInputQueueSize = 60
+                AudioInputQueueSizeSeconds = 1.0
             };
 
             return new RealtimeInstantReplaySession(options);

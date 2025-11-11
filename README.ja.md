@@ -134,7 +134,7 @@ File.Move(outputPath, Path.Combine(Application.persistentDataPath, Path.GetFileN
 
 録画できる時間はメモリ使用量によって決定されます。デフォルト設定では 20MiB に設定されており、圧縮されたフレームや音声サンプルの合計サイズがこの上限に達すると古いデータから順に破棄されます。より長時間の録画を可能にするには、メモリ使用量 `MaxMemoryUsageBytesForCompressedFrames` を上げたり、フレームレートや解像度、ビットレートを下げてください。
 
-実行時に使用されるメモリとしては、上記のエンコード済みのデータを保持するバッファに加え、エンコード前の生のフレームや音声サンプルがいくつか保持されます。これはエンコーダーが非同期的に動作する関係で、あるフレームをエンコードしている間に次のフレームを受け取るためです。`VideoInputQueueSize` と `AudioInputQueueSize` でそれぞれのキューのサイズを指定できるほか、`MaxNumberOfRawFrameBuffers` (オプション) で圧縮前のフレームを保持するバッファの最大数を指定できます。この値を小さくすることでメモリ使用量を削減できる場合がありますが、フレームドロップの可能性が高まります。
+実行時に使用されるメモリとしては、上記のエンコード済みのデータを保持するバッファに加え、エンコード前の生のフレームや音声サンプルがいくつか保持されます。これはエンコーダーが非同期的に動作する関係で、あるフレームをエンコードしている間に次のフレームを受け取るためです。`VideoInputQueueSize` と `AudioInputQueueSizeSeconds` でそれぞれのキューのサイズを指定できるほか、`MaxNumberOfRawFrameBuffers` (オプション) で圧縮前のフレームを保持するバッファの最大数を指定できます。この値を小さくすることでメモリ使用量を削減できる場合がありますが、フレームドロップの可能性が高まります。
 
 ```csharp
 // デフォルト設定
@@ -157,7 +157,7 @@ var options = new RealtimeEncodingOptions
     MaxMemoryUsageBytesForCompressedFrames = 20 * 1024 * 1024, // 20 MiB
     FixedFrameRate = 30.0, // 固定フレームレートを使用しない場合はnull
     VideoInputQueueSize = 5, // エンコード前の生のフレームを保持する数の上限
-    AudioInputQueueSize = 60, // エンコード前の生の音声サンプルフレームを保持する数の上限
+    AudioInputQueueSizeSeconds = 1.0 // エンコード前にバッファリングされる最大音声入力時間（秒）
 };
 
 using var session = new RealtimeInstantReplaySession(options)

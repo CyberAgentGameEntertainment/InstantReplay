@@ -8,7 +8,8 @@ namespace InstantReplay
 {
     internal class VideoTemporalAdjuster<T> : IPipelineTransform<T, T> where T : struct, IDiscreteTemporalData
     {
-        private const double AllowedLag = 0.1;
+        private const double DefaultAllowedLag = 0.1;
+        private readonly double _allowedLag;
         private readonly double? _fixedFrameInterval;
         private readonly IRecordingTimeProvider _recordingTimeProvider;
         private bool _disposed;
@@ -16,10 +17,14 @@ namespace InstantReplay
         private double _prevFrameTime;
         private double? _videoTimeDifference;
 
-        public VideoTemporalAdjuster(IRecordingTimeProvider recordingTimeProvider, double? fixedFrameInterval)
+        public VideoTemporalAdjuster(IRecordingTimeProvider recordingTimeProvider, double? fixedFrameInterval,
+            double? allowedLag = null)
         {
             _recordingTimeProvider = recordingTimeProvider;
             _fixedFrameInterval = fixedFrameInterval;
+            if (allowedLag is < 0)
+                throw new ArgumentOutOfRangeException(nameof(allowedLag), "allowedLag must be non-negative.");
+            _allowedLag = allowedLag ?? DefaultAllowedLag;
         }
 
         public bool WillAcceptWhenNextWont => false;
@@ -64,7 +69,7 @@ namespace InstantReplay
             {
                 var expectedTime = realTime + _videoTimeDifference.Value;
                 var diff = time - expectedTime;
-                if (Math.Abs(diff) >= AllowedLag)
+                if (Math.Abs(diff) >= _allowedLag)
                 {
                     ILogger.LogWarningCore(
                         "Video timestamp adjusted. The timestamp IFrameProvider provided may not be realtime.");

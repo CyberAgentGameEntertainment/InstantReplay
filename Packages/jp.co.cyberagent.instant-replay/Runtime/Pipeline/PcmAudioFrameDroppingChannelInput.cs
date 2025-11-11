@@ -3,52 +3,51 @@
 // --------------------------------------------------------------
 
 using System;
-using System.Runtime.CompilerServices;
+using System.Threading;
 using System.Threading.Channels;
 using System.Threading.Tasks;
 
 namespace InstantReplay
 {
-    internal class DroppingChannelInput<T> : IPipelineInput<T>
+    internal class PcmAudioFrameDroppingChannelInput : IPipelineInput<PcmAudioFrame>
     {
-        private readonly ChannelWriter<T> _inner;
-        private readonly IAsyncPipelineInput<T> _next;
-        private readonly Action<T> _onDrop;
+        private readonly int _capacitySamples;
+        private readonly ChannelWriter<PcmAudioFrame> _inner;
+        private readonly IAsyncPipelineInput<PcmAudioFrame> _next;
         private readonly Task _processVideoFramesTask;
+        private int _currentNumSamples;
 
-        internal DroppingChannelInput(int capacity, Action<T> onDrop, IAsyncPipelineInput<T> next)
+        internal PcmAudioFrameDroppingChannelInput(int capacitySamples, IAsyncPipelineInput<PcmAudioFrame> next)
         {
-            _onDrop = onDrop;
+            _capacitySamples = capacitySamples;
             _next = next;
-            var channel = Channel.CreateBounded<T>(new BoundedChannelOptions(capacity)
+            var channel = Channel.CreateUnbounded<PcmAudioFrame>(new UnboundedChannelOptions
             {
-                FullMode = BoundedChannelFullMode.Wait,
                 SingleReader = true,
                 SingleWriter = false,
                 AllowSynchronousContinuations = true
             });
 
             _inner = channel.Writer;
-            _processVideoFramesTask = ProcessItemsAsync(channel.Reader);
+            _processVideoFramesTask = ProcessFramesAsync(channel.Reader);
         }
 
         public bool WillAccept()
         {
-            var waitToWriteAsync = _inner.WaitToWriteAsync();
-            if (waitToWriteAsync.IsCompleted)
-                return waitToWriteAsync.Result;
-
-            // forget
-            var awaiter = waitToWriteAsync.GetAwaiter();
-            awaiter.UnsafeOnCompleted(PooledActionOnce<ValueTaskAwaiter<bool>>
-                .Get(static awaiter => { awaiter.GetResult(); }, awaiter).Wrapper);
-            return false;
+            return _currentNumSamples < _capacitySamples;
         }
 
-        public void Push(T value)
+        public void Push(PcmAudioFrame value)
         {
-            if (!_inner.TryWrite(value))
-                _onDrop?.Invoke(value);
+            if (_currentNumSamples + value.Data.Length > _capacitySamples || !_inner.TryWrite(value))
+            {
+                ILogger.LogWarningCore("Dropped audio frame due to full queue.");
+                value.Dispose();
+            }
+            else
+            {
+                Interlocked.Add(ref _currentNumSamples, value.Data.Length);
+            }
         }
 
         public async ValueTask CompleteAsync(Exception exception = null)
@@ -71,14 +70,17 @@ namespace InstantReplay
             _next?.Dispose();
         }
 
-        private async Task ProcessItemsAsync(ChannelReader<T> reader)
+        private async Task ProcessFramesAsync(ChannelReader<PcmAudioFrame> reader)
         {
             try
             {
                 try
                 {
                     await foreach (var value in reader.ReadAllAsync().ConfigureAwait(false))
+                    {
+                        Interlocked.Add(ref _currentNumSamples, -value.Data.Length);
                         await _next.PushAsync(value).ConfigureAwait(false);
+                    }
                 }
                 finally
                 {

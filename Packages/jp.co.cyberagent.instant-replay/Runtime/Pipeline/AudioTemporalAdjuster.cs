@@ -9,7 +9,8 @@ namespace InstantReplay
 {
     internal class AudioTemporalAdjuster : IPipelineTransform<InputAudioFrame, PcmAudioFrame>
     {
-        private const double AllowedLag = 0.1;
+        private const double DefaultAllowedLag = 0.1;
+        private readonly double _allowedLag;
         private readonly double _numChannelsInOption;
 
         private readonly IRecordingTimeProvider _recordingTimeProvider;
@@ -21,11 +22,14 @@ namespace InstantReplay
         private bool _disposed;
 
         public AudioTemporalAdjuster(IRecordingTimeProvider recordingTimeProvider, double sampleRateInOption,
-            double numChannelsInOption)
+            double numChannelsInOption, double? allowedLag = null)
         {
             _recordingTimeProvider = recordingTimeProvider;
             _sampleRateInOption = sampleRateInOption;
             _numChannelsInOption = numChannelsInOption;
+            if (allowedLag is < 0)
+                throw new ArgumentOutOfRangeException(nameof(allowedLag), "allowedLag must be non-negative.");
+            _allowedLag = allowedLag ?? DefaultAllowedLag;
         }
 
         public bool WillAcceptWhenNextWont => true; // we need to keep advancing position even if next won't accept
@@ -54,10 +58,8 @@ namespace InstantReplay
             {
                 var expectedTime = realTime + _audioTimeDifference.Value;
                 var diff = timestamp - expectedTime;
-                if (Math.Abs(diff) >= AllowedLag)
+                if (Math.Abs(diff) >= _allowedLag)
                 {
-                    ILogger.LogWarningCore(
-                        "Audio timestamp adjusted. The timestamp IAudioSampleProvider provided may not be realtime.");
                     _audioTimeDifference = timestamp - realTime;
                     timestamp = realTime;
                 }
@@ -71,27 +73,34 @@ namespace InstantReplay
 
             var numSamples = samples.Length / channels;
 
+            // input sample position (in output scale)
             var samplePosition = (long)Math.Round(timestamp * _sampleRateInOption);
+
+            // expected sample position
             var currentSamplePosition = _currentSamplePosition ??= samplePosition;
+
             var lag = samplePosition - currentSamplePosition;
 
             var numScaledSamples = _sampleRateInOption == sampleRate
                 ? numSamples
                 : (long)Math.Round(numSamples * (_sampleRateInOption / sampleRate));
+
             long blankOrSkip;
-            if (Math.Abs(lag) > AllowedLag * _sampleRateInOption)
+            if (Math.Abs(lag) > _allowedLag * _sampleRateInOption)
             {
                 // if there is too much lag, skip input or insert blank
                 blankOrSkip = lag;
+                ILogger.LogWarningCore(
+                    "Audio timestamp adjusted. The timestamp IAudioSampleProvider provided may not be realtime.");
             }
             else
             {
-                // scale to position
+                // if there is slight lag, scale samples to fit
                 blankOrSkip = 0;
                 numScaledSamples += lag;
             }
 
-            var writeLength = (int)((numScaledSamples + blankOrSkip) * channels);
+            var writeLength = (int)((numScaledSamples + blankOrSkip) * _numChannelsInOption);
 
             if (writeLength <= 0)
                 return false;
@@ -100,6 +109,7 @@ namespace InstantReplay
             if (!willAcceptedByNextInput)
             {
                 // advance _currentSamplePosition even if we cannot output
+                ILogger.LogWarningCore("Dropped audio frame due to full queue.");
                 output = default;
                 return false;
             }
@@ -107,21 +117,25 @@ namespace InstantReplay
             var writeBufferArray = ArrayPool<short>.Shared.Rent(writeLength);
             var writeBuffer = writeBufferArray.AsSpan(0, writeLength);
 
-            if (blankOrSkip > 0)
-                writeBuffer[..(int)blankOrSkip].Clear();
+            var blank = (int)Math.Max(0, blankOrSkip);
 
-            var skip = (int)Math.Max(0, -blankOrSkip);
+            if (blank > 0)
+                writeBuffer[..blank].Clear();
 
-            for (var i = skip; i < numScaledSamples; i++)
-            for (var j = 0; j < _numChannelsInOption; j++)
+            for (var writePos = blank; writePos < numScaledSamples + blankOrSkip; writePos++)
             {
-                // NOTE: should we interpolate samples?
-                var pos = numSamples == numScaledSamples
-                    ? i
-                    : (int)Math.Floor(i * ((double)numSamples / numScaledSamples));
-                var sample = samples[pos * channels + j % channels];
-                var scaledSample = (short)Math.Clamp(sample * short.MaxValue, short.MinValue, short.MaxValue);
-                writeBuffer[i * (int)_numChannelsInOption + j] = scaledSample;
+                var inputPos = writePos - blankOrSkip;
+                var inputPosInputScaled = numSamples == numScaledSamples
+                    ? inputPos
+                    : (int)Math.Floor(inputPos * ((double)numSamples / numScaledSamples));
+
+                for (var j = 0; j < _numChannelsInOption; j++)
+                {
+                    // NOTE: should we interpolate samples?
+                    var sample = samples[checked((int)(inputPosInputScaled * channels + j % channels))];
+                    var scaledSample = (short)Math.Clamp(sample * short.MaxValue, short.MinValue, short.MaxValue);
+                    writeBuffer[writePos * (int)_numChannelsInOption + j] = scaledSample;
+                }
             }
 
             output = new PcmAudioFrame(writeBufferArray, writeBufferArray.AsMemory(0, writeLength), timestamp);

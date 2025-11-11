@@ -140,7 +140,7 @@ File.Move(outputPath, Path.Combine(Application.persistentDataPath, Path.GetFileN
 
 The recording duration is determined by the memory usage. The default setting is set to 20 MiB, and when the total size of compressed frames and audio samples reaches this limit, older data is discarded. To enable longer recordings, increase the memory usage `MaxMemoryUsageBytesForCompressedFrames` or reduce the frame rate, resolution, or bitrate.
 
-It consumes some memory for the buffers that hold the compressed data, as well as for the raw frames and audio samples to be encoded. This is necessary because the encoder operates asynchronously, allowing it to receive the next frame while encoding the current one. You can specify the number of frames stored concurrently with `VideoInputQueueSize` and `AudioInputQueueSize`, and the max number of raw frame buffers with `MaxNumberOfRawFrameBuffers` (optional). Reducing these values can decrease memory usage, but it may increase the likelihood of frame drops.
+It consumes some memory for the buffers that hold the compressed data, as well as for the raw frames and audio samples to be encoded. This is necessary because the encoder operates asynchronously, allowing it to receive the next frame while encoding the current one. You can specify the number of frames stored concurrently with `VideoInputQueueSize` and `AudioInputQueueSizeSeconds`, and the max number of raw frame buffers with `MaxNumberOfRawFrameBuffers` (optional). Reducing these values can decrease memory usage, but it may increase the likelihood of frame drops.
 
 ```csharp
 // Default settings
@@ -163,7 +163,7 @@ var options = new RealtimeEncodingOptions
     MaxMemoryUsageBytesForCompressedFrames = 20 * 1024 * 1024, // 20 MiB
     FixedFrameRate = 30.0, // null if not using fixed frame rate
     VideoInputQueueSize = 5, // Maximum number of raw frames to keep before encoding
-    AudioInputQueueSize = 60, // Maximum number of raw audio sample frames to keep before encoding
+    AudioInputQueueSizeSeconds = 1.0 // Max queued audio input duration to be buffered before encoding, in seconds
 };
 
 using var session = new RealtimeInstantReplaySession(options);

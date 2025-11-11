@@ -95,7 +95,8 @@ namespace InstantReplay.Examples
                 MaxMemoryUsageBytesForCompressedFrames = maxMemoryUsageForCompressedMb * 1024 * 1024,
                 FixedFrameRate = 30.0, // null if not using fixed frame rate
                 VideoInputQueueSize = 5, // Maximum number of raw frames to keep before encoding
-                AudioInputQueueSize = 60 // Maximum number of raw audio sample frames to keep before encoding
+                AudioInputQueueSizeSeconds =
+                    1.0 // Max queued audio input duration to be buffered before encoding, in seconds
             });
         }
 
