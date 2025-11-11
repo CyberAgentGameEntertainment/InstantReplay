@@ -1,3 +1,10 @@
+## [1.2.1] - 2025/11/11
+
+### Fixed
+
+- Fixed `CriAudioSampleProvider` drops audio samples when frame rate is low.
+- Fixed `AudioTemporalAdjuster` causes audio glitches when timestamp jumps.
+
 ## [1.2.0] - 2025/10/23
 
 ### Added
