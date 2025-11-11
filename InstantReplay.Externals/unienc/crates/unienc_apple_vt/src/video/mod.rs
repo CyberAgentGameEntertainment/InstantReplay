@@ -17,9 +17,11 @@ use objc2_video_toolbox::{
     VTEncodeInfoFlags, VTSessionSetProperty,
 };
 use tokio::sync::mpsc;
-use unienc_common::{buffer::SharedBuffer, EncodedData, Encoder, EncoderInput, EncoderOutput, VideoSample};
+use unienc_common::{
+    buffer::SharedBuffer, EncodedData, Encoder, EncoderInput, EncoderOutput, VideoSample,
+};
 
-use crate::{common::UnsafeSendRetained, OsStatus};
+use crate::{OsStatus, common::UnsafeSendRetained, metal::SharedTexture};
 
 pub struct VideoToolboxEncoder {
     input: VideoToolboxEncoderInput,
@@ -85,11 +87,11 @@ impl EncodedData for VideoEncodedData {
         }
     }
 
-    fn kind(&self) -> unienc_common::UniencDataKind {
+    fn kind(&self) -> unienc_common::UniencSampleKind {
         if self.not_sync {
-            unienc_common::UniencDataKind::Interpolated
+            unienc_common::UniencSampleKind::Interpolated
         } else {
-            unienc_common::UniencDataKind::Key
+            unienc_common::UniencSampleKind::Key
         }
     }
 
@@ -133,39 +135,44 @@ impl Encoder for VideoToolboxEncoder {
 }
 
 impl EncoderInput for VideoToolboxEncoderInput {
-    type Data = VideoSample;
+    type Data = VideoSample<SharedTexture>;
 
     async fn push(&mut self, data: Self::Data) -> Result<()> {
+        let buffer = match data.frame {
+            unienc_common::VideoFrame::Bgra32(bgra32) => {
+                let buffer = bgra32.buffer;
+                let buffer_boxed = Box::new(buffer);
+                let pixel_data_ptr = buffer_boxed.data().as_ptr();
+                let buffer_boxed_raw = Box::into_raw(buffer_boxed);
 
-        let buffer = data.buffer;
-        let buffer_boxed = Box::new(buffer);
-        let pixel_data_ptr = buffer_boxed.data().as_ptr();
-        let buffer_boxed_raw = Box::into_raw(buffer_boxed);
+                let mut buffer: *mut CVPixelBuffer = std::ptr::null_mut();
+                unsafe {
+                    CVPixelBufferCreateWithBytes(
+                        kCFAllocatorDefault,
+                        bgra32.width as usize,
+                        bgra32.height as usize,
+                        kCVPixelFormatType_32BGRA,
+                        NonNull::new(pixel_data_ptr as *mut c_void)
+                            .context("Failed to create NonNull from pixel data pointer")?,
+                        (bgra32.width * 4) as usize,
+                        Some(release_pixel_buffer),
+                        buffer_boxed_raw as *mut _,
+                        None,
+                        NonNull::new(&mut buffer).context("Failed to create CVPixelBuffer")?,
+                    )
+                }
+                .to_result()
+                .inspect_err(|_err| {
+                    // free pixel data if failed
+                    _ = unsafe { Box::from_raw(buffer_boxed_raw) };
+                })?;
 
-        let mut buffer: *mut CVPixelBuffer = std::ptr::null_mut();
-        unsafe {
-            CVPixelBufferCreateWithBytes(
-                kCFAllocatorDefault,
-                data.width as usize,
-                data.height as usize,
-                kCVPixelFormatType_32BGRA,
-                NonNull::new(pixel_data_ptr as *mut c_void)
-                    .context("Failed to create NonNull from pixel data pointer")?,
-                (data.width * 4) as usize,
-                Some(release_pixel_buffer),
-                buffer_boxed_raw as *mut _,
-                None,
-                NonNull::new(&mut buffer).context("Failed to create CVPixelBuffer")?,
-            )
-        }
-        .to_result()
-        .map_err(|err| {
-            // free pixel data if failed
-            _ = unsafe { Box::from_raw(buffer_boxed_raw) };
-            err
-        })?;
-
-        let buffer = unsafe { Retained::from_raw(buffer) }.context("CVPixelBuffer is null")?;
+                unsafe { Retained::from_raw(buffer) }.context("CVPixelBuffer is null")?
+            }
+            unienc_common::VideoFrame::BlitTarget(texture) => {
+                texture.pixel_buffer()
+            },
+        };
 
         let mut retry = 0;
 
