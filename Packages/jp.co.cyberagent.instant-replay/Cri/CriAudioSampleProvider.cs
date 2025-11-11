@@ -3,7 +3,7 @@
 // --------------------------------------------------------------
 
 using System;
-using System.Threading;
+using System.Threading.Tasks;
 using CriWare;
 using UnityEngine;
 using Object = UnityEngine.Object;
@@ -15,7 +15,9 @@ namespace InstantReplay.Cri
     /// </summary>
     public class CriAudioSampleProvider : IAudioSampleProvider
     {
-        private readonly Action _updateDelegate;
+        private const int SampleBatchSize = 512;
+        private readonly Action _disposeDelegate;
+        private readonly object _lock = new();
         private CriAtomExOutputAnalyzer _analyzer;
         private ulong _timestampInSamples;
 
@@ -48,11 +50,10 @@ namespace InstantReplay.Cri
                     // If the sampling rate is 0, CRI defaults to 48000.
                     // See: https://game.criware.jp/manual/unity_plugin/latest/contents/cri4u_component_initializer.html
                     if (sampleRate == 0)
-                    {
                         sampleRate = 48000;
-                    }
                 }
                 else
+                {
                     try
                     {
                         sampleRate = CriAtomPlugin.GetOutputSamplingRate();
@@ -62,13 +63,14 @@ namespace InstantReplay.Cri
                         throw new ArgumentException(
                             "Failed to get CRI output sampling rate. Specify configuredSamplingRate manually.", ex);
                     }
+                }
             }
 
             var config = new CriAtomExOutputAnalyzer.Config
             {
                 enablePcmCapture = true,
                 enablePcmCaptureCallback = true,
-                numCapturedPcmSamples = 512
+                numCapturedPcmSamples = SampleBatchSize
             };
 
             var analyzer = _analyzer = new CriAtomExOutputAnalyzer(config);
@@ -118,19 +120,41 @@ namespace InstantReplay.Cri
 
             analyzer.AttachDspBus(dspBusName);
 
-            PlayerLoopEntryPoint.OnAfterUpdate += _updateDelegate = () => { analyzer.ExecutePcmCaptureCallback(); };
+            // we need to stop UpdateLoop before CRI finalization otherwise it crashes
+            CriAtomPlugin.OnBeforeFinalize += _disposeDelegate = Dispose;
+
+            Task.Run(() => UpdateLoop(sampleRate));
         }
 
         public event IAudioSampleProvider.ProvideAudioSamples OnProvideAudioSamples;
 
         public void Dispose()
         {
-            var analyzer = Interlocked.Exchange(ref _analyzer, null);
-            if (analyzer == null) return;
+            lock (_lock)
+            {
+                if (_analyzer == null) return;
 
-            PlayerLoopEntryPoint.OnAfterUpdate -= _updateDelegate;
-            analyzer.DetachDspBus();
-            analyzer.Dispose();
+                CriAtomPlugin.OnBeforeFinalize -= _disposeDelegate;
+
+                _analyzer.DetachDspBus();
+                _analyzer.Dispose();
+                _analyzer = null;
+            }
+        }
+
+        private async Task UpdateLoop(int sampleRate)
+        {
+            var interval = TimeSpan.FromSeconds((double)SampleBatchSize / sampleRate);
+            while (true)
+            {
+                lock (_lock)
+                {
+                    if (_analyzer == null) return;
+                    _analyzer.ExecutePcmCaptureCallback();
+                }
+
+                await Task.Delay(interval).ConfigureAwait(false);
+            }
         }
     }
 }
