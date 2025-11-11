@@ -1,6 +1,6 @@
 {
   "name": "jp.co.cyberagent.instant-replay.dependencies",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "displayName": "Instant Replay (depndencies)",
   "description": "This package contains dependencies for Instant Replay.",
   "unity": "2022.3",
