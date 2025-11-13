@@ -16,7 +16,8 @@ namespace InstantReplay.Cri
     public class CriAudioSampleProvider : IAudioSampleProvider
     {
         private const int SampleBatchSize = 512;
-        private readonly Action _disposeDelegate;
+        // private readonly Action _disposeDelegate;
+        private readonly Action _updateDelegate;
         private readonly object _lock = new();
         private CriAtomExOutputAnalyzer _analyzer;
         private ulong _timestampInSamples;
@@ -120,10 +121,21 @@ namespace InstantReplay.Cri
 
             analyzer.AttachDspBus(dspBusName);
 
+            PlayerLoopEntryPoint.OnAfterUpdate += _updateDelegate = () =>
+            {
+                lock (_lock)
+                {
+                    if (_analyzer == null) return;
+                    _analyzer.ExecutePcmCaptureCallback();
+                }
+            };
+            
+            /*
             // we need to stop UpdateLoop before CRI finalization otherwise it crashes
             CriAtomPlugin.OnBeforeFinalize += _disposeDelegate = Dispose;
 
             Task.Run(() => UpdateLoop(sampleRate));
+            */
         }
 
         public event IAudioSampleProvider.ProvideAudioSamples OnProvideAudioSamples;
@@ -134,7 +146,17 @@ namespace InstantReplay.Cri
             {
                 if (_analyzer == null) return;
 
-                CriAtomPlugin.OnBeforeFinalize -= _disposeDelegate;
+                /*
+                if (_disposeDelegate != null)
+                {
+                    CriAtomPlugin.OnBeforeFinalize -= _disposeDelegate;
+                }
+                */
+
+                if (_updateDelegate != null)
+                {
+                    PlayerLoopEntryPoint.OnAfterUpdate -= _updateDelegate;
+                }
 
                 _analyzer.DetachDspBus();
                 _analyzer.Dispose();
@@ -142,6 +164,7 @@ namespace InstantReplay.Cri
             }
         }
 
+        /*
         private async Task UpdateLoop(int sampleRate)
         {
             var interval = TimeSpan.FromSeconds((double)SampleBatchSize / sampleRate);
@@ -156,5 +179,6 @@ namespace InstantReplay.Cri
                 await Task.Delay(interval).ConfigureAwait(false);
             }
         }
+        */
     }
 }
