@@ -101,9 +101,6 @@ namespace UniEnc.Native
         [return: MarshalAs(UnmanagedType.U1)]
         internal static extern bool unienc_error_is_success(UniencErrorNative error);
 
-        [DllImport(__DllName, EntryPoint = "unienc_jpeg_decode", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
-        internal static extern void unienc_jpeg_decode(byte* data, nuint size, nuint callback, void* user_data);
-
         [DllImport(__DllName, EntryPoint = "unienc_new_shared_buffer_pool", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
         [return: MarshalAs(UnmanagedType.U1)]
         internal static extern bool unienc_new_shared_buffer_pool(nuint limit, Mutex** pool_out, nuint _on_error, void* _user_data);

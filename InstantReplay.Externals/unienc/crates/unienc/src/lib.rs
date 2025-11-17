@@ -9,7 +9,6 @@ use tokio::sync::Mutex;
 use unienc_common::{EncodedData, Encoder, EncodingSystem, Muxer, UniencDataKind};
 
 mod audio;
-mod jpeg;
 mod mux;
 mod public_types;
 mod video;
