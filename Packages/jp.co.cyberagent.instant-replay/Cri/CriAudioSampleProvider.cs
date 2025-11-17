@@ -3,7 +3,6 @@
 // --------------------------------------------------------------
 
 using System;
-using System.Threading.Tasks;
 using CriWare;
 using UnityEngine;
 using Object = UnityEngine.Object;
@@ -16,8 +15,8 @@ namespace InstantReplay.Cri
     public class CriAudioSampleProvider : IAudioSampleProvider
     {
         private const int SampleBatchSize = 512;
-        private readonly Action _disposeDelegate;
         private readonly object _lock = new();
+        private readonly Action _updateDelegate;
         private CriAtomExOutputAnalyzer _analyzer;
         private ulong _timestampInSamples;
 
@@ -120,10 +119,16 @@ namespace InstantReplay.Cri
 
             analyzer.AttachDspBus(dspBusName);
 
-            // we need to stop UpdateLoop before CRI finalization otherwise it crashes
-            CriAtomPlugin.OnBeforeFinalize += _disposeDelegate = Dispose;
-
-            Task.Run(() => UpdateLoop(sampleRate));
+            PlayerLoopEntryPoint.OnAfterUpdate += _updateDelegate = () =>
+            {
+                lock (_lock)
+                {
+                    if (_analyzer == null) return;
+                    // ExecutePcmCaptureCallback() seems must be called from the main thread.
+                    // If the frame rate is low (about 20 FPS or less), internal buffer overflows and audio dropouts occur.
+                    _analyzer.ExecutePcmCaptureCallback();
+                }
+            };
         }
 
         public event IAudioSampleProvider.ProvideAudioSamples OnProvideAudioSamples;
@@ -134,26 +139,12 @@ namespace InstantReplay.Cri
             {
                 if (_analyzer == null) return;
 
-                CriAtomPlugin.OnBeforeFinalize -= _disposeDelegate;
+                if (_updateDelegate != null)
+                    PlayerLoopEntryPoint.OnAfterUpdate -= _updateDelegate;
 
                 _analyzer.DetachDspBus();
                 _analyzer.Dispose();
                 _analyzer = null;
-            }
-        }
-
-        private async Task UpdateLoop(int sampleRate)
-        {
-            var interval = TimeSpan.FromSeconds((double)SampleBatchSize / sampleRate);
-            while (true)
-            {
-                lock (_lock)
-                {
-                    if (_analyzer == null) return;
-                    _analyzer.ExecutePcmCaptureCallback();
-                }
-
-                await Task.Delay(interval).ConfigureAwait(false);
             }
         }
     }
