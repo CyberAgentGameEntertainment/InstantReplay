@@ -1,3 +1,10 @@
+## [1.2.2] - 2025/11/17
+
+### Fixed
+
+- Fixed `CriAudioSampleProvider` causes race condition.
+- Fixed `UnityEngine.ImageConversion.EncodeToJPG()` doesn't work on iOS when Instant Replay is installed.
+
 ## [1.2.1] - 2025/11/11
 
 ### Fixed
