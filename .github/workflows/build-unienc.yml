@@ -25,7 +25,6 @@ jobs:
       run:
         working-directory: InstantReplay.Externals/unienc/crates/unienc
     steps:
-      - uses: ilammy/setup-nasm@v1
       - uses: actions/checkout@v4
       - run: rustup default stable
       - run: rustup target add ${{ matrix.arch }}-pc-windows-msvc
@@ -71,7 +70,6 @@ jobs:
       run:
         working-directory: InstantReplay.Externals/unienc/crates/unienc
     steps:
-      - uses: ilammy/setup-nasm@v1
       - uses: actions/checkout@v4
       - run: rustup default stable
       - run: rustup target add ${{ matrix.arch }}-apple-darwin
@@ -93,7 +91,6 @@ jobs:
         working-directory: InstantReplay.Externals/unienc/crates/unienc
     steps:
       - uses: actions/checkout@v4
-      - run: echo "IPHONEOS_DEPLOYMENT_TARGET=13.0.0" >> $GITHUB_ENV
       - run: rustup default stable
       - run: rustup target add ${{ matrix.arch }}-apple-ios
       - run: cargo build --target ${{ matrix.arch }}-apple-ios --profile ${{ env._RUST_BUILD_CONFIG == 'debug' && 'dev' || env._RUST_BUILD_CONFIG }}
@@ -113,7 +110,6 @@ jobs:
       run:
         working-directory: InstantReplay.Externals/unienc/crates/unienc
     steps:
-      - uses: ilammy/setup-nasm@v1
       - uses: actions/checkout@v4
       - run: rustup default stable
       - run: rustup target add ${{ matrix.arch }}-unknown-linux-gnu
