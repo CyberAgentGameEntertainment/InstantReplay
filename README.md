@@ -52,7 +52,7 @@ When a bug occurs, you can export the operations performed up to that point as a
 
 Platform|OS version|aarch64|x86_64|Other requirements
 -|-|-|-|-
-iOS|13.0+|✅|N/A|
+iOS|10.0+|✅|N/A|
 Android|5.0+|✅|✅|
 macOS|11.0+|✅|✅|
 Windows|Windows 10+, Windows Server 2016+|-|✅|
