@@ -16,7 +16,6 @@ namespace InstantReplay.Cri
     public class CriAudioSampleProvider : IAudioSampleProvider
     {
         private const int SampleBatchSize = 512;
-        // private readonly Action _disposeDelegate;
         private readonly Action _updateDelegate;
         private readonly object _lock = new();
         private CriAtomExOutputAnalyzer _analyzer;
@@ -126,16 +125,11 @@ namespace InstantReplay.Cri
                 lock (_lock)
                 {
                     if (_analyzer == null) return;
+                    // ExecutePcmCaptureCallback() seems must be called from the main thread.
+                    // If the frame rate is low (about 20 FPS or less), internal buffer overflows and audio dropouts occur.
                     _analyzer.ExecutePcmCaptureCallback();
                 }
             };
-            
-            /*
-            // we need to stop UpdateLoop before CRI finalization otherwise it crashes
-            CriAtomPlugin.OnBeforeFinalize += _disposeDelegate = Dispose;
-
-            Task.Run(() => UpdateLoop(sampleRate));
-            */
         }
 
         public event IAudioSampleProvider.ProvideAudioSamples OnProvideAudioSamples;
@@ -145,13 +139,6 @@ namespace InstantReplay.Cri
             lock (_lock)
             {
                 if (_analyzer == null) return;
-
-                /*
-                if (_disposeDelegate != null)
-                {
-                    CriAtomPlugin.OnBeforeFinalize -= _disposeDelegate;
-                }
-                */
 
                 if (_updateDelegate != null)
                 {
@@ -163,22 +150,5 @@ namespace InstantReplay.Cri
                 _analyzer = null;
             }
         }
-
-        /*
-        private async Task UpdateLoop(int sampleRate)
-        {
-            var interval = TimeSpan.FromSeconds((double)SampleBatchSize / sampleRate);
-            while (true)
-            {
-                lock (_lock)
-                {
-                    if (_analyzer == null) return;
-                    _analyzer.ExecutePcmCaptureCallback();
-                }
-
-                await Task.Delay(interval).ConfigureAwait(false);
-            }
-        }
-        */
     }
 }
