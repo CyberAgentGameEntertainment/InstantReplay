@@ -158,8 +158,6 @@ namespace InstantReplay
 
                         if (!reader.TryRead(out var task)) return;
 
-                        Debug.Assert(task.IsCompleted);
-
                         var (bytes, timestamp) = task.Result;
                         tex ??= new Texture2D(2, 2);
                         if (!tex.LoadImage(bytes))
@@ -233,7 +231,6 @@ namespace InstantReplay
                     }
                     finally
                     {
-                        Debug.Log("Complete video encoder");
                         _videoEncoder.CompleteInput();
                     }
                 }

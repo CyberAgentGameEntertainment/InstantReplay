@@ -4,6 +4,7 @@
 
 using System;
 using CriWare;
+using UniEnc;
 using UnityEngine;
 using Object = UnityEngine.Object;
 

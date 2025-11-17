@@ -1,3 +1,3 @@
 using System.Runtime.CompilerServices;
 
-[assembly: InternalsVisibleTo("InstantReplay")]
+[assembly: InternalsVisibleTo("InstantReplay.Cri")]
