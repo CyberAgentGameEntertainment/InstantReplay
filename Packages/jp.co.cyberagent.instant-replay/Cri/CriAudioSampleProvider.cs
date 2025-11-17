@@ -3,7 +3,6 @@
 // --------------------------------------------------------------
 
 using System;
-using System.Threading.Tasks;
 using CriWare;
 using UnityEngine;
 using Object = UnityEngine.Object;
@@ -16,8 +15,8 @@ namespace InstantReplay.Cri
     public class CriAudioSampleProvider : IAudioSampleProvider
     {
         private const int SampleBatchSize = 512;
-        private readonly Action _updateDelegate;
         private readonly object _lock = new();
+        private readonly Action _updateDelegate;
         private CriAtomExOutputAnalyzer _analyzer;
         private ulong _timestampInSamples;
 
@@ -141,9 +140,7 @@ namespace InstantReplay.Cri
                 if (_analyzer == null) return;
 
                 if (_updateDelegate != null)
-                {
                     PlayerLoopEntryPoint.OnAfterUpdate -= _updateDelegate;
-                }
 
                 _analyzer.DetachDspBus();
                 _analyzer.Dispose();
