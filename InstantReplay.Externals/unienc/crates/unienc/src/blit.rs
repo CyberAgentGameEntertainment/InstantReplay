@@ -1,16 +1,23 @@
 use std::os::raw::c_void;
 
-use unienc_common::{EncodingSystem, IntoRaw, TryFromUnityNativeTexturePointer};
+use unienc_common::{
+    BlitOptions, EncodingSystem, IntoRaw, TryFromRaw, TryFromUnityNativeTexturePointer,
+};
 use unity_native_plugin::enums::RenderingExtEventType;
 
 use crate::{
-    ApplyCallback, PlatformEncodingSystem, Runtime, SendPtr, UniencDataCallback,
-    UniencError, UniencErrorNative,
+    platform_types::BlitTarget, ApplyCallback, PlatformEncodingSystem, Runtime, SendPtr,
+    UniencDataCallback, UniencError, UniencErrorNative,
 };
 
 const EVENT_ID: RenderingExtEventType = RenderingExtEventType::UserEventsStart;
 
-type EventClosure = Box<(dyn FnOnce() + Send)>;
+type EventClosure = Box<dyn FnOnce() + Send>;
+
+#[no_mangle]
+pub unsafe extern "C" fn unienc_is_blit_supported(system: *const PlatformEncodingSystem) -> bool {
+    (&*system).is_blit_supported()
+}
 
 #[no_mangle]
 pub unsafe extern "C" fn unienc_new_blit_closure(
@@ -19,10 +26,11 @@ pub unsafe extern "C" fn unienc_new_blit_closure(
     source_native_texture_ptr: *mut c_void,
     dst_width: u32,
     dst_height: u32,
+    flip_vertically: bool,
     event_function_ptr_out: *mut *const c_void,
     event_id_out: *mut u32,
     event_data_out: *mut *mut c_void,
-    callback: usize, /*UniencCallback*/
+    callback: usize, /*UniencDataCallback<UniencBlitTargetData>*/
     user_data: SendPtr<c_void>,
 ) -> bool {
     let _guard = (*runtime).enter();
@@ -43,8 +51,15 @@ pub unsafe extern "C" fn unienc_new_blit_closure(
         }
     };
 
-    (*system)
-        .new_blit_closure(source, dst_width, dst_height)
+    (&*system)
+        .new_blit_closure(
+            source,
+            BlitOptions {
+                dst_width,
+                dst_height,
+                flip_vertically,
+            },
+        )
         .map_or_else(
             |err| {
                 UniencError::from_anyhow(err).apply_callback(callback, user_data);
@@ -93,6 +108,15 @@ pub unsafe extern "C" fn unienc_new_blit_closure(
         )
 }
 
+#[no_mangle]
+pub unsafe extern "C" fn unienc_free_blit_target(blit_target_data: UniencBlitTargetData) {
+    if blit_target_data.data.is_null() {
+        return;
+    }
+
+    let _ = <BlitTarget as TryFromRaw>::try_from_raw(blit_target_data.data);
+}
+
 extern "C" fn unienc_custom_graphics_event(event: RenderingExtEventType, data: *mut EventClosure) {
     if event != EVENT_ID {
         return;
@@ -103,13 +127,13 @@ extern "C" fn unienc_custom_graphics_event(event: RenderingExtEventType, data: *
 
 #[repr(C)]
 pub struct UniencBlitTargetData {
-    data: *const c_void,
+    pub data: *mut BlitTarget,
 }
 
 impl Default for UniencBlitTargetData {
     fn default() -> Self {
         UniencBlitTargetData {
-            data: std::ptr::null(),
+            data: std::ptr::null_mut(),
         }
     }
 }

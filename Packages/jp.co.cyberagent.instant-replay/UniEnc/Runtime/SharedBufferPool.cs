@@ -5,7 +5,6 @@
 using System;
 using System.Collections.Concurrent;
 using System.Runtime.InteropServices;
-using System.Threading;
 using AOT;
 using UniEnc.Internal;
 using UniEnc.Native;
@@ -72,7 +71,7 @@ namespace UniEnc
                 return false;
             }
 
-            buffer = new SharedBuffer(SharedBufferHandle.GetHandle((nint)bufPtr, ptr, (nint)size));
+            buffer = new SharedBuffer((nint)bufPtr, ptr, (nint)size);
             return true;
         }
 
@@ -112,91 +111,50 @@ namespace UniEnc
         }
     }
 
-    public struct SharedBuffer : IDisposable
+    public readonly struct SharedBuffer : IDisposable
     {
-        private SharedBufferHandle _handle;
+        private readonly Handle _handle;
         private readonly ushort _token;
 
-        public bool IsValid => _handle != null && _handle.Token == _token;
+        public bool IsValid => _handle.IsAlive && _handle.Token == _token;
 
-        public NativeArray<byte> NativeArray
-        {
-            get
-            {
-                ThrowIfInvalid();
-                return _handle.NativeArray;
-            }
-        }
+        public NativeArray<byte> NativeArray => _handle.GetNativeArray(_token);
 
-        public Span<byte> Span
-        {
-            get
-            {
-                ThrowIfInvalid();
-                return _handle.Span;
-            }
-        }
+        public Span<byte> Span => _handle.GetSpan(_token);
 
-        internal SharedBuffer(SharedBufferHandle handle)
+        internal unsafe SharedBuffer(IntPtr handle, byte* ptr, nint length)
         {
-            _handle = handle;
-            _token = handle.Token;
-        }
-
-        private void ThrowIfInvalid()
-        {
-            if (!IsValid)
-                throw new ObjectDisposedException("SharedBuffer has already been moved out or disposed.");
+            _handle = Handle.GetHandle(handle, ptr, length);
+            _token = _handle.Token;
         }
 
         public IntPtr MoveOut()
         {
-            ThrowIfInvalid();
-
-            var handle = _handle;
-            _handle = null;
-            return handle.MoveOut();
+            return _handle.MoveOut(_token);
         }
 
-        public unsafe void Dispose()
+        public void Dispose()
         {
-            if (!IsValid)
-                return;
-
-            try
-            {
-                NativeMethods.unienc_free_shared_buffer((Native.SharedBuffer*)_handle.MoveOut());
-            }
-            catch
-            {
-                // ignore
-            }
+            _handle?.MoveOutAndRelease(_token);
         }
-    }
 
-    internal unsafe class SharedBufferHandle : SafeHandle
-    {
-        private static readonly ConcurrentBag<SharedBufferHandle> Pool = new();
+        private unsafe class Handle : PooledHandle
+        {
+            private static readonly ConcurrentBag<Handle> Pool = new();
 
 #if ENABLE_UNITY_COLLECTIONS_CHECKS
-        private AtomicSafetyHandle? _ash;
+            private AtomicSafetyHandle? _ash;
 #endif
-        private nint _length;
+            private nint _length;
+            private byte* _ptr;
 
-        // 0: normal, 1: pooled, 2: released
-        private int _pooled;
-        private byte* _ptr;
-
-        private SharedBufferHandle(IntPtr handle) : base(IntPtr.Zero, true)
-        {
-            SetHandle(handle);
-        }
-
-        public NativeArray<byte> NativeArray
-        {
-            get
+            private Handle(IntPtr handle) : base(handle)
             {
-                if (_pooled != 0) throw new InvalidOperationException();
+            }
+
+            public NativeArray<byte> GetNativeArray(ushort token)
+            {
+                if (token != Token || !IsAlive) throw new InvalidOperationException();
                 var array = NativeArrayUnsafeUtility.ConvertExistingDataToNativeArray<byte>(_ptr, (int)_length,
                     Allocator.None);
 
@@ -205,81 +163,50 @@ namespace UniEnc
 #endif
                 return array;
             }
-        }
 
-        public Span<byte> Span
-        {
-            get
+            public Span<byte> GetSpan(ushort token)
             {
-                if (_pooled != 0) throw new InvalidOperationException();
+                if (token != Token || !IsAlive) throw new InvalidOperationException();
+                if (!IsAlive) throw new InvalidOperationException();
                 return new Span<byte>(_ptr, (int)_length);
             }
-        }
 
-        public ushort Token { get; private set; }
-
-        public override bool IsInvalid => handle == IntPtr.Zero && _pooled == 0;
-
-        public static SharedBufferHandle GetHandle(IntPtr handle, byte* ptr, nint length)
-        {
-            if (Pool.TryTake(out var bufferHandle))
+            public static Handle GetHandle(IntPtr handle, byte* ptr, nint length)
             {
-                bufferHandle.SetHandle(handle);
-                if (Interlocked.CompareExchange(ref bufferHandle._pooled, 0, 1) != 1)
-                    throw new InvalidOperationException();
-            }
-            else
-            {
-                bufferHandle = new SharedBufferHandle(handle);
+                if (Pool.TryTake(out var bufferHandle))
+                    bufferHandle.SetHandleForPooledHandle(handle);
+                else
+                    bufferHandle = new Handle(handle);
+
+                bufferHandle._ptr = ptr;
+                bufferHandle._length = length;
+
+                return bufferHandle;
             }
 
-            bufferHandle._ptr = ptr;
-            bufferHandle._length = length;
-
-            return bufferHandle;
-        }
-
-        public IntPtr MoveOut()
-        {
-            if (Interlocked.CompareExchange(ref _pooled, 1, 0) != 0)
-                throw new InvalidOperationException();
-
-            _ptr = null;
-            _length = 0;
-
-#if ENABLE_UNITY_COLLECTIONS_CHECKS
-            if (_ash is { } ash)
+            protected override void AddToPool()
             {
-                _ash = null;
-                AtomicSafetyHandle.Release(ash);
-            }
-#endif
-
-            if (++Token < ushort.MaxValue)
                 Pool.Add(this);
+            }
 
-            return handle;
-        }
-
-        protected override bool ReleaseHandle()
-        {
-            Token++;
-
-            if (Interlocked.CompareExchange(ref _pooled, 2, 0) == 0)
+            protected override void ReleaseHandle(nint handle)
+            {
                 NativeMethods.unienc_free_shared_buffer((Native.SharedBuffer*)handle);
+            }
 
-            _ptr = null;
-            _length = 0;
+            protected override void Reset()
+            {
+                _ptr = null;
+                _length = 0;
 
 #if ENABLE_UNITY_COLLECTIONS_CHECKS
-            if (_ash is { } ash)
-            {
-                _ash = null;
-                AtomicSafetyHandle.Release(ash);
-            }
+                if (_ash is { } ash)
+                {
+                    _ash = null;
+                    AtomicSafetyHandle.Release(ash);
+                }
 #endif
-
-            return true;
+            }
         }
     }
 }

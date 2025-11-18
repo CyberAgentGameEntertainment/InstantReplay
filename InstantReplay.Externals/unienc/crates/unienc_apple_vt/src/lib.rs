@@ -2,7 +2,7 @@ use std::{ffi::c_void, future::Future, path::Path, pin::Pin};
 
 use objc2::{rc::Retained, runtime::ProtocolObject};
 use objc2_metal::MTLTexture;
-use unienc_common::{EncodingSystem, TryFromUnityNativeTexturePointer};
+use unienc_common::{BlitOptions, EncodingSystem, TryFromUnityNativeTexturePointer};
 
 use crate::{
     audio::AudioToolboxEncoder, common::UnsafeSendRetained, metal::SharedTexture, mux::AVFMuxer,
@@ -58,20 +58,23 @@ impl<V: unienc_common::VideoEncoderOptions, A: unienc_common::AudioEncoderOption
         }
     }
 
+    fn is_blit_supported(&self) -> bool {
+        true
+    }
+
     fn new_blit_closure(
         &self,
         source: Self::BlitSourceType,
-        dst_width: u32,
-        dst_height: u32,
+        options: BlitOptions,
     ) -> Result<
-        Box<
-            (dyn FnOnce() -> Pin<Box<(dyn Future<Output = Result<Self::BlitTargetType>> + Send)>>
-                 + Send),
-        >,
+        Box<dyn FnOnce() -> Pin<Box<dyn Future<Output = Result<Self::BlitTargetType>> + Send>> + Send>,
     > {
+        let tex = UnsafeSendRetained::from((*source.texture).clone());
         Ok(Box::new(move || {
+            let tex = tex.clone();
+            let res = metal::custom_blit(&tex, options);
             Box::pin(async move {
-                match metal::custom_blit((*source.texture).clone(), dst_width, dst_height) {
+                match res {
                     Ok(future) => future.await,
                     Err(err) => Err(anyhow::anyhow!("Failed to perform blit operation: {}", err)),
                 }

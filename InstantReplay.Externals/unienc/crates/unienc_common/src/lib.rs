@@ -1,8 +1,8 @@
 use std::ffi::c_void;
 use std::fmt::Debug;
-use std::pin::Pin;
-use std::{future::Future};
+use std::future::Future;
 use std::path::Path;
+use std::pin::Pin;
 
 use anyhow::Result;
 use bincode::{Decode, Encode};
@@ -44,7 +44,9 @@ pub trait MuxerInput: Send + 'static {
 pub trait EncodingSystem {
     type VideoEncoderOptionsType: VideoEncoderOptions;
     type AudioEncoderOptionsType: AudioEncoderOptions;
-    type VideoEncoderType: Encoder<InputType: EncoderInput<Data = VideoSample<Self::BlitTargetType>>>;
+    type VideoEncoderType: Encoder<
+        InputType: EncoderInput<Data = VideoSample<Self::BlitTargetType>>,
+    >;
     type AudioEncoderType: Encoder<InputType: EncoderInput<Data = AudioSample>>;
     type MuxerType: Muxer<
         VideoInputType: MuxerInput<
@@ -64,7 +66,29 @@ pub trait EncodingSystem {
     fn new_video_encoder(&self) -> Result<Self::VideoEncoderType>;
     fn new_audio_encoder(&self) -> Result<Self::AudioEncoderType>;
     fn new_muxer(&self, output_path: &Path) -> Result<Self::MuxerType>;
-    fn new_blit_closure(&self, source: Self::BlitSourceType, dst_width: u32, dst_height: u32) -> Result<Box<dyn FnOnce() -> Pin<Box<dyn Future<Output = Result<Self::BlitTargetType>> + Send>> + Send>>;
+
+    fn is_blit_supported(&self) -> bool {
+        false
+    }
+
+    fn new_blit_closure(
+        &self,
+        _source: Self::BlitSourceType,
+        _options: BlitOptions,
+    ) -> Result<
+        Box<dyn FnOnce() -> Pin<Box<dyn Future<Output = Result<Self::BlitTargetType>> + Send>> + Send>,
+    > {
+        Err(anyhow::anyhow!(
+            "Blit not supported in FFmpeg encoding system"
+        ))
+    }
+}
+
+#[derive(Clone, Copy)]
+pub struct BlitOptions {
+    pub dst_width: u32,
+    pub dst_height: u32,
+    pub flip_vertically: bool,
 }
 
 pub trait TryFromUnityNativeTexturePointer: Sized {
@@ -72,28 +96,32 @@ pub trait TryFromUnityNativeTexturePointer: Sized {
 }
 
 pub trait TryFromRaw: Sized {
-    unsafe fn try_from_raw(ptr: *mut c_void) -> Result<Self>;
+    unsafe fn try_from_raw(ptr: *mut Self) -> Result<Self>;
 }
 
 pub trait IntoRaw {
-    fn into_raw(self) -> *mut c_void;
+    fn into_raw(self) -> *mut Self;
 }
 
 pub struct UnsupportedBlitData;
 
 impl TryFromUnityNativeTexturePointer for UnsupportedBlitData {
     fn try_from_unity_native_texture_ptr(_ptr: *mut c_void) -> Result<Self> {
-        Err(anyhow::anyhow!("Blit not supported in this encoding system"))
+        Err(anyhow::anyhow!(
+            "Blit not supported in this encoding system"
+        ))
     }
 }
 impl TryFromRaw for UnsupportedBlitData {
-    unsafe fn try_from_raw(_ptr: *mut c_void) -> Result<Self> {
-        Err(anyhow::anyhow!("Blit not supported in this encoding system"))
+    unsafe fn try_from_raw(_ptr: *mut Self) -> Result<Self> {
+        Err(anyhow::anyhow!(
+            "Blit not supported in this encoding system"
+        ))
     }
 }
 
 impl IntoRaw for UnsupportedBlitData {
-    fn into_raw(self) -> *mut c_void {
+    fn into_raw(self) -> *mut Self {
         std::ptr::null_mut()
     }
 }

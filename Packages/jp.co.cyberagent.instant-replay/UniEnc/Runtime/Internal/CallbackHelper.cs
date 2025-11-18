@@ -16,12 +16,21 @@ namespace UniEnc.Internal
         public unsafe delegate void SimpleCallbackDelegate(void* userData, UniencErrorNative errorKind);
 
         private static readonly unsafe SimpleCallbackDelegate SSimpleCallbackDelegate = SimpleCallback;
-        private static readonly unsafe DataCallbackDelegate SDataCallbackDelegate = DataCallback;
+
+        private static readonly unsafe DataCallbackDelegate<UniencSampleData> SSampleDataCallbackDelegate =
+            SampleDataCallback;
+
+        private static readonly unsafe DataCallbackDelegate<UniencBlitTargetData> SBlitTargetDataCallbackDelegate =
+            BlitTargetDataCallback;
 
         private static readonly IntPtr SimpleCallbackPtr =
             Marshal.GetFunctionPointerForDelegate(SSimpleCallbackDelegate);
 
-        private static readonly IntPtr DataCallbackPtr = Marshal.GetFunctionPointerForDelegate(SDataCallbackDelegate);
+        private static readonly IntPtr DataCallbackPtr =
+            Marshal.GetFunctionPointerForDelegate(SSampleDataCallbackDelegate);
+
+        private static readonly IntPtr BlitTargetDataCallbackPtr =
+            Marshal.GetFunctionPointerForDelegate(SBlitTargetDataCallbackDelegate);
 
         /// <summary>
         ///     Native callback for simple operations.
@@ -50,27 +59,54 @@ namespace UniEnc.Internal
         /// <summary>
         ///     Native callback for data operations.
         /// </summary>
-        [MonoPInvokeCallback(typeof(DataCallbackDelegate))]
-        private static unsafe void DataCallback(void* userData, byte* data, nuint size, double timestamp,
-            DataKind kind, UniencErrorNative error)
+        [MonoPInvokeCallback(typeof(DataCallbackDelegate<UniencSampleData>))]
+        private static unsafe void SampleDataCallback(UniencSampleData sampleData, void* userData,
+            UniencErrorNative error)
         {
             var handle = GCHandle.FromIntPtr((IntPtr)userData);
-            var context = (DataCallbackContext)handle.Target;
+            var context = (DataCallbackContext<EncodedFrame>)handle.Target;
             handle.Free();
 
             if (error.kind == UniencErrorKind.Success)
             {
-                if (size > 0 && data != null)
+                if (sampleData.size > 0 && sampleData.data != null)
                 {
-                    var sourceSpan = new ReadOnlySpan<byte>(data, (int)size);
-                    var frame = EncodedFrame.CreateWithCopy(sourceSpan, timestamp, kind);
+                    var sourceSpan = new ReadOnlySpan<byte>(sampleData.data, (int)sampleData.size);
+                    var frame = EncodedFrame.CreateWithCopy(sourceSpan, sampleData.timestamp, sampleData.kind);
                     context.SetResult(frame);
                 }
                 else
                 {
-                    var frame = EncodedFrame.CreateWithCopy(ReadOnlySpan<byte>.Empty, timestamp, kind);
+                    var frame = EncodedFrame.CreateWithCopy(ReadOnlySpan<byte>.Empty, sampleData.timestamp,
+                        sampleData.kind);
                     context.SetResult(frame);
                 }
+            }
+            else
+            {
+                string errorMessage = null;
+                if (error.message != null)
+                    errorMessage = Marshal.PtrToStringUTF8((IntPtr)error.message);
+
+                context.SetException(new UniEncException(error.kind, errorMessage ?? "Operation failed"));
+            }
+        }
+
+        /// <summary>
+        ///     Native callback for data operations.
+        /// </summary>
+        [MonoPInvokeCallback(typeof(DataCallbackDelegate<UniencBlitTargetData>))]
+        private static unsafe void BlitTargetDataCallback(UniencBlitTargetData blitTargetData, void* userData,
+            UniencErrorNative error)
+        {
+            var handle = GCHandle.FromIntPtr((IntPtr)userData);
+            var context = (DataCallbackContext<BlitTargetHandle>)handle.Target;
+            handle.Free();
+
+            if (error.kind == UniencErrorKind.Success)
+            {
+                // Debug.Log($"Successfully created BlitTargetHandle: ptr={(nint)blitTargetData.data}");
+                context.SetResult(new BlitTargetHandle((nint)blitTargetData.data));
             }
             else
             {
@@ -105,6 +141,14 @@ namespace UniEnc.Internal
         internal static nuint GetDataCallbackPtr()
         {
             return (nuint)(nint)DataCallbackPtr;
+        }
+
+        /// <summary>
+        ///     Gets the function pointer for data callbacks.
+        /// </summary>
+        internal static nuint GetBlitTargetDataCallbackPtr()
+        {
+            return (nuint)(nint)BlitTargetDataCallbackPtr;
         }
 
         /// <summary>
@@ -186,15 +230,15 @@ namespace UniEnc.Internal
         /// <summary>
         ///     Reusable context for callbacks that return data.
         /// </summary>
-        internal sealed class DataCallbackContext : IValueTaskSource<EncodedFrame>
+        internal sealed class DataCallbackContext<T> : IValueTaskSource<T>
         {
-            private static readonly ConcurrentQueue<DataCallbackContext> Pool = new();
+            private static readonly ConcurrentQueue<DataCallbackContext<T>> Pool = new();
 
-            private ManualResetValueTaskSourceCore<EncodedFrame> _core;
+            private ManualResetValueTaskSourceCore<T> _core;
 
-            public ValueTask<EncodedFrame> Task => new(this, _core.Version);
+            public ValueTask<T> Task => new(this, _core.Version);
 
-            public EncodedFrame GetResult(short token)
+            public T GetResult(short token)
             {
                 var result = _core.GetResult(token);
                 Return();
@@ -212,7 +256,7 @@ namespace UniEnc.Internal
                 _core.OnCompleted(continuation, state, token, flags);
             }
 
-            public static DataCallbackContext Rent()
+            public static DataCallbackContext<T> Rent()
             {
                 if (Pool.TryDequeue(out var context))
                 {
@@ -220,7 +264,7 @@ namespace UniEnc.Internal
                     return context;
                 }
 
-                return new DataCallbackContext();
+                return new DataCallbackContext<T>();
             }
 
             public void Return()
@@ -228,7 +272,7 @@ namespace UniEnc.Internal
                 Pool.Enqueue(this);
             }
 
-            public void SetResult(EncodedFrame result)
+            public void SetResult(T result)
             {
                 _core.SetResult(result);
             }
@@ -239,7 +283,7 @@ namespace UniEnc.Internal
             }
         }
 
-        private unsafe delegate void DataCallbackDelegate(void* userData, byte* data, nuint size, double timestamp,
-            DataKind kind, UniencErrorNative error);
+        private unsafe delegate void DataCallbackDelegate<in T>(T data, void* userData, UniencErrorNative error)
+            where T : unmanaged;
     }
 }

@@ -85,7 +85,7 @@ namespace UniEnc
             {
                 _ = _outputHandle ?? throw new ObjectDisposedException(nameof(_outputHandle));
 
-                var context = CallbackHelper.DataCallbackContext.Rent();
+                var context = CallbackHelper.DataCallbackContext<EncodedFrame>.Rent();
                 var contextHandle = CallbackHelper.CreateSendPtr(context);
                 using var runtime = RuntimeWrapper.GetScope();
 

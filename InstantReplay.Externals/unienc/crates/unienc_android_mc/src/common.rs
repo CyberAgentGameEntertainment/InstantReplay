@@ -5,7 +5,7 @@ use jni::{
     sys::{jboolean, jint, jlong}, JNIEnv,
 };
 use std::{collections::HashMap, fmt::Display, sync::Arc, time::Duration};
-use unienc_common::{EncodedData, UniencSampleKind, UnsupportedBlitData, VideoFrameBgra32, VideoSample};
+use unienc_common::{EncodedData, UniencSampleKind, VideoFrameBgra32};
 
 use crate::java::*;
 

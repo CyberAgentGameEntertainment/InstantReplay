@@ -1,9 +1,12 @@
 use std::{
-    cell::{Cell, RefCell}, ffi::c_void, future::Future, ptr::NonNull, sync::{Arc, Mutex, OnceLock}
+    cell::{Cell, RefCell},
+    future::Future,
+    ptr::NonNull,
+    sync::{Arc, Mutex, OnceLock},
 };
 
 use block2::RcBlock;
-use objc2::{rc::Retained, runtime::{ProtocolObject}};
+use objc2::{rc::Retained, runtime::ProtocolObject};
 use objc2_core_foundation::{kCFAllocatorDefault, kCFBooleanTrue, CFDictionary};
 use objc2_core_video::{
     kCVPixelBufferMetalCompatibilityKey, kCVPixelFormatType_32BGRA, CVMetalTexture,
@@ -20,7 +23,7 @@ use objc2_metal::{
     MTLVertexFormat, MTLVertexStepFunction,
 };
 use tokio::sync::oneshot;
-use unienc_common::{IntoRaw, TryFromRaw};
+use unienc_common::{BlitOptions, IntoRaw, TryFromRaw};
 use unity_native_plugin::{
     graphics::{GfxDeviceEventType, UnityGraphics},
     metal::objc2::{UnityGraphicsMetalV1, UnityGraphicsMetalV1Interface},
@@ -57,13 +60,21 @@ mod entry_points {
 }
 
 fn unity_plugin_load(interfaces: &unity_native_plugin::interface::UnityInterfaces) {
+    println!("unienc: unity_plugin_load");
     let graphics = interfaces.interface::<UnityGraphics>().unwrap();
 
     GRAPHICS
         .set(Mutex::new(graphics))
         .map_err(|_e| anyhow!("Failed to set graphics"))
         .unwrap();
+
     graphics.register_device_event_callback(Some(on_device_event));
+
+    // we need to call it manually on iOS
+    #[cfg(target_os = "ios")]
+    {
+        on_device_event(GfxDeviceEventType::Initialize);
+    }
 }
 fn unity_plugin_unload() {}
 
@@ -73,6 +84,7 @@ struct VertexUniforms {
 }
 
 extern "system" fn on_device_event(ev_type: GfxDeviceEventType) {
+    println!("unienc: on_device_event {ev_type:?}");
     match ev_type {
         unity_native_plugin::graphics::GfxDeviceEventType::Initialize => {
             let renderer = GRAPHICS.get().unwrap().lock().unwrap().renderer();
@@ -230,17 +242,15 @@ fragment FShaderOutput fragment_main(VertexOut in [[stage_in]],
     }
 }
 
-pub(crate) fn custom_blit(source: Retained<ProtocolObject<dyn MTLTexture>>, dst_width: u32, dst_height: u32) -> Result<impl Future<Output = Result<SharedTexture>> + Send> {
-    // custom blit;
-    /*
-    let Some(source) =
-        (unsafe { Retained::<ProtocolObject<dyn MTLTexture>>::retain(data as *mut _) })
-    else {
-        return;
-    };
-     */
-
-    let context = CONTEXT.get().context("Context is not initialized")?.lock().map_err(|e| anyhow!(e.to_string()))?;
+pub(crate) fn custom_blit(
+    source: &ProtocolObject<dyn MTLTexture>,
+    options: BlitOptions,
+) -> Result<impl Future<Output = Result<SharedTexture>> + Send> {
+    let context = CONTEXT
+        .get()
+        .context("Context is not initialized")?
+        .lock()
+        .map_err(|e| anyhow!(e.to_string()))?;
     let metal = context.metal;
     let device = &context.device;
 
@@ -253,18 +263,21 @@ pub(crate) fn custom_blit(source: Retained<ProtocolObject<dyn MTLTexture>>, dst_
             None,
             NonNull::new(&mut cache).context("Failed to get NonNull for CVMetalTextureCache")?,
         )
-        .to_result()
-        ?
+        .to_result()?
     };
 
-    let cache = unsafe { Retained::from_raw(cache).context("Failed to create Retained for CVMetalTextureCache")? };
+    let cache = unsafe {
+        Retained::from_raw(cache).context("Failed to create Retained for CVMetalTextureCache")?
+    };
 
-    let width = dst_width;//source.width();
-    let height = dst_height;//source.height();
+    let width = options.dst_width;
+    let height = options.dst_height;
 
     let shared_texture = SharedTexture::new(&cache, width as usize, height as usize)?;
 
-    let command_buffer = metal.current_command_buffer().context("Failed to get current command buffer")?;
+    let command_buffer = metal
+        .current_command_buffer()
+        .context("Failed to get current command buffer")?;
     metal.end_current_command_encoder();
 
     let color_attachment_desc = MTLRenderPassColorAttachmentDescriptor::new();
@@ -293,7 +306,9 @@ pub(crate) fn custom_blit(source: Retained<ProtocolObject<dyn MTLTexture>>, dst_
     sampler_desc.setMagFilter(MTLSamplerMinMagFilter::Linear);
     sampler_desc.setMipFilter(MTLSamplerMipFilter::NotMipmapped);
 
-    let sampler_state = device.newSamplerStateWithDescriptor(&sampler_desc).context("Failed to create sampler state")?;
+    let sampler_state = device
+        .newSamplerStateWithDescriptor(&sampler_desc)
+        .context("Failed to create sampler state")?;
 
     encoder.setRenderPipelineState(&context.pipeline_state);
     encoder.setCullMode(MTLCullMode::None);
@@ -301,12 +316,29 @@ pub(crate) fn custom_blit(source: Retained<ProtocolObject<dyn MTLTexture>>, dst_
     // vertex
     unsafe { encoder.setVertexBuffer_offset_atIndex(Some(&*context.vertices), 0, 0) };
 
-    let mut vert_uniforms = VertexUniforms {
-        scale_and_tiling: [1.0, 1.0, 0.0, 0.0],
+    // scale to fit
+    let pixel_scale = f32::min(
+        options.dst_width as f32 / source.width() as f32,
+        options.dst_height as f32 / source.height() as f32,
+    );
+    let render_scale_x = pixel_scale * source.width() as f32 / options.dst_width as f32;
+    let render_scale_y = pixel_scale * source.height() as f32 / options.dst_height as f32;
+    let flip_vertically = options.flip_vertically;
+
+    let mut vert_uniforms = if flip_vertically {
+        VertexUniforms {
+            scale_and_tiling: [1f32 / render_scale_x, -1f32 / render_scale_y, 0.0, 1.0],
+        }
+    } else {
+        VertexUniforms {
+            scale_and_tiling: [1f32 / render_scale_x, 1f32 / render_scale_y, 0.0, 0.0],
+        }
     };
+
     let vert_uniforms = unsafe {
         device.newBufferWithBytes_length_options(
-            NonNull::new(&mut vert_uniforms as *mut VertexUniforms as *mut _).context("Failed to create NonNull for vertex uniforms")?,
+            NonNull::new(&mut vert_uniforms as *mut VertexUniforms as *mut _)
+                .context("Failed to create NonNull for vertex uniforms")?,
             std::mem::size_of::<VertexUniforms>(),
             MTLResourceOptions::CPUCacheModeWriteCombined,
         )
@@ -317,7 +349,7 @@ pub(crate) fn custom_blit(source: Retained<ProtocolObject<dyn MTLTexture>>, dst_
 
     // fragment
 
-    unsafe { encoder.setFragmentTexture_atIndex(Some(&source), 0) };
+    unsafe { encoder.setFragmentTexture_atIndex(Some(source), 0) };
     unsafe { encoder.setFragmentSamplerState_atIndex(Some(&sampler_state), 0) };
 
     unsafe {
@@ -372,14 +404,16 @@ struct SharedTextureInner {
 }
 
 impl TryFromRaw for SharedTexture {
-    unsafe fn try_from_raw(ptr: *mut c_void) -> Result<Self> {
-        Ok(SharedTexture { inner: Arc::from_raw(ptr as *mut Mutex<SharedTextureInner>) })
+    unsafe fn try_from_raw(ptr: *mut Self) -> Result<Self> {
+        Ok(SharedTexture {
+            inner: Arc::from_raw(ptr as *mut Mutex<SharedTextureInner>),
+        })
     }
 }
 
 impl IntoRaw for SharedTexture {
-    fn into_raw(self) -> *mut c_void {
-        Arc::into_raw(self.inner) as *mut c_void
+    fn into_raw(self) -> *mut Self {
+        Arc::into_raw(self.inner) as *mut Self
     }
 }
 
@@ -428,10 +462,12 @@ impl SharedTexture {
         let texture = unsafe { Retained::from_raw(texture) }
             .context("Failed to get MTLTexture from CVMetalTexture")?;
 
-        Ok(Self { inner: Arc::new(Mutex::new(SharedTextureInner {
-            texture: texture.into(),
-            pixel_buffer: buffer.into(),
-        })) })
+        Ok(Self {
+            inner: Arc::new(Mutex::new(SharedTextureInner {
+                texture: texture.into(),
+                pixel_buffer: buffer.into(),
+            })),
+        })
     }
 
     pub fn metal_texture(&self) -> Retained<ProtocolObject<dyn MTLTexture>> {
@@ -439,6 +475,6 @@ impl SharedTexture {
     }
 
     pub fn pixel_buffer(&self) -> Retained<CVPixelBuffer> {
-        self.inner.lock().unwrap().pixel_buffer.clone()
+        self.inner.lock().unwrap().pixel_buffer.inner.clone()
     }
 }

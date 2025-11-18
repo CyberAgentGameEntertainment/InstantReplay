@@ -1,9 +1,17 @@
 use std::{fmt::Debug, ops::Deref};
 
-use objc2::rc::Retained;
+use objc2::{Message, rc::Retained};
 
 pub struct UnsafeSendRetained<T> {
     pub inner: Retained<T>,
+}
+
+impl<T: Message> Clone for UnsafeSendRetained<T> {
+    fn clone(&self) -> Self {
+        Self {
+            inner: self.inner.clone(),
+        }
+    }
 }
 
 unsafe impl<T> Send for UnsafeSendRetained<T> {}
