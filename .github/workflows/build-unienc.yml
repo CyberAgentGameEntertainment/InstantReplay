@@ -19,7 +19,7 @@ jobs:
     runs-on: windows-2022
     strategy:
       matrix:
-        arch: [i686, x86_64]
+        arch: [x86_64]
     timeout-minutes: 30
     defaults:
       run:
@@ -43,7 +43,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        triple: [aarch64-linux-android, armv7-linux-androideabi, x86_64-linux-android]
+        triple: [aarch64-linux-android, x86_64-linux-android]
     timeout-minutes: 30
     defaults:
       run:
