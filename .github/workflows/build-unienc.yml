@@ -26,6 +26,8 @@ jobs:
         working-directory: InstantReplay.Externals/unienc/crates/unienc
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: 'true'
       - run: rustup default stable
       - run: rustup target add ${{ matrix.arch }}-pc-windows-msvc
       - run: cargo build --target ${{ matrix.arch }}-pc-windows-msvc --profile ${{ env._RUST_BUILD_CONFIG == 'debug' && 'dev' || env._RUST_BUILD_CONFIG }}
@@ -48,6 +50,8 @@ jobs:
         working-directory: InstantReplay.Externals/unienc/crates/unienc
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: 'true'
       - run: rustup default stable
       - run: rustup target add ${{ matrix.triple }}
       - run: sudo apt update && sudo apt install gcc-multilib
@@ -71,6 +75,8 @@ jobs:
         working-directory: InstantReplay.Externals/unienc/crates/unienc
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: 'true'
       - run: rustup default stable
       - run: rustup target add ${{ matrix.arch }}-apple-darwin
       - run: cargo build --target ${{ matrix.arch }}-apple-darwin --profile ${{ env._RUST_BUILD_CONFIG == 'debug' && 'dev' || env._RUST_BUILD_CONFIG }}
@@ -91,6 +97,8 @@ jobs:
         working-directory: InstantReplay.Externals/unienc/crates/unienc
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: 'true'
       - run: rustup default stable
       - run: rustup target add ${{ matrix.arch }}-apple-ios
       - run: cargo build --target ${{ matrix.arch }}-apple-ios --profile ${{ env._RUST_BUILD_CONFIG == 'debug' && 'dev' || env._RUST_BUILD_CONFIG }}
@@ -111,6 +119,8 @@ jobs:
         working-directory: InstantReplay.Externals/unienc/crates/unienc
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: 'true'
       - run: rustup default stable
       - run: rustup target add ${{ matrix.arch }}-unknown-linux-gnu
       - run: sudo apt update && sudo apt install gcc-multilib
