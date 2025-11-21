@@ -1,8 +1,9 @@
 use std::ffi::{c_int, c_void};
+use std::future::Future;
 use std::path::Path;
 use std::sync::OnceLock;
 use jni::JavaVM;
-use unienc_common::EncodingSystem;
+use unienc_common::{EncodingSystem, UnsupportedBlitData};
 use anyhow::Result;
 
 pub mod audio;
@@ -35,6 +36,8 @@ impl<V: unienc_common::VideoEncoderOptions, A: unienc_common::AudioEncoderOption
     type VideoEncoderType = MediaCodecVideoEncoder;
     type AudioEncoderType = MediaCodecAudioEncoder;
     type MuxerType = MediaMuxer;
+    type BlitSourceType = UnsupportedBlitData;
+    type BlitTargetType = UnsupportedBlitData;
 
     fn new(video_options: &V, audio_options: &A) -> Self {
         Self {

@@ -52,5 +52,7 @@ namespace InstantReplay
         ///     audio sample timestamps will be adjusted. This reduces audio misalignment but may introduce noise.
         /// </summary>
         public double? AudioLagAdjustmentThreshold { get; set; }
+
+        public bool ForceReadback { get; set; }
     }
 }

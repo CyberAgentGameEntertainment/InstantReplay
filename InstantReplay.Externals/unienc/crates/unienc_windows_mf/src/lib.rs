@@ -1,6 +1,6 @@
 use anyhow::Result;
-use std::path::Path;
-use unienc_common::EncodingSystem;
+use std::{future::Future, path::Path};
+use unienc_common::{BlitOptions, EncodingSystem, UnsupportedBlitData};
 
 pub mod audio;
 mod common;
@@ -28,6 +28,8 @@ impl<V: unienc_common::VideoEncoderOptions, A: unienc_common::AudioEncoderOption
     type VideoEncoderType = MediaFoundationVideoEncoder;
     type AudioEncoderType = MediaFoundationAudioEncoder;
     type MuxerType = MediaFoundationMuxer;
+    type BlitSourceType = UnsupportedBlitData;
+    type BlitTargetType = UnsupportedBlitData;
 
     fn new(video_options: &V, audio_options: &A) -> Self {
         // Initialize Media Foundation

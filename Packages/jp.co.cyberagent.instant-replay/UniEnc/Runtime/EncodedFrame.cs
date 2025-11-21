@@ -24,12 +24,13 @@ namespace UniEnc
         /// <summary>
         ///     Whether this is a key frame (for video).
         /// </summary>
-        public DataKind Kind { get; }
+        public UniencSampleKind Kind { get; }
 
         /// <summary>
         ///     Creates a new EncodedFrame with data copied from the source.
         /// </summary>
-        internal static EncodedFrame CreateWithCopy(ReadOnlySpan<byte> sourceData, double timestamp, DataKind kind)
+        internal static EncodedFrame CreateWithCopy(ReadOnlySpan<byte> sourceData, double timestamp,
+            UniencSampleKind kind)
         {
             var rentedArray = ArrayPool<byte>.Shared.Rent(sourceData.Length);
             sourceData.CopyTo(rentedArray.AsSpan());
@@ -39,7 +40,7 @@ namespace UniEnc
         /// <summary>
         ///     Creates a new EncodedFrame with pre-rented array (internal use only).
         /// </summary>
-        private EncodedFrame(byte[] rentedArray, int length, double timestamp, DataKind kind)
+        private EncodedFrame(byte[] rentedArray, int length, double timestamp, UniencSampleKind kind)
         {
             _rentedArray = rentedArray;
             _length = length;

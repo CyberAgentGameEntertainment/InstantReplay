@@ -8,7 +8,7 @@ namespace UniEnc
     /// <summary>
     ///     Main factory class for creating video/audio encoders and muxers.
     /// </summary>
-    public sealed class EncodingSystem : IDisposable
+    public sealed partial class EncodingSystem : IDisposable
     {
         private readonly object _lock = new();
         private EncodingSystemHandle _handle;

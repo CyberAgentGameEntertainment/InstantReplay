@@ -5,7 +5,7 @@ use jni::{
     sys::{jboolean, jint, jlong}, JNIEnv,
 };
 use std::{collections::HashMap, fmt::Display, sync::Arc, time::Duration};
-use unienc_common::{EncodedData, UniencDataKind, VideoSample};
+use unienc_common::{EncodedData, UniencSampleKind, VideoFrameBgra32};
 
 use crate::java::*;
 
@@ -564,18 +564,18 @@ impl EncodedData for CommonEncodedData {
         self.timestamp = timestamp;
     }
 
-    fn kind(&self) -> UniencDataKind {
+    fn kind(&self) -> UniencSampleKind {
         match self.content {
             CommonEncodedDataContent::Buffer { buffer_flag, .. } => {
                 if (buffer_flag & media_codec_buffer_flag::BUFFER_FLAG_KEY_FRAME) != 0 {
-                    UniencDataKind::Key
+                    UniencSampleKind::Key
                 } else if (buffer_flag & media_codec_buffer_flag::BUFFER_FLAG_CODEC_CONFIG) != 0 {
-                    UniencDataKind::Metadata
+                    UniencSampleKind::Metadata
                 } else {
-                    UniencDataKind::Interpolated
+                    UniencSampleKind::Interpolated
                 }
             }
-            CommonEncodedDataContent::FormatInfo(_) => UniencDataKind::Metadata,
+            CommonEncodedDataContent::FormatInfo(_) => UniencSampleKind::Metadata,
         }
     }
 }
@@ -732,7 +732,7 @@ pub(crate) fn format_to_map(
 
 /// Write ARGB data to YUV image planes with padding for 16-byte alignment
 pub fn write_bgra_to_yuv_planes_with_padding(
-    sample: &VideoSample,
+    sample: &VideoFrameBgra32,
     padded_width: u32,
     padded_height: u32,
     planes: &[ImagePlane],

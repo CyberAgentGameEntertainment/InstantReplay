@@ -1,13 +1,29 @@
-use std::ops::Deref;
+use std::{fmt::Debug, ops::Deref};
 
-use objc2::rc::Retained;
+use objc2::{Message, rc::Retained};
 
 pub struct UnsafeSendRetained<T> {
     pub inner: Retained<T>,
 }
 
+impl<T: Message> Clone for UnsafeSendRetained<T> {
+    fn clone(&self) -> Self {
+        Self {
+            inner: self.inner.clone(),
+        }
+    }
+}
+
 unsafe impl<T> Send for UnsafeSendRetained<T> {}
-unsafe impl<T> Sync for UnsafeSendRetained<T> {}
+// unsafe impl<T> Sync for UnsafeSendRetained<T> {}
+
+impl<T> Debug for UnsafeSendRetained<T> where T: Debug {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("UnsafeSendRetained")
+            .field("inner", &self.inner)
+            .finish()
+    }
+}
 
 impl<T> Deref for UnsafeSendRetained<T> {
     type Target = Retained<T>;

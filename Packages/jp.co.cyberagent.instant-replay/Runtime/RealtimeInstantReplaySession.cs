@@ -70,16 +70,6 @@ namespace InstantReplay
             var audioEncoder = encodingSystem.CreateAudioEncoder();
             var buffer = _buffer = new BoundedEncodedFrameBuffer(options.MaxMemoryUsageBytesForCompressedFrames);
 
-            var preprocessor = FramePreprocessor.WithFixedSize(
-                (int)options.VideoOptions.Width,
-                (int)options.VideoOptions.Height,
-                // RGBA to BGRA
-                new Matrix4x4(new Vector4(0, 0, 1, 0),
-                    new Vector4(0, 1, 0, 0),
-                    new Vector4(1, 0, 0, 0),
-                    new Vector4(0, 0, 0, 1)
-                ));
-
             // ReSharper disable once ConvertToLocalFunction
             Action<LazyVideoFrameData> onLazyVideoFrameDataDropped = async static dropped =>
             {
@@ -94,18 +84,48 @@ namespace InstantReplay
                 }
             };
 
-            _videoPipeline = new FrameProviderSubscription(frameProvider, disposeFrameProvider,
-                new VideoTemporalAdjuster<IFrameProvider.Frame>(
-                    _temporalController,
-                    fixedFrameInterval,
-                    options.VideoLagAdjustmentThreshold).AsInput(
-                    new FramePreprocessorInput(preprocessor, true).AsInput(
-                        new AsyncGPUReadbackTransform(new SharedBufferPool((nuint)uncompressedLimit)).AsInput(
+            if (!options.ForceReadback && encodingSystem.IsBlitSupported())
+            {
+                _videoPipeline = new FrameProviderSubscription(frameProvider, disposeFrameProvider,
+                    new VideoTemporalAdjuster<IFrameProvider.Frame>(
+                        _temporalController,
+                        fixedFrameInterval,
+                        options.VideoLagAdjustmentThreshold).AsInput(
+                        new NativeBlitTransform(
+                            encodingSystem,
+                            options.VideoOptions.Width,
+                            options.VideoOptions.Height).AsInput(
                             new DroppingChannelInput<LazyVideoFrameData>(
                                 options.VideoInputQueueSize,
                                 onLazyVideoFrameDataDropped,
                                 new VideoEncoderInput(videoEncoder,
-                                    new BoundedEncodedDataBufferVideoInput(buffer).AsAsync()))))));
+                                    new BoundedEncodedDataBufferVideoInput(buffer).AsAsync())))));
+            }
+            else
+            {
+                var preprocessor = FramePreprocessor.WithFixedSize(
+                    (int)options.VideoOptions.Width,
+                    (int)options.VideoOptions.Height,
+                    // RGBA to BGRA
+                    new Matrix4x4(new Vector4(0, 0, 1, 0),
+                        new Vector4(0, 1, 0, 0),
+                        new Vector4(1, 0, 0, 0),
+                        new Vector4(0, 0, 0, 1)
+                    ));
+
+                _videoPipeline = new FrameProviderSubscription(frameProvider, disposeFrameProvider,
+                    new VideoTemporalAdjuster<IFrameProvider.Frame>(
+                        _temporalController,
+                        fixedFrameInterval,
+                        options.VideoLagAdjustmentThreshold).AsInput(
+                        new FramePreprocessorInput(preprocessor, true).AsInput(
+                            new AsyncGPUReadbackTransform(new SharedBufferPool((nuint)uncompressedLimit)).AsInput(
+                                new DroppingChannelInput<LazyVideoFrameData>(
+                                    options.VideoInputQueueSize,
+                                    onLazyVideoFrameDataDropped,
+                                    new VideoEncoderInput(videoEncoder,
+                                        new BoundedEncodedDataBufferVideoInput(buffer).AsAsync()))))));
+            }
 
             var audioInputQueueSizeSeconds = options.AudioInputQueueSizeSeconds ?? 1.0;
             var audioInputQueueSizeSamples = (int)(options.AudioOptions.SampleRate * options.AudioOptions.Channels *

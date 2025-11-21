@@ -35,11 +35,24 @@ namespace UniEnc.Native
     internal struct SharedBuffer
     {
     }
+
+    // opaque
+    internal struct BlitTargetType
+    {
+    }
+
+    partial struct UniencBlitTargetData
+    {
+        public unsafe UniencBlitTargetData(BlitTargetType* data)
+        {
+            this.data = data;
+        }
+    }
 }
 
 namespace UniEnc
 {
-    public enum DataKind : byte
+    public enum UniencSampleKind : byte
     {
         Interpolated,
         Key,

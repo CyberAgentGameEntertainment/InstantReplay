@@ -36,7 +36,7 @@ namespace UniEnc
         /// <param name="width">Frame width in pixels</param>
         /// <param name="height">Frame height in pixels</param>
         /// <param name="timestamp">Frame timestamp in seconds</param>
-        public ValueTask PushFrameAsync(ref SharedBuffer frameData, uint width, uint height, double timestamp)
+        public ValueTask PushFrameAsync(in SharedBuffer frameData, uint width, uint height, double timestamp)
         {
             lock (_lock)
             {
@@ -52,12 +52,47 @@ namespace UniEnc
                     {
                         using var runtime = RuntimeWrapper.GetScope();
 
-                        NativeMethods.unienc_video_encoder_push(
+                        NativeMethods.unienc_video_encoder_push_shared_buffer(
                             runtime.Runtime,
                             _inputHandle.DangerousGetHandle(),
                             frameData.MoveOut(),
                             width,
                             height,
+                            timestamp,
+                            CallbackHelper.GetSimpleCallbackPtr(),
+                            contextHandle);
+                    }
+
+                    return context.Task;
+                }
+                catch
+                {
+                    context.Return();
+                    throw;
+                }
+            }
+        }
+
+        public ValueTask PushFrameAsync(in BlitTargetHandle blitTarget, double timestamp)
+        {
+            lock (_lock)
+            {
+                _ = _inputHandle ?? throw new ObjectDisposedException(nameof(_inputHandle));
+
+                var context = CallbackHelper.SimpleCallbackContext.Rent();
+
+                try
+                {
+                    var contextHandle = CallbackHelper.CreateSendPtr(context);
+
+                    unsafe
+                    {
+                        using var runtime = RuntimeWrapper.GetScope();
+
+                        NativeMethods.unienc_video_encoder_push_blit_target(
+                            runtime.Runtime,
+                            _inputHandle.DangerousGetHandle(),
+                            new UniencBlitTargetData((BlitTargetType*)blitTarget.MoveOut()),
                             timestamp,
                             CallbackHelper.GetSimpleCallbackPtr(),
                             contextHandle);
@@ -83,7 +118,7 @@ namespace UniEnc
             {
                 _ = _outputHandle ?? throw new ObjectDisposedException(nameof(_outputHandle));
 
-                var context = CallbackHelper.DataCallbackContext.Rent();
+                var context = CallbackHelper.DataCallbackContext<EncodedFrame>.Rent();
                 var contextHandle = CallbackHelper.CreateSendPtr(context);
 
                 unsafe

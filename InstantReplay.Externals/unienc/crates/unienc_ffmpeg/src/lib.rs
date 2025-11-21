@@ -1,12 +1,12 @@
 use anyhow::Result;
-use std::path::Path;
-use unienc_common::EncodingSystem;
+use std::{future::Future, path::Path};
+use unienc_common::{BlitOptions, EncodingSystem, UnsupportedBlitData};
 
 pub mod audio;
-pub mod mux;
-pub mod video;
 mod ffmpeg;
+pub mod mux;
 mod utils;
+pub mod video;
 
 use audio::FFmpegAudioEncoder;
 use mux::FFmpegMuxer;
@@ -28,9 +28,10 @@ impl<V: unienc_common::VideoEncoderOptions, A: unienc_common::AudioEncoderOption
     type VideoEncoderType = FFmpegVideoEncoder;
     type AudioEncoderType = FFmpegAudioEncoder;
     type MuxerType = FFmpegMuxer;
+    type BlitSourceType = UnsupportedBlitData;
+    type BlitTargetType = UnsupportedBlitData;
 
     fn new(video_options: &V, audio_options: &A) -> Self {
-
         Self {
             video_options: *video_options,
             audio_options: *audio_options,
