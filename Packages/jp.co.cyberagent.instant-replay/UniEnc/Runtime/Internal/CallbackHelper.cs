@@ -105,7 +105,6 @@ namespace UniEnc.Internal
 
             if (error.kind == UniencErrorKind.Success)
             {
-                // Debug.Log($"Successfully created BlitTargetHandle: ptr={(nint)blitTargetData.data}");
                 context.SetResult(new BlitTargetHandle((nint)blitTargetData.data));
             }
             else
