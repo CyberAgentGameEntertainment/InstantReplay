@@ -1,6 +1,7 @@
 use std::cell::RefCell;
 use std::ffi::{c_char, c_void};
 use std::fs;
+use std::sync::Mutex;
 use std::{path::Path, ptr::NonNull};
 
 use anyhow::Result;
@@ -35,13 +36,13 @@ pub struct AVFMuxer {
 }
 
 pub struct AVFMuxerVideoInput {
-    tx: mpsc::Sender<UnsafeSendRetained<CMSampleBuffer>>,
+    tx: mpsc::Sender<Mutex<UnsafeSendRetained<CMSampleBuffer>>>,
     finish_rx: oneshot::Receiver<Result<()>>,
 }
 
 pub struct AVFMuxerAudioInput {
     asbd: AudioStreamBasicDescription,
-    tx: mpsc::Sender<UnsafeSendRetained<CMSampleBuffer>>,
+    tx: mpsc::Sender<Mutex<UnsafeSendRetained<CMSampleBuffer>>>,
     finish_rx: oneshot::Receiver<Result<()>>,
     magic_cookie_applied: bool,
 }
@@ -50,7 +51,7 @@ impl MuxerInput for AVFMuxerVideoInput {
     type Data = VideoEncodedData;
 
     async fn push(&mut self, data: Self::Data) -> Result<()> {
-        self.tx.send(data.sample_buffer).await?;
+        self.tx.send(Mutex::new(data.sample_buffer)).await?;
 
         Ok(())
     }
@@ -71,7 +72,7 @@ impl MuxerInput for AVFMuxerAudioInput {
         let sample_buffer =
             create_audio_sample_buffer(&data, &mut self.asbd, !self.magic_cookie_applied)?;
         self.magic_cookie_applied = true;
-        self.tx.send(sample_buffer.into()).await?;
+        self.tx.send(Mutex::new(sample_buffer.into())).await?;
 
         Ok(())
     }
@@ -141,7 +142,7 @@ impl AVFMuxer {
         let path = output_path.as_ref();
         _ = fs::remove_file(path);
         let url =
-            unsafe { NSURL::fileURLWithPath(&NSString::from_str(path.to_string_lossy().as_ref())) };
+            NSURL::fileURLWithPath(&NSString::from_str(path.to_string_lossy().as_ref()));
 
         let file_type = unsafe { AVFileTypeMPEG4.unwrap() };
         let writer = unsafe {
@@ -224,10 +225,10 @@ impl AVFMuxer {
             input: Retained<AVAssetWriterInput>,
             label: &str,
         ) -> (
-            mpsc::Sender<UnsafeSendRetained<CMSampleBuffer>>,
+            mpsc::Sender<Mutex<UnsafeSendRetained<CMSampleBuffer>>>,
             oneshot::Receiver<Result<()>>,
         ) {
-            let (tx, rx) = mpsc::channel::<UnsafeSendRetained<CMSampleBuffer>>(100);
+            let (tx, rx) = mpsc::channel::<Mutex<UnsafeSendRetained<CMSampleBuffer>>>(100);
             let (finish_tx, finish_rx) = oneshot::channel::<Result<()>>();
 
             let rx = RefCell::new(rx);
@@ -241,7 +242,7 @@ impl AVFMuxer {
                 while unsafe { input_clone.isReadyForMoreMediaData() } {
                     match rx.borrow_mut().try_recv() {
                         Ok(sample_buffer) => {
-                            if !unsafe { input_clone.appendSampleBuffer(&sample_buffer) } {
+                            if !unsafe { input_clone.appendSampleBuffer(&sample_buffer.lock().unwrap()) } {
                                 // TODO: handle error
                                 println!(
                                     "failed to append sample buffer: {label_clone}, {}",

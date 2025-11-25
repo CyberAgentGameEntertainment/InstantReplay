@@ -21,26 +21,61 @@ namespace InstantReplay
 
         public async ValueTask PushAsync(LazyVideoFrameData value)
         {
-            var frameData = await value.ReadbackTask;
-            try
+            switch (value.Kind)
             {
-                if (!frameData.IsValid)
-                    throw new ArgumentException("Frame data is invalid", nameof(value));
+                case LazyVideoFrameData.DataKind.SharedBuffer:
+                {
+                    var frameData = await value.ReadbackTask;
+                    try
+                    {
+                        if (!frameData.IsValid)
+                            throw new ArgumentException("Frame data is invalid", nameof(value));
 
-                try
-                {
-                    await _videoEncoder.PushFrameAsync(ref frameData, (uint)value.Width, (uint)value.Height,
-                        value.Timestamp);
+                        try
+                        {
+                            await _videoEncoder.PushFrameAsync(frameData, (uint)value.Width, (uint)value.Height,
+                                value.Timestamp);
+                        }
+                        catch (ObjectDisposedException)
+                        {
+                            // ignore
+                        }
+                    }
+                    finally
+                    {
+                        // If frame data is moved out by encoder, this will be no-op
+                        frameData.Dispose();
+                    }
+
+                    break;
                 }
-                catch (ObjectDisposedException)
+                case LazyVideoFrameData.DataKind.BlitTarget:
                 {
-                    // ignore
+                    var blitTarget = await value.BlitTask;
+                    try
+                    {
+                        if (!blitTarget.IsValid)
+                            throw new ArgumentException("Frame data is invalid", nameof(value));
+
+                        try
+                        {
+                            await _videoEncoder.PushFrameAsync(blitTarget, value.Timestamp);
+                        }
+                        catch (ObjectDisposedException)
+                        {
+                            // ignore
+                        }
+                    }
+                    finally
+                    {
+                        // If frame data is moved out by encoder, this will be no-op
+                        blitTarget.Dispose();
+                    }
+
+                    break;
                 }
-            }
-            finally
-            {
-                // If frame data is moved out by encoder, this will be no-op
-                frameData.Dispose();
+                default:
+                    throw new ArgumentOutOfRangeException();
             }
         }
 

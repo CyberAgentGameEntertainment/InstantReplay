@@ -215,10 +215,8 @@ namespace InstantReplay
                                 using (buffer)
                                 {
                                     if (exception == null)
-#pragma warning disable CS0728
-                                        await _videoEncoder.PushFrameAsync(ref buffer, (uint)item.width,
+                                        await _videoEncoder.PushFrameAsync(buffer, (uint)item.width,
                                             (uint)item.height, item.timestamp).ConfigureAwait(false);
-#pragma warning restore CS0728
                                 }
                             }
                             catch (Exception ex)

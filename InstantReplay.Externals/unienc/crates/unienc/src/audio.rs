@@ -5,9 +5,7 @@ use tokio::sync::Mutex;
 use unienc_common::{AudioSample, EncoderInput, EncoderOutput};
 
 use crate::{
-    arc_from_raw, arc_from_raw_retained,
-    platform_types::{AudioEncoderInput, AudioEncoderOutput},
-    ApplyCallback, Runtime, SendPtr, UniencCallback, UniencDataCallback, UniencError,
+    ApplyCallback, Runtime, SendPtr, UniencCallback, UniencDataCallback, UniencError, UniencSampleData, arc_from_raw, arc_from_raw_retained, platform_types::{AudioEncoderInput, AudioEncoderOutput}
 };
 
 // Audio encoder input/output functions
@@ -58,11 +56,11 @@ pub unsafe extern "C" fn unienc_audio_encoder_push(
 pub unsafe extern "C" fn unienc_audio_encoder_pull(
     runtime: *mut Runtime,
     output: SendPtr<Mutex<Option<AudioEncoderOutput>>>,
-    callback: usize, /*UniencDataCallback*/
+    callback: usize, /*UniencDataCallback<UniencSampleData>*/
     user_data: SendPtr<c_void>,
 ) {
     let _guard = (*runtime).enter();
-    let callback: UniencDataCallback = std::mem::transmute(callback);
+    let callback: UniencDataCallback<UniencSampleData> = std::mem::transmute(callback);
     if output.is_null() {
         UniencError::invalid_input_error("Invalid input parameters")
             .apply_callback(callback, user_data);

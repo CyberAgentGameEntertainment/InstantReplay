@@ -1,32 +1,29 @@
-
 use unienc_common::{
-    buffer::SharedBuffer, AudioSample, CompletionHandle, EncodedData, Encoder, EncoderInput, EncoderOutput, EncodingSystem, Muxer, MuxerInput, VideoSample
+    buffer::SharedBuffer, AudioSample, CompletionHandle, EncodedData, Encoder, EncoderInput,
+    EncoderOutput, EncodingSystem, Muxer, MuxerInput, VideoFrame, VideoFrameBgra32, VideoSample,
 };
 
 use unienc::PlatformEncodingSystem;
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_e2e() {
-
-    test_e2e_typed(
-        PlatformEncodingSystem::new(
-            &unienc::VideoEncoderOptionsNative {
-                width: 1280,
-                height: 720,
-                fps_hint: 5,
-                bitrate: 1000000,
-            },
-            &unienc::AudioEncoderOptionsNative {
-                sample_rate: 48000,
-                channels: 2,
-                bitrate: 128000,
-            },
-        ))
+    test_e2e_typed(PlatformEncodingSystem::new(
+        &unienc::VideoEncoderOptionsNative {
+            width: 1280,
+            height: 720,
+            fps_hint: 5,
+            bitrate: 1000000,
+        },
+        &unienc::AudioEncoderOptionsNative {
+            sample_rate: 48000,
+            channels: 2,
+            bitrate: 128000,
+        },
+    ))
     .await;
 }
 
 async fn test_e2e_typed<T: EncodingSystem + Send>(encoding_system: T) {
-
     let video_encoder = encoding_system.new_video_encoder().unwrap();
 
     let audio_encoder = encoding_system.new_audio_encoder().unwrap();
@@ -50,9 +47,11 @@ async fn test_e2e_typed<T: EncodingSystem + Send>(encoding_system: T) {
 
             video_input
                 .push(VideoSample {
-                    buffer: SharedBuffer::new_unmanaged(data),
-                    width: 1280,
-                    height: 720,
+                    frame: VideoFrame::Bgra32(VideoFrameBgra32 {
+                        buffer: SharedBuffer::new_unmanaged(data),
+                        width: 1280,
+                        height: 720,
+                    }),
                     timestamp: (i as f64) / 10.0 + 100.0,
                 })
                 .await
@@ -94,7 +93,6 @@ async fn test_e2e_typed<T: EncodingSystem + Send>(encoding_system: T) {
                     .unwrap();
             data.set_timestamp(data.timestamp() - 100.0);
             video_input.push(data).await.unwrap();
-            
         }
         video_input.finish().await.unwrap();
     });

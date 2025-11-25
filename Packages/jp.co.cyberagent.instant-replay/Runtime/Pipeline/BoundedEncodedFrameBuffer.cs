@@ -63,7 +63,7 @@ namespace InstantReplay
 
             lock (_videoQueue)
             {
-                if (frame.Kind == DataKind.Metadata)
+                if (frame.Kind == UniencSampleKind.Metadata)
                     _videoMetadata.Add(frame);
                 else
                     _videoQueue.Enqueue(frame);
@@ -85,7 +85,7 @@ namespace InstantReplay
 
             lock (_audioQueue)
             {
-                if (frame.Kind == DataKind.Metadata)
+                if (frame.Kind == UniencSampleKind.Metadata)
                     _audioMetadata.Add(frame);
                 else
                     _audioQueue.Enqueue(frame);
@@ -140,7 +140,7 @@ namespace InstantReplay
                     var minTimespan = double.MaxValue;
                     for (var i = 0; i < unprocessedVideoFrames.Length; i++)
                     {
-                        if (unprocessedVideoFrames.Span[i].Kind != DataKind.Key) continue;
+                        if (unprocessedVideoFrames.Span[i].Kind != UniencSampleKind.Key) continue;
                         var timespan = Math.Abs(unprocessedVideoFrames.Span[i].Timestamp - expectedStartTime);
                         if (timespan >= minTimespan) continue;
                         minTimespan = timespan;
@@ -151,7 +151,7 @@ namespace InstantReplay
                 {
                     for (var i = 0; i < unprocessedVideoFrames.Length; i++)
                     {
-                        if (unprocessedVideoFrames.Span[i].Kind != DataKind.Key) continue;
+                        if (unprocessedVideoFrames.Span[i].Kind != UniencSampleKind.Key) continue;
                         argMinTimespan = i;
                         break;
                     }

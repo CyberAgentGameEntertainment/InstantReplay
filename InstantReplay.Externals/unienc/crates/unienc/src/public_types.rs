@@ -1,4 +1,4 @@
-use crate::UniencErrorNative;
+use crate::{UniencErrorNative, UniencSampleData, blit::UniencBlitTargetData};
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -18,10 +18,6 @@ pub enum UniencErrorKind {
 
 // These are unused but required to let csbindgen generate the binding for specific types.
 #[no_mangle]
-pub unsafe extern "C" fn unienc_error_kind_is_success(error: UniencErrorKind) -> bool {
-    error == UniencErrorKind::Success
-}
-#[no_mangle]
-pub unsafe extern "C" fn unienc_error_is_success(error: UniencErrorNative) -> bool {
-    error.kind == UniencErrorKind::Success
+pub unsafe extern "C" fn unienc_dummy(_error_kind: UniencErrorKind, _error_native: UniencErrorNative, _sample: UniencSampleData, _blit: UniencBlitTargetData) {
+    
 }
