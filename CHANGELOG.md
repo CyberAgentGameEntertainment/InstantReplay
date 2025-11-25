@@ -1,3 +1,10 @@
+## [1.3.0] - 2025/11/25
+
+### Added
+
+- Added readback-free encoding pipeline for iOS and macOS to reduce latency and memory usage.
+- Added `RealtimeEncodingOptions.ForceReadback` to disable readback-free encoding pipeline.
+
 ## [1.2.2] - 2025/11/17
 
 ### Fixed
