@@ -3,6 +3,7 @@
 // --------------------------------------------------------------
 
 #if UNITY_2023_1_OR_NEWER
+using System;
 using System.Threading;
 #endif
 using UnityEngine;
@@ -31,7 +32,14 @@ namespace InstantReplay
                 {
                     await Awaitable.EndOfFrameAsync(); // passing cancellation token emits too much garbage
                     if (ct.IsCancellationRequested) break;
-                    OnEndOfFrame();
+                    try
+                    {
+                        OnEndOfFrame();
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.LogException(ex);
+                    }
                 } while (true);
             }
 #else
@@ -63,6 +71,7 @@ namespace InstantReplay
                 {
                     Object.DestroyImmediate(_renderTexture);
                 }
+
                 _renderTexture = null;
             }
         }
