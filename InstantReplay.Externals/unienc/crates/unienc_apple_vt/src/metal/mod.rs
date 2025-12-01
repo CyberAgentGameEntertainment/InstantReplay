@@ -70,11 +70,8 @@ fn unity_plugin_load(interfaces: &unity_native_plugin::interface::UnityInterface
 
     graphics.register_device_event_callback(Some(on_device_event));
 
-    // we need to call it manually on iOS
-    #[cfg(target_os = "ios")]
-    {
-        on_device_event(GfxDeviceEventType::Initialize);
-    }
+    // "load on startup" is unreliable
+    on_device_event(GfxDeviceEventType::Initialize);
 }
 fn unity_plugin_unload() {}
 
@@ -90,6 +87,10 @@ extern "system" fn on_device_event(ev_type: GfxDeviceEventType) {
             let renderer = GRAPHICS.get().unwrap().lock().unwrap().renderer();
 
             if renderer == unity_native_plugin::graphics::GfxRenderer::Metal {
+                if CONTEXT.get().is_some() {
+                    // already initialized
+                    return;
+                }
                 let interfaces = unity_native_plugin::interface::UnityInterfaces::get();
                 let metal = interfaces.interface::<UnityGraphicsMetalV1>().unwrap();
                 let device = metal.metal_device().unwrap();
