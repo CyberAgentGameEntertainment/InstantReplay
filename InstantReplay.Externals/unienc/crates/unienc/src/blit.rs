@@ -27,6 +27,7 @@ pub unsafe extern "C" fn unienc_new_blit_closure(
     dst_width: u32,
     dst_height: u32,
     flip_vertically: bool,
+    is_gamma_workflow: bool,
     event_function_ptr_out: *mut *const c_void,
     event_id_out: *mut u32,
     event_data_out: *mut *mut c_void,
@@ -58,6 +59,7 @@ pub unsafe extern "C" fn unienc_new_blit_closure(
                 dst_width,
                 dst_height,
                 flip_vertically,
+                is_gamma_workflow,
             },
         )
         .map_or_else(

@@ -89,6 +89,7 @@ pub struct BlitOptions {
     pub dst_width: u32,
     pub dst_height: u32,
     pub flip_vertically: bool,
+    pub is_gamma_workflow: bool,
 }
 
 pub trait TryFromUnityNativeTexturePointer: Sized {
