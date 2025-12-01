@@ -21,30 +21,6 @@ namespace UniEnc.Native
 
 
 
-        [DllImport(__DllName, EntryPoint = "unienc_new_runtime", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
-        internal static extern Runtime* unienc_new_runtime();
-
-        [DllImport(__DllName, EntryPoint = "unienc_drop_runtime", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
-        internal static extern void unienc_drop_runtime(Runtime* runtime);
-
-        [DllImport(__DllName, EntryPoint = "unienc_new_encoding_system", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
-        internal static extern void* unienc_new_encoding_system(Runtime* runtime, VideoEncoderOptionsNative* video_options, AudioEncoderOptionsNative* audio_options);
-
-        [DllImport(__DllName, EntryPoint = "unienc_free_encoding_system", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
-        internal static extern void unienc_free_encoding_system(void* system);
-
-        [DllImport(__DllName, EntryPoint = "unienc_new_video_encoder", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
-        [return: MarshalAs(UnmanagedType.U1)]
-        internal static extern bool unienc_new_video_encoder(Runtime* runtime, void* system, Mutex** input_out, Mutex** output_out, nuint on_error, SendPtr user_data);
-
-        [DllImport(__DllName, EntryPoint = "unienc_new_audio_encoder", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
-        [return: MarshalAs(UnmanagedType.U1)]
-        internal static extern bool unienc_new_audio_encoder(Runtime* runtime, void* system, Mutex** input_out, Mutex** output_out, nuint on_error, SendPtr user_data);
-
-        [DllImport(__DllName, EntryPoint = "unienc_new_muxer", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
-        [return: MarshalAs(UnmanagedType.U1)]
-        internal static extern bool unienc_new_muxer(Runtime* runtime, void* system, byte* output_path, Mutex** video_input_out, Mutex** audio_input_out, Mutex** completion_handle_out, nuint on_error, SendPtr user_data);
-
         [DllImport(__DllName, EntryPoint = "unienc_audio_encoder_push", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
         internal static extern void unienc_audio_encoder_push(Runtime* runtime, SendPtr input, SendPtr data, nuint sample_count, ulong timestamp_in_samples, nuint callback, SendPtr user_data);
 
@@ -84,8 +60,8 @@ namespace UniEnc.Native
         [DllImport(__DllName, EntryPoint = "unienc_video_encoder_push_shared_buffer", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
         internal static extern void unienc_video_encoder_push_shared_buffer(Runtime* runtime, SendPtr input, SendPtr buffer, uint width, uint height, double timestamp, nuint callback, SendPtr user_data);
 
-        [DllImport(__DllName, EntryPoint = "unienc_video_encoder_push_blit_target", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
-        internal static extern void unienc_video_encoder_push_blit_target(Runtime* runtime, SendPtr input, UniencBlitTargetData blit_target, double timestamp, nuint callback, SendPtr user_data);
+        [DllImport(__DllName, EntryPoint = "unienc_video_encoder_push_blit_source", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        internal static extern void unienc_video_encoder_push_blit_source(Runtime* runtime, SendPtr input, void* source_native_texture_ptr, double timestamp, nuint issue_graphics_event_callback, nuint callback, SendPtr user_data);
 
         [DllImport(__DllName, EntryPoint = "unienc_video_encoder_pull", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
         internal static extern void unienc_video_encoder_pull(Runtime* runtime, SendPtr output, nuint callback, SendPtr user_data);
@@ -96,8 +72,29 @@ namespace UniEnc.Native
         [DllImport(__DllName, EntryPoint = "unienc_free_video_encoder_output", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
         internal static extern void unienc_free_video_encoder_output(SendPtr video_output);
 
-        [DllImport(__DllName, EntryPoint = "unienc_dummy", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
-        internal static extern void unienc_dummy(UniencErrorKind _error_kind, UniencErrorNative _error_native, UniencSampleData _sample, UniencBlitTargetData _blit);
+        [DllImport(__DllName, EntryPoint = "unienc_new_runtime", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        internal static extern Runtime* unienc_new_runtime();
+
+        [DllImport(__DllName, EntryPoint = "unienc_drop_runtime", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        internal static extern void unienc_drop_runtime(Runtime* runtime);
+
+        [DllImport(__DllName, EntryPoint = "unienc_new_encoding_system", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        internal static extern PlatformEncodingSystem* unienc_new_encoding_system(Runtime* runtime, VideoEncoderOptionsNative* video_options, AudioEncoderOptionsNative* audio_options);
+
+        [DllImport(__DllName, EntryPoint = "unienc_free_encoding_system", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        internal static extern void unienc_free_encoding_system(PlatformEncodingSystem* system);
+
+        [DllImport(__DllName, EntryPoint = "unienc_new_video_encoder", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        [return: MarshalAs(UnmanagedType.U1)]
+        internal static extern bool unienc_new_video_encoder(Runtime* runtime, PlatformEncodingSystem* system, Mutex** input_out, Mutex** output_out, nuint on_error, SendPtr user_data);
+
+        [DllImport(__DllName, EntryPoint = "unienc_new_audio_encoder", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        [return: MarshalAs(UnmanagedType.U1)]
+        internal static extern bool unienc_new_audio_encoder(Runtime* runtime, PlatformEncodingSystem* system, Mutex** input_out, Mutex** output_out, nuint on_error, SendPtr user_data);
+
+        [DllImport(__DllName, EntryPoint = "unienc_new_muxer", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        [return: MarshalAs(UnmanagedType.U1)]
+        internal static extern bool unienc_new_muxer(Runtime* runtime, PlatformEncodingSystem* system, byte* output_path, Mutex** video_input_out, Mutex** audio_input_out, Mutex** completion_handle_out, nuint on_error, SendPtr user_data);
 
         [DllImport(__DllName, EntryPoint = "unienc_new_shared_buffer_pool", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
         [return: MarshalAs(UnmanagedType.U1)]
@@ -115,23 +112,15 @@ namespace UniEnc.Native
 
         [DllImport(__DllName, EntryPoint = "unienc_is_blit_supported", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
         [return: MarshalAs(UnmanagedType.U1)]
-        internal static extern bool unienc_is_blit_supported(void* system);
+        internal static extern bool unienc_is_blit_supported(PlatformEncodingSystem* system);
 
-        [DllImport(__DllName, EntryPoint = "unienc_new_blit_closure", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
-        [return: MarshalAs(UnmanagedType.U1)]
-        internal static extern bool unienc_new_blit_closure(Runtime* runtime, void* system, void* source_native_texture_ptr, uint dst_width, uint dst_height, [MarshalAs(UnmanagedType.U1)] bool flip_vertically, [MarshalAs(UnmanagedType.U1)] bool is_gamma_workflow, void** event_function_ptr_out, uint* event_id_out, void** event_data_out, nuint callback, SendPtr user_data);
+        [DllImport(__DllName, EntryPoint = "unienc_free_graphics_event_context", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        internal static extern void unienc_free_graphics_event_context(void* context);
 
-        [DllImport(__DllName, EntryPoint = "unienc_free_blit_target", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
-        internal static extern void unienc_free_blit_target(UniencBlitTargetData blit_target_data);
+        [DllImport(__DllName, EntryPoint = "unienc_dummy", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        internal static extern void unienc_dummy(UniencErrorKind _error_kind, UniencErrorNative _error_native, UniencSampleData _sample);
 
 
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    internal unsafe partial struct UniencErrorNative
-    {
-        public UniencErrorKind kind;
-        public byte* message;
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -141,12 +130,6 @@ namespace UniEnc.Native
         public nuint size;
         public double timestamp;
         public UniencSampleKind kind;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    internal unsafe partial struct SendPtr
-    {
-        public T* Item1;
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -167,14 +150,16 @@ namespace UniEnc.Native
     }
 
     [StructLayout(LayoutKind.Sequential)]
-    internal unsafe partial struct Runtime
+    internal unsafe partial struct SendPtr
     {
+        public T* Item1;
     }
 
     [StructLayout(LayoutKind.Sequential)]
-    internal unsafe partial struct UniencBlitTargetData
+    internal unsafe partial struct UniencErrorNative
     {
-        public BlitTargetType* data;
+        public UniencErrorKind kind;
+        public byte* message;
     }
 
 

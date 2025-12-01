@@ -1,3 +1,7 @@
+
+#[cfg(not(any(target_vendor = "apple")))]
+compile_error!("This crate can only be compiled for Apple platforms.");
+
 use std::{ffi::c_void, future::Future, path::Path, pin::Pin};
 
 use objc2::{rc::Retained, runtime::ProtocolObject};

@@ -1,18 +1,11 @@
 use std::ffi::c_void;
 
+use crate::*;
 use anyhow::Context;
 use tokio::sync::Mutex;
 use unienc_common::{
-    buffer::SharedBuffer, EncoderInput, EncoderOutput, TryFromRaw, VideoFrame, VideoFrameBgra32,
-    VideoSample,
-};
-
-use crate::{
-    arc_from_raw, arc_from_raw_retained,
-    blit::UniencBlitTargetData,
-    platform_types::{BlitTarget, VideoEncoderInput, VideoEncoderOutput},
-    ApplyCallback, Runtime, SendPtr, UniencCallback, UniencDataCallback, UniencError,
-    UniencSampleData,
+    buffer::SharedBuffer, EncoderInput, EncoderOutput, TryFromUnityNativeTexturePointer,
+    VideoFrame, VideoFrameBgra32, VideoSample,
 };
 
 // Video encoder input/output functions
@@ -47,42 +40,56 @@ pub unsafe extern "C" fn unienc_video_encoder_push_shared_buffer(
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn unienc_video_encoder_push_blit_target(
+pub unsafe extern "C" fn unienc_video_encoder_push_blit_source(
     runtime: *mut Runtime,
     input: SendPtr<Mutex<Option<VideoEncoderInput>>>,
-    blit_target: UniencBlitTargetData,
+    source_native_texture_ptr: *mut c_void,
+    // flip_vertically: bool,
     timestamp: f64,
-    callback: usize, /*UniencCallback*/
+    issue_graphics_event_callback: usize, /* UniencIssueGraphicsEventCallback */
+    callback: usize,                      /*UniencCallback*/
     user_data: SendPtr<c_void>,
 ) {
     let callback: UniencCallback = std::mem::transmute(callback);
-    if input.is_null() || blit_target.data.is_null() {
+    if input.is_null() || source_native_texture_ptr.is_null() {
         UniencError::invalid_input_error("Invalid input parameters")
             .apply_callback(callback, user_data);
         return;
     }
+    let unienc_issue_graphics_event_callback: UniencIssueGraphicsEventCallback =
+        std::mem::transmute(issue_graphics_event_callback);
 
-    let blit_target = match <BlitTarget as TryFromRaw>::try_from_raw(blit_target.data) {
-        Ok(blit_target) => blit_target,
-        Err(_) => {
-            UniencError::invalid_input_error("Failed to convert blit target data")
-                .apply_callback(callback, user_data);
-            return;
+    // weak runtime for graphics event
+    let Some(weak) = runtime.as_ref().and_then(|r| Some(r.weak())) else {
+        UniencError::invalid_input_error("Invalid runtime pointer")
+            .apply_callback(callback, user_data);
+        return;
+    };
+
+    match BlitSource::try_from_unity_native_texture_ptr(source_native_texture_ptr) {
+        Ok(blit_source) => {
+            let sample = VideoSample {
+                frame: VideoFrame::BlitSource {
+                    source: blit_source,
+                    event_issuer: Box::new(UniencGraphicsEventIssuer::new(
+                        unienc_issue_graphics_event_callback,
+                        weak
+                    )),
+                },
+                timestamp,
+            };
+            video_encoder_push_video_sample(runtime, input, sample, callback, user_data);
         }
-    };
-
-    let sample = VideoSample {
-        frame: VideoFrame::BlitTarget(blit_target),
-        timestamp,
-    };
-
-    video_encoder_push_video_sample(runtime, input, sample, callback, user_data);
+        Err(err) => {
+            UniencError::from_anyhow(err).apply_callback(callback, user_data);
+        }
+    }
 }
 
 unsafe fn video_encoder_push_video_sample(
     runtime: *mut Runtime,
     input: SendPtr<Mutex<Option<VideoEncoderInput>>>,
-    sample: VideoSample<BlitTarget>,
+    sample: VideoSample<BlitSource>,
     callback: UniencCallback,
     user_data: SendPtr<c_void>,
 ) {
@@ -127,7 +134,7 @@ pub unsafe extern "C" fn unienc_video_encoder_pull(
 
     let output = arc_from_raw_retained(*output);
 
-    tokio::spawn(async move {
+    spawn_optimistically(async move {
         let mut output = output.lock().await;
         let result = match output
             .as_mut()

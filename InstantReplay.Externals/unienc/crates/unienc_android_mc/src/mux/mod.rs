@@ -129,7 +129,6 @@ async fn push(
                     crate::common::MediaFormatValue::Integer(height as i32),
                 );
             }
-            println!("acquiring shared state lock");
 
             let mut shared_state_lock = shared_state.write().await;
             let shared_state = &mut *shared_state_lock;
@@ -144,12 +143,10 @@ async fn push(
                     let (tx, rx) = oneshot::channel();
                     *shared_state = MuxerSharedState::Partial(tx);
                     drop(shared_state_lock);
-                    println!("waiting until other side starts");
                     rx.await??;
                 }
                 MuxerSharedState::Partial(_sender) => {
                     let mut env = attach_current_thread()?;
-                    println!("starting muxer");
                     start_muxer(&mut env, muxer)?;
                     let prev = std::mem::replace(shared_state, MuxerSharedState::Started);
                     let MuxerSharedState::Partial(sender) = prev else {

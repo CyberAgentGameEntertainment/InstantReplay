@@ -169,7 +169,7 @@ impl EncoderInput for VideoToolboxEncoderInput {
 
                 unsafe { Retained::from_raw(buffer) }.context("CVPixelBuffer is null")?
             }
-            unienc_common::VideoFrame::BlitTarget(texture) => {
+            unienc_common::VideoFrame::BlitSource(texture) => {
                 texture.pixel_buffer()
             },
         };

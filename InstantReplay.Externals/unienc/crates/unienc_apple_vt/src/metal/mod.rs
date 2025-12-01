@@ -418,20 +418,6 @@ struct SharedTextureInner {
     pixel_buffer: UnsafeSendRetained<CVPixelBuffer>,
 }
 
-impl TryFromRaw for SharedTexture {
-    unsafe fn try_from_raw(ptr: *mut Self) -> Result<Self> {
-        Ok(SharedTexture {
-            inner: Arc::from_raw(ptr as *mut Mutex<SharedTextureInner>),
-        })
-    }
-}
-
-impl IntoRaw for SharedTexture {
-    fn into_raw(self) -> *mut Self {
-        Arc::into_raw(self.inner) as *mut Self
-    }
-}
-
 impl SharedTexture {
     pub fn new(cache: &CVMetalTextureCache, width: usize, height: usize, srgb: bool) -> Result<Self> {
         let pixel_format = kCVPixelFormatType_32BGRA;

@@ -6,7 +6,6 @@ using System;
 using System.Collections.Concurrent;
 using System.Runtime.InteropServices;
 using AOT;
-using UniEnc.Internal;
 using UniEnc.Native;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;

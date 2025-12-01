@@ -220,6 +220,116 @@ impl MediaCodec {
         let format_obj = format.l()?;
         format_to_map(env, &format_obj)
     }
+
+    pub fn create_input_surface(&self) -> Result<SafeGlobalRef> {
+        let env = &mut attach_current_thread()?;
+        let surface = call_object_method(
+            env,
+            self.inner.codec.as_obj(),
+            "createInputSurface",
+            "()Landroid/view/Surface;",
+            &[],
+        )?;
+        SafeGlobalRef::new(env, surface)
+    }
+
+    pub fn signal_end_of_input_stream(&self) -> Result<()> {
+        let env = &attach_current_thread()?;
+        call_void_method(
+            env,
+            self.inner.codec.as_obj(),
+            "signalEndOfInputStream",
+            "()V",
+            &[],
+        )
+    }
+
+    pub fn print_codec_info(&self) -> Result<()> {
+        let env = &mut attach_current_thread()?;
+        let codec_info = call_object_method(
+            env,
+            self.inner.codec.as_obj(),
+            "getCodecInfo",
+            "()Landroid/media/MediaCodecInfo;",
+            &[],
+        )?;
+
+        // getCanonicalName
+        let canonical_name = env.call_method(
+            &codec_info,
+            "getCanonicalName",
+            "()Ljava/lang/String;",
+            &[],
+        )?.l()?;
+        let canonical_name_str = JString::from(canonical_name);
+        let canonical_name_rust = env.get_string(&canonical_name_str)?.to_str()?.to_string();
+
+        // isHardwareAccelerated
+        let is_hardware_accelerated = env.call_method(
+            codec_info,
+            "isHardwareAccelerated",
+            "()Z",
+            &[],
+        )?.z()?;
+
+        println!("MediaCodec Info: Canonical Name: {}, Hardware Accelerated: {}", canonical_name_rust, is_hardware_accelerated);
+
+        Ok(())
+    }
+
+    pub fn print_metrics(&self) -> Result<()> {
+        let env = &mut attach_current_thread()?;
+        let metrics = call_object_method(
+            env,
+            self.inner.codec.as_obj(),
+            "getMetrics",
+            "()Landroid/os/PersistableBundle;",
+            &[],
+        )?;
+
+        // Get the key set
+        let key_set = env.call_method(
+            &metrics,
+            "keySet",
+            "()Ljava/util/Set;",
+            &[],
+        )?.l()?;
+
+        let iterator = env.call_method(
+            &key_set,
+            "iterator",
+            "()Ljava/util/Iterator;",
+            &[],
+        )?.l()?;
+
+        println!("MediaCodec Metrics:");
+        while env.call_method(&iterator, "hasNext", "()Z", &[])?.z()? {
+            let key = env.call_method(&iterator, "next", "()Ljava/lang/Object;", &[])?.l()?;
+            let key_str = JString::from(key);
+            let key_rust = env.get_string(&key_str)?.to_str()?.to_string();
+
+            let value = env.call_method(
+                &metrics,
+                "get",
+                "(Ljava/lang/String;)Ljava/lang/Object;",
+                &[JValue::Object(&key_str)],
+            )?.l()?;
+
+            let value_str = env.call_method(
+                &value,
+                "toString",
+                "()Ljava/lang/String;",
+                &[],
+            )?.l()?;
+            let value_jstr = JString::from(value_str);
+            let value_rust = env.get_string(&value_jstr)?.to_str()?.to_string();
+
+            println!("  {}: {}", key_rust, value_rust);
+        }
+
+        Ok(())
+
+    }
 }
 
 impl Drop for MediaCodecInner {
@@ -630,7 +740,7 @@ pub(crate) async fn pull_encoded_data_with_codec(
             }
         }
         if sleep {
-            tokio::time::sleep(Duration::from_millis(10)).await;
+            tokio::task::yield_now().await;
         }
     }
 }
