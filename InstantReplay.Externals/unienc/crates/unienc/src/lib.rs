@@ -1,15 +1,16 @@
-use std::ffi::{c_char, c_void, CStr, CString};
+use std::ffi::{c_char, CStr, CString};
 use std::ops::Deref;
+use std::os::raw::c_void;
 use std::path::Path;
 use std::sync::{Arc, Weak};
 
 use anyhow::{Context, Result};
 use tokio::runtime::EnterGuard;
 use tokio::sync::Mutex;
+use unity_native_plugin::graphics::RenderingEventAndData;
 use unienc_common::{EncodedData, Encoder, EncodingSystem, Muxer, UniencSampleKind};
 
 mod audio;
-mod blit;
 mod buffer;
 mod mux;
 mod public_types;
@@ -17,6 +18,7 @@ mod video;
 
 #[cfg(target_os = "android")]
 mod android;
+mod graphics;
 
 pub use public_types::*;
 
@@ -178,6 +180,8 @@ impl UniencError {
 pub type UniencCallback = unsafe extern "C" fn(user_data: *mut c_void, error: UniencErrorNative);
 pub type UniencDataCallback<Data> =
     unsafe extern "C" fn(data: Data, user_data: *mut c_void, error: UniencErrorNative);
+pub type UniencIssueGraphicsEventCallback =
+    unsafe extern "C" fn(func: RenderingEventAndData, event_id: i32, user_data: *mut c_void);
 
 #[repr(C)]
 pub struct UniencSampleData {
@@ -283,22 +287,29 @@ impl unienc_common::AudioEncoderOptions for AudioEncoderOptionsNative {
     }
 }
 
+pub struct UniencGraphicsEventIssuer {
+    func: UniencIssueGraphicsEventCallback,
+}
+
 #[cfg(target_vendor = "apple")]
 pub type PlatformEncodingSystem = unienc_apple_vt::VideoToolboxEncodingSystem<
     VideoEncoderOptionsNative,
     AudioEncoderOptionsNative,
+    UniencGraphicsEventIssuer,
 >;
 
 #[cfg(target_os = "android")]
 pub type PlatformEncodingSystem = unienc_android_mc::MediaCodecEncodingSystem<
     VideoEncoderOptionsNative,
     AudioEncoderOptionsNative,
+    UniencGraphicsEventIssuer,
 >;
 
 #[cfg(windows)]
 pub type PlatformEncodingSystem = unienc_windows_mf::MediaFoundationEncodingSystem<
     VideoEncoderOptionsNative,
     AudioEncoderOptionsNative,
+    UniencGraphicsEventIssuer,
 >;
 
 #[cfg(all(
@@ -306,7 +317,7 @@ pub type PlatformEncodingSystem = unienc_windows_mf::MediaFoundationEncodingSyst
     not(any(target_vendor = "apple", target_os = "android", windows))
 ))]
 pub type PlatformEncodingSystem =
-    unienc_ffmpeg::FFmpegEncodingSystem<VideoEncoderOptionsNative, AudioEncoderOptionsNative>;
+    unienc_ffmpeg::FFmpegEncodingSystem<VideoEncoderOptionsNative, AudioEncoderOptionsNative, UniencGraphicsEventIssuer>;
 
 #[cfg(not(any(target_vendor = "apple", target_os = "android", windows, unix)))]
 pub type PlatformEncodingSystem = ();
@@ -332,8 +343,7 @@ mod platform_types {
 
     pub type VideoEncodedData = <VideoEncoderOutput as EncoderOutput>::Data;
     pub type AudioEncodedData = <AudioEncoderOutput as EncoderOutput>::Data;
-
-    pub type BlitTarget = <crate::PlatformEncodingSystem as unienc_common::EncodingSystem>::BlitTargetType;
+    pub type BlitSource = <crate::PlatformEncodingSystem as unienc_common::EncodingSystem>::BlitSourceType;
 }
 
 use platform_types::*;
@@ -408,6 +418,7 @@ pub unsafe extern "C" fn unienc_new_video_encoder(
     system: *const PlatformEncodingSystem,
     input_out: *mut *const Mutex<Option<VideoEncoderInput>>,
     output_out: *mut *const Mutex<Option<VideoEncoderOutput>>,
+    unienc_issue_graphics_event_callback: UniencIssueGraphicsEventCallback,
     on_error: usize, /*UniencCallback*/
     user_data: SendPtr<c_void>,
 ) -> bool {
@@ -421,7 +432,7 @@ pub unsafe extern "C" fn unienc_new_video_encoder(
     }
 
     unsafe {
-        match (&*system).new_video_encoder() {
+        match (&*system).new_video_encoder(UniencGraphicsEventIssuer {func: unienc_issue_graphics_event_callback}) {
             Ok(encoder) => match encoder.get().context("Failed to get encoded video sample") {
                 Ok((input, output)) => {
                     *input_out = Arc::into_raw(Arc::new(Mutex::new(Some(input))));

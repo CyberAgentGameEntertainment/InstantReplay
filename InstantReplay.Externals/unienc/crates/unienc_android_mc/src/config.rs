@@ -29,6 +29,7 @@ pub mod format_keys {
     pub const KEY_AAC_PROFILE: &str = "aac-profile";
 }
 
+pub const COLOR_FORMAT_SURFACAE: jint = 0x7F000789;
 pub const COLOR_FORMAT_YUV420_FLEXIBLE: jint = 0x7F420888;
 pub const AAC_OBJECT_TYPE_AAC_LC: jint = 2;
 

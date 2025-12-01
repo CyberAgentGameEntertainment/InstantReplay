@@ -220,6 +220,29 @@ impl MediaCodec {
         let format_obj = format.l()?;
         format_to_map(env, &format_obj)
     }
+
+    pub fn create_input_surface(&self) -> Result<SafeGlobalRef> {
+        let env = &mut attach_current_thread()?;
+        let surface = call_object_method(
+            env,
+            self.inner.codec.as_obj(),
+            "createInputSurface",
+            "()Landroid/view/Surface;",
+            &[],
+        )?;
+        SafeGlobalRef::new(env, surface)
+    }
+
+    pub fn signal_end_of_input_stream(&self) -> Result<()> {
+        let env = &attach_current_thread()?;
+        call_void_method(
+            env,
+            self.inner.codec.as_obj(),
+            "signalEndOfInputStream",
+            "()V",
+            &[],
+        )
+    }
 }
 
 impl Drop for MediaCodecInner {
