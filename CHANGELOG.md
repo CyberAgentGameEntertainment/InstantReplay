@@ -1,3 +1,10 @@
+## [1.3.1] - 2025/12/02
+
+### Fixed
+
+- Fixed no frames are recorded when "load on startup" option for `libunienc.dylib` is ignored accidentally on macOS Editor.
+- Fixed recorded video becomes brighter or darker than the original with gamma workflow.
+
 ## [1.3.0] - 2025/11/25
 
 ### Added
