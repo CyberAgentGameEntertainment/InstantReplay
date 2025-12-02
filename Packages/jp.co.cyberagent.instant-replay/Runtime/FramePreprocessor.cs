@@ -88,7 +88,14 @@ namespace InstantReplay
 
             if (Output == null)
             {
-                Output = new RenderTexture(width, height, 0, GraphicsFormat.R8G8B8A8_SRGB);
+                var format = QualitySettings.activeColorSpace switch
+                {
+                    ColorSpace.Gamma => GraphicsFormat.R8G8B8A8_UNorm,
+                    ColorSpace.Linear => GraphicsFormat.R8G8B8A8_SRGB,
+                    _ => throw new ArgumentOutOfRangeException()
+                };
+
+                Output = new RenderTexture(width, height, 0, format);
                 Output.name = "InstantReplay Preprocessing"; // for profiling
                 Output.filterMode = FilterMode.Bilinear;
                 Output.wrapMode = TextureWrapMode.Clamp;

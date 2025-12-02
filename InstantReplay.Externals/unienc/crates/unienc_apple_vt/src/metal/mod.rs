@@ -8,10 +8,7 @@ use std::{
 use block2::RcBlock;
 use objc2::{rc::Retained, runtime::ProtocolObject};
 use objc2_core_foundation::{kCFAllocatorDefault, kCFBooleanTrue, CFDictionary};
-use objc2_core_video::{
-    kCVPixelBufferMetalCompatibilityKey, kCVPixelFormatType_32BGRA, CVMetalTexture,
-    CVMetalTextureCache, CVMetalTextureGetTexture, CVPixelBuffer, CVPixelBufferCreate,
-};
+use objc2_core_video::{kCVPixelBufferMetalCompatibilityKey, kCVPixelBufferPixelFormatTypeKey, kCVPixelFormatType_32BGRA, CVMetalTexture, CVMetalTextureCache, CVMetalTextureGetTexture, CVPixelBuffer, CVPixelBufferCreate};
 use objc2_foundation::NSString;
 use objc2_metal::{
     MTLBuffer, MTLCommandBuffer, MTLCommandEncoder, MTLCullMode, MTLDevice, MTLIndexType,
@@ -44,6 +41,7 @@ struct GlobalContext {
     metal: UnityGraphicsMetalV1,
     device: Retained<ProtocolObject<dyn MTLDevice>>,
     pipeline_state: Retained<ProtocolObject<dyn MTLRenderPipelineState>>,
+    pipeline_state_srgb: Retained<ProtocolObject<dyn MTLRenderPipelineState>>,
     vertices: UnsafeSendRetained<ProtocolObject<dyn MTLBuffer>>,
     indices: UnsafeSendRetained<ProtocolObject<dyn MTLBuffer>>,
 }
@@ -200,7 +198,10 @@ fragment FShaderOutput fragment_main(VertexOut in [[stage_in]],
                 };
 
                 let color_desc = MTLRenderPipelineColorAttachmentDescriptor::new();
-                color_desc.setPixelFormat(MTLPixelFormat::BGRA8Unorm_sRGB);
+                color_desc.setPixelFormat(MTLPixelFormat::BGRA8Unorm);
+
+                let color_desc_srgb = MTLRenderPipelineColorAttachmentDescriptor::new();
+                color_desc_srgb.setPixelFormat(MTLPixelFormat::BGRA8Unorm_sRGB);
 
                 let pipeline_state_desc = MTLRenderPipelineDescriptor::new();
                 pipeline_state_desc.setLabel(Some(&NSString::from_str("unienc blit")));
@@ -225,11 +226,22 @@ fragment FShaderOutput fragment_main(VertexOut in [[stage_in]],
                     .newRenderPipelineStateWithDescriptor_error(&pipeline_state_desc)
                     .unwrap();
 
+                unsafe {
+                    pipeline_state_desc
+                        .colorAttachments()
+                        .setObject_atIndexedSubscript(Some(&color_desc_srgb), 0)
+                };
+
+                let pipeline_state_srgb = device
+                    .newRenderPipelineStateWithDescriptor_error(&pipeline_state_desc)
+                    .unwrap();
+
                 CONTEXT
                     .set(Mutex::new(GlobalContext {
                         metal,
                         device,
                         pipeline_state,
+                        pipeline_state_srgb,
                         vertices: vertices.into(),
                         indices: indices.into(),
                     }))
@@ -274,7 +286,7 @@ pub(crate) fn custom_blit(
     let width = options.dst_width;
     let height = options.dst_height;
 
-    let shared_texture = SharedTexture::new(&cache, width as usize, height as usize)?;
+    let shared_texture = SharedTexture::new(&cache, width as usize, height as usize, !options.is_gamma_workflow)?; // with gamma workflow, input is unorm with gamma color space
 
     let command_buffer = metal
         .current_command_buffer()
@@ -297,9 +309,6 @@ pub(crate) fn custom_blit(
         .renderCommandEncoderWithDescriptor(&render_pass_descriptor)
         .context("Failed to create render command encoder")?;
 
-    let color_desc = MTLRenderPipelineColorAttachmentDescriptor::new();
-    color_desc.setPixelFormat(MTLPixelFormat::BGRA8Unorm);
-
     let sampler_desc = MTLSamplerDescriptor::new();
     sampler_desc.setSAddressMode(MTLSamplerAddressMode::ClampToEdge);
     sampler_desc.setTAddressMode(MTLSamplerAddressMode::ClampToEdge);
@@ -311,7 +320,12 @@ pub(crate) fn custom_blit(
         .newSamplerStateWithDescriptor(&sampler_desc)
         .context("Failed to create sampler state")?;
 
-    encoder.setRenderPipelineState(&context.pipeline_state);
+    if options.is_gamma_workflow {
+        encoder.setRenderPipelineState(&context.pipeline_state);
+    } else {
+        encoder.setRenderPipelineState(&context.pipeline_state_srgb);
+    }
+
     encoder.setCullMode(MTLCullMode::None);
 
     // vertex
@@ -419,7 +433,7 @@ impl IntoRaw for SharedTexture {
 }
 
 impl SharedTexture {
-    pub fn new(cache: &CVMetalTextureCache, width: usize, height: usize) -> Result<Self> {
+    pub fn new(cache: &CVMetalTextureCache, width: usize, height: usize, srgb: bool) -> Result<Self> {
         let pixel_format = kCVPixelFormatType_32BGRA;
 
         let pixel_buffer_attrs = unsafe {
@@ -451,7 +465,7 @@ impl SharedTexture {
                 cache,
                 &buffer,
                 None,
-                MTLPixelFormat::BGRA8Unorm_sRGB,
+                if srgb { MTLPixelFormat::BGRA8Unorm_sRGB } else { MTLPixelFormat::BGRA8Unorm },
                 width,
                 height,
                 0,

@@ -45,6 +45,7 @@ namespace UniEnc
                         destWidth,
                         destHeight,
                         flipVertically,
+                        QualitySettings.activeColorSpace == ColorSpace.Gamma,
                         &eventFuncPtr,
                         &eventId,
                         &eventDataPtr,

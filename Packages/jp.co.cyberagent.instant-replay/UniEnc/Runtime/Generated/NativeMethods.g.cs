@@ -119,7 +119,7 @@ namespace UniEnc.Native
 
         [DllImport(__DllName, EntryPoint = "unienc_new_blit_closure", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
         [return: MarshalAs(UnmanagedType.U1)]
-        internal static extern bool unienc_new_blit_closure(Runtime* runtime, void* system, void* source_native_texture_ptr, uint dst_width, uint dst_height, [MarshalAs(UnmanagedType.U1)] bool flip_vertically, void** event_function_ptr_out, uint* event_id_out, void** event_data_out, nuint callback, SendPtr user_data);
+        internal static extern bool unienc_new_blit_closure(Runtime* runtime, void* system, void* source_native_texture_ptr, uint dst_width, uint dst_height, [MarshalAs(UnmanagedType.U1)] bool flip_vertically, [MarshalAs(UnmanagedType.U1)] bool is_gamma_workflow, void** event_function_ptr_out, uint* event_id_out, void** event_data_out, nuint callback, SendPtr user_data);
 
         [DllImport(__DllName, EntryPoint = "unienc_free_blit_target", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
         internal static extern void unienc_free_blit_target(UniencBlitTargetData blit_target_data);
