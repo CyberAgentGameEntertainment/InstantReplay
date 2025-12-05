@@ -2,12 +2,10 @@ use std::ffi::c_void;
 use std::fmt::Debug;
 use std::future::Future;
 use std::path::Path;
-use std::pin::Pin;
-
-use anyhow::Result;
-use bincode::{Decode, Encode};
 
 use crate::buffer::SharedBuffer;
+use anyhow::Result;
+use bincode::{Decode, Encode};
 
 pub mod buffer;
 
@@ -45,7 +43,7 @@ pub trait EncodingSystem {
     type VideoEncoderOptionsType: VideoEncoderOptions;
     type AudioEncoderOptionsType: AudioEncoderOptions;
     type VideoEncoderType: Encoder<
-        InputType: EncoderInput<Data = VideoSample<Self::BlitTargetType>>,
+        InputType: EncoderInput<Data = VideoSample<Self::BlitSourceType>>,
     >;
     type AudioEncoderType: Encoder<InputType: EncoderInput<Data = AudioSample>>;
     type MuxerType: Muxer<
@@ -57,32 +55,25 @@ pub trait EncodingSystem {
         >,
     >;
     type BlitSourceType: TryFromUnityNativeTexturePointer + Send;
-    type BlitTargetType: TryFromRaw + IntoRaw + Send;
+    type GraphicsEventIssuerType: GraphicsEventIssuer;
 
     fn new(
         video_options: &Self::VideoEncoderOptionsType,
         audio_options: &Self::AudioEncoderOptionsType,
     ) -> Self;
-    fn new_video_encoder(&self) -> Result<Self::VideoEncoderType>;
+    fn new_video_encoder(&self, issuer: Self::GraphicsEventIssuerType) -> Result<Self::VideoEncoderType>;
     fn new_audio_encoder(&self) -> Result<Self::AudioEncoderType>;
     fn new_muxer(&self, output_path: &Path) -> Result<Self::MuxerType>;
 
     fn is_blit_supported(&self) -> bool {
         false
     }
-
-    fn new_blit_closure(
-        &self,
-        _source: Self::BlitSourceType,
-        _options: BlitOptions,
-    ) -> Result<
-        Box<dyn FnOnce() -> Pin<Box<dyn Future<Output = Result<Self::BlitTargetType>> + Send>> + Send>,
-    > {
-        Err(anyhow::anyhow!(
-            "Blit not supported in FFmpeg encoding system"
-        ))
-    }
 }
+
+pub trait GraphicsEventIssuer: Send + 'static {
+    fn issue_graphics_event(&self, callback: impl FnOnce() + Send, event_id: i32);
+}
+
 
 #[derive(Clone, Copy)]
 pub struct BlitOptions {
@@ -96,14 +87,6 @@ pub trait TryFromUnityNativeTexturePointer: Sized {
     fn try_from_unity_native_texture_ptr(ptr: *mut c_void) -> Result<Self>;
 }
 
-pub trait TryFromRaw: Sized {
-    unsafe fn try_from_raw(ptr: *mut Self) -> Result<Self>;
-}
-
-pub trait IntoRaw {
-    fn into_raw(self) -> *mut Self;
-}
-
 pub struct UnsupportedBlitData;
 
 impl TryFromUnityNativeTexturePointer for UnsupportedBlitData {
@@ -111,19 +94,6 @@ impl TryFromUnityNativeTexturePointer for UnsupportedBlitData {
         Err(anyhow::anyhow!(
             "Blit not supported in this encoding system"
         ))
-    }
-}
-impl TryFromRaw for UnsupportedBlitData {
-    unsafe fn try_from_raw(_ptr: *mut Self) -> Result<Self> {
-        Err(anyhow::anyhow!(
-            "Blit not supported in this encoding system"
-        ))
-    }
-}
-
-impl IntoRaw for UnsupportedBlitData {
-    fn into_raw(self) -> *mut Self {
-        std::ptr::null_mut()
     }
 }
 
@@ -141,14 +111,14 @@ pub trait AudioEncoderOptions: Clone + Copy {
 }
 
 // #[derive(Clone)]
-pub struct VideoSample<BlitTargetType> {
-    pub frame: VideoFrame<BlitTargetType>,
+pub struct VideoSample<BlitSourceType> {
+    pub frame: VideoFrame<BlitSourceType>,
     pub timestamp: f64,
 }
 
-pub enum VideoFrame<BlitTargetType> {
+pub enum VideoFrame<BlitSourceType> {
     Bgra32(VideoFrameBgra32),
-    BlitTarget(BlitTargetType),
+    BlitSource(BlitSourceType),
 }
 
 pub struct VideoFrameBgra32 {

@@ -33,7 +33,7 @@ impl SafeGlobalRef {
         })
     }
 
-    pub fn as_obj(&self) -> &JObject {
+    pub fn as_obj(&self) -> &JObject<'_> {
         self.inner.as_obj()
     }
 }

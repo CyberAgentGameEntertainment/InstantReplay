@@ -1,3 +1,7 @@
+
+#[cfg(not(any(target_os = "windows")))]
+compile_error!("This crate can only be compiled for Windows platforms.");
+
 use anyhow::Result;
 use std::{future::Future, path::Path};
 use unienc_common::{BlitOptions, EncodingSystem, UnsupportedBlitData};

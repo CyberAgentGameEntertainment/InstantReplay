@@ -7,3 +7,4 @@ edition.workspace = true
 anyhow = { workspace = true }
 bincode = { workspace = true }
 tokio = { version = "1.45.1", features = ["sync"] }
+unity-native-plugin = "0.8.0"

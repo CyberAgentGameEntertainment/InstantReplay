@@ -12,3 +12,6 @@ bincode = { workspace = true }
 ndk-sys = { version = "0.6.0", features = ["media"] }
 bitflags = "2.9.1"
 libc = "0.2.174"
+ash = "0.38.0"
+unity-native-plugin = "0.8.0"
+unity-native-plugin-vulkan = "0.8.0"
