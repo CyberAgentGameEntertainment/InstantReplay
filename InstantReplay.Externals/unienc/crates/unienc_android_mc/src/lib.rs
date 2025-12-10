@@ -67,6 +67,10 @@ impl<V: unienc_common::VideoEncoderOptions, A: unienc_common::AudioEncoderOption
         let s = vulkan::is_initialized();
         s
     }
+    fn unity_plugin_load(interfaces: &unity_native_plugin::interface::UnityInterfaces) {
+        vulkan::unity_plugin_load(interfaces);
+    }
+    fn unity_plugin_unload() {}
 }
 
 pub struct VulkanTexture {

@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using AOT;
 using UniEnc.Native;
 using UnityEngine;
+using UnityEngine.Experimental.Rendering;
 using UnityEngine.Rendering;
 using Object = UnityEngine.Object;
 
@@ -78,12 +79,14 @@ namespace UniEnc
             }
         }
 
-        public ValueTask PushFrameAsync(Texture source, double timestamp)
+        public ValueTask PushFrameAsync(Texture source, bool isGammaWorkflow, double timestamp)
         {
-            return PushFrameAsync(source.GetNativeTexturePtr(), timestamp);
+            return PushFrameAsync(source.GetNativeTexturePtr(), (uint)source.width, (uint)source.height,
+                source.graphicsFormat, isGammaWorkflow, timestamp);
         }
 
-        public ValueTask PushFrameAsync(nint sourceTexturePtr, double timestamp)
+        public ValueTask PushFrameAsync(nint sourceTexturePtr, uint width, uint height, GraphicsFormat format,
+            bool isGammaWorkflow, double timestamp)
         {
             lock (_lock)
             {
@@ -103,6 +106,11 @@ namespace UniEnc
                             runtime.Runtime,
                             _inputHandle.DangerousGetHandle(),
                             (void*)sourceTexturePtr,
+                            width,
+                            height,
+                            (uint)format,
+                            false,
+                            isGammaWorkflow,
                             timestamp,
                             (nuint)OnIssueGraphicsEventPtr,
                             CallbackHelper.GetSimpleCallbackPtr(),
@@ -206,7 +214,7 @@ namespace UniEnc
                 return true;
             }
         }
-        
+
         private static Action<nint, int, nint> _onIssueGraphicsEvent;
         private static nint? _onIssueGraphicsEventPtr;
 
@@ -227,7 +235,6 @@ namespace UniEnc
                     {
                         var (eventFuncPtr, eventId, context) = ((nint, int, nint))ctx;
                         OnIssueGraphicsEvent(eventFuncPtr, eventId, context);
-
                     }, (eventFuncPtr, eventId, context));
                 }
                 else

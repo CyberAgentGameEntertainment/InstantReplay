@@ -7,6 +7,7 @@ mod types;
 mod api;
 mod ffi;
 mod platform;
+mod unity;
 
 pub(crate) use crate::ffi::*;
 pub(crate) use crate::platform::*;

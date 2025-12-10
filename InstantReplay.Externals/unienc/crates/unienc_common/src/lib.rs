@@ -67,14 +67,10 @@ pub trait EncodingSystem {
     fn is_blit_supported(&self) -> bool {
         false
     }
-}
 
-#[derive(Clone, Copy)]
-pub struct BlitOptions {
-    pub dst_width: u32,
-    pub dst_height: u32,
-    pub flip_vertically: bool,
-    pub is_gamma_workflow: bool,
+    #[allow(unused_variables)]
+    fn unity_plugin_load(interfaces: &unity_native_plugin::interface::UnityInterfaces) {}
+    fn unity_plugin_unload() {}
 }
 
 pub trait TryFromUnityNativeTexturePointer: Sized {
@@ -114,6 +110,11 @@ pub enum VideoFrame<BlitSourceType> {
     Bgra32(VideoFrameBgra32),
     BlitSource{
         source: BlitSourceType,
+        width: u32,
+        height: u32,
+        graphics_format: u32,
+        flip_vertically: bool,
+        is_gamma_workflow: bool,
         event_issuer: Box<dyn GraphicsEventIssuer + Send>,
     },
 }

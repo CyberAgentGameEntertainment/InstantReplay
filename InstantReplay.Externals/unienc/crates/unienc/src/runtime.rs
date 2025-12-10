@@ -1,7 +1,6 @@
-use std::cell::RefCell;
+use anyhow::Result;
 use std::sync::{Arc, Weak};
 use tokio::runtime::EnterGuard;
-use anyhow::Result;
 
 pub struct Runtime {
     tokio_runtime: Arc<tokio::runtime::Runtime>,

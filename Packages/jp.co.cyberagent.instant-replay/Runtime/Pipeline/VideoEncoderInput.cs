@@ -56,7 +56,8 @@ namespace InstantReplay
 
                     try
                     {
-                        await _videoEncoder.PushFrameAsync(value.NativeBlitSourceHandle, value.Timestamp);
+                        await _videoEncoder.PushFrameAsync(value.NativeBlitSourceHandle, (uint)value.Width,
+                            (uint)value.Height, value.BlitSourceFormat, value.IsGammaWorkflow, value.Timestamp);
                     }
                     catch (ObjectDisposedException)
                     {

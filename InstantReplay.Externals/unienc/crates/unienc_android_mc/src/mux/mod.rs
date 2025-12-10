@@ -4,8 +4,8 @@ use std::{path::Path, sync::Arc};
 use tokio::sync::{oneshot, RwLock};
 use unienc_common::{CompletionHandle, Muxer, MuxerInput};
 
-use crate::config::{MUXER_OUTPUT_FORMAT_MPEG_4};
-use crate::{common::*};
+use crate::common::*;
+use crate::config::MUXER_OUTPUT_FORMAT_MPEG_4;
 
 use crate::java::*;
 
@@ -18,7 +18,7 @@ pub struct MediaMuxer {
 enum MuxerSharedState {
     None,
     Partial(oneshot::Sender<Result<()>>), // either video or audio has started (sender is used to signal the other side to start)
-    Started, // both video and audio have started
+    Started,                              // both video and audio have started
 }
 
 pub struct MediaMuxerVideoInput {
@@ -171,7 +171,7 @@ async fn push(
             // println!("writing sample data: is_video: {}, flags({}): {:?}, length: {}, timestamp: {}", is_video, track_index, flags, data.len(), timestamp_us);
 
             write_sample_data(env, muxer, *track_index, &data, timestamp_us, flags)?;
-        },
+        }
     }
     Ok(())
 }

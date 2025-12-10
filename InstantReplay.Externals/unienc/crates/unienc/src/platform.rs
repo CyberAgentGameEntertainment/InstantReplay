@@ -5,7 +5,6 @@ use crate::*;
 pub type PlatformEncodingSystem = unienc_apple_vt::VideoToolboxEncodingSystem<
     VideoEncoderOptionsNative,
     AudioEncoderOptionsNative,
-    UniencGraphicsEventIssuer,
 >;
 
 #[cfg(target_os = "android")]
@@ -18,7 +17,6 @@ pub type PlatformEncodingSystem = unienc_android_mc::MediaCodecEncodingSystem<
 pub type PlatformEncodingSystem = unienc_windows_mf::MediaFoundationEncodingSystem<
     VideoEncoderOptionsNative,
     AudioEncoderOptionsNative,
-    UniencGraphicsEventIssuer,
 >;
 
 #[cfg(all(
@@ -26,7 +24,7 @@ pub type PlatformEncodingSystem = unienc_windows_mf::MediaFoundationEncodingSyst
     not(any(target_vendor = "apple", target_os = "android", windows))
 ))]
 pub type PlatformEncodingSystem =
-unienc_ffmpeg::FFmpegEncodingSystem<VideoEncoderOptionsNative, AudioEncoderOptionsNative, UniencGraphicsEventIssuer>;
+unienc_ffmpeg::FFmpegEncodingSystem<VideoEncoderOptionsNative, AudioEncoderOptionsNative>;
 
 #[cfg(not(any(target_vendor = "apple", target_os = "android", windows, unix)))]
 pub type PlatformEncodingSystem = ();

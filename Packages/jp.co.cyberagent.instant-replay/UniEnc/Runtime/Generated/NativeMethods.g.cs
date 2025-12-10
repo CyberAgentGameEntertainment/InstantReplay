@@ -61,7 +61,7 @@ namespace UniEnc.Native
         internal static extern void unienc_video_encoder_push_shared_buffer(Runtime* runtime, SendPtr input, SendPtr buffer, uint width, uint height, double timestamp, nuint callback, SendPtr user_data);
 
         [DllImport(__DllName, EntryPoint = "unienc_video_encoder_push_blit_source", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
-        internal static extern void unienc_video_encoder_push_blit_source(Runtime* runtime, SendPtr input, void* source_native_texture_ptr, double timestamp, nuint issue_graphics_event_callback, nuint callback, SendPtr user_data);
+        internal static extern void unienc_video_encoder_push_blit_source(Runtime* runtime, SendPtr input, void* source_native_texture_ptr, uint width, uint height, uint graphics_format, [MarshalAs(UnmanagedType.U1)] bool flip_vertically, [MarshalAs(UnmanagedType.U1)] bool is_gamma_workflow, double timestamp, nuint issue_graphics_event_callback, nuint callback, SendPtr user_data);
 
         [DllImport(__DllName, EntryPoint = "unienc_video_encoder_pull", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
         internal static extern void unienc_video_encoder_pull(Runtime* runtime, SendPtr output, nuint callback, SendPtr user_data);

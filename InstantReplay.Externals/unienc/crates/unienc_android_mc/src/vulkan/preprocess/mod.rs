@@ -1,13 +1,17 @@
-use crate::vulkan::presentation::{VulkanSurface, VulkanSwapchainTaget};
-use crate::vulkan::types::{VulkanCommandBuffer, VulkanCommandPoolHandle, VulkanDescriptorPoolHandle, VulkanDescriptorSet, VulkanDescriptorSetLayoutHandle, VulkanImageViewHandle, VulkanPipelineHandle, VulkanPipelineLayoutHandle, VulkanRenderPassHandle, VulkanSamplerHandle, VulkanShaderModuleHandle};
-use crate::vulkan::utils::{create_shader_module, FenceGuard, SemaphoreGuard};
+use crate::vulkan::format::GRAPHICS_FORMAT_TO_VULKAN;
+use crate::vulkan::hardware_buffer_surface::HardwareBufferFrame;
+use crate::vulkan::types::{
+    VulkanCommandBuffer, VulkanCommandPoolHandle, VulkanDescriptorPoolHandle, VulkanDescriptorSet,
+    VulkanDescriptorSetLayoutHandle, VulkanImageViewHandle, VulkanPipelineHandle,
+    VulkanPipelineLayoutHandle, VulkanRenderPassHandle, VulkanSamplerHandle,
+    VulkanShaderModuleHandle,
+};
+use crate::vulkan::utils::{create_shader_module, FenceGuard};
 use crate::vulkan::{GlobalContext, ProfilerMarkerDescExt, MARKERS};
 use anyhow::{anyhow, Context, Result};
 use ash::vk;
-use std::ffi::c_str;
 use std::future::Future;
 use std::sync::{Arc, Mutex};
-use unity_native_plugin_vulkan::vulkan::VulkanGraphicsQueueAccess;
 
 const VERT: &[u8] = include_bytes!("preprocess.vert.glsl.spv");
 const FRAG: &[u8] = include_bytes!("preprocess.frag.glsl.spv");
@@ -59,7 +63,6 @@ impl DescriptorSetPool {
     }
 }
 
-
 impl Drop for DescriptorSetGuard {
     fn drop(&mut self) {
         if let Some(desc_set) = self.desc_set.take() {
@@ -77,10 +80,6 @@ impl DescriptorSetGuard {
 #[repr(C)]
 struct VertPushConstants {
     scale_and_tiling: [f32; 4],
-}
-#[repr(C)]
-struct FragPushConstants {
-    rechannel: [[f32; 4]; 4],
 }
 
 pub fn create_pass(
@@ -147,7 +146,7 @@ pub fn create_pass(
                         vk::PushConstantRange::default()
                             .stage_flags(vk::ShaderStageFlags::VERTEX)
                             .offset(0)
-                            .size(std::mem::size_of::<VertPushConstants>() as u32)
+                            .size(std::mem::size_of::<VertPushConstants>() as u32),
                     ]),
                 None,
             )
@@ -163,11 +162,11 @@ pub fn create_pass(
                     vk::PipelineShaderStageCreateInfo::default()
                         .stage(vk::ShaderStageFlags::VERTEX)
                         .module(*shader_vert)
-                        .name(c_str::CStr::from_bytes_with_nul(b"main\0")?),
+                        .name(c"main"),
                     vk::PipelineShaderStageCreateInfo::default()
                         .stage(vk::ShaderStageFlags::FRAGMENT)
                         .module(*shader_frag)
-                        .name(c_str::CStr::from_bytes_with_nul(b"main\0")?),
+                        .name(c"main"),
                 ])
                 .vertex_input_state(&vk::PipelineVertexInputStateCreateInfo::default())
                 .input_assembly_state(
@@ -242,16 +241,19 @@ pub fn create_pass(
     const MAX_FRAMES_IN_FLIGHT: u32 = 4;
 
     // create desc pool
-    let desc_pool = Arc::new(VulkanDescriptorPoolHandle::new(unsafe {
-        device.create_descriptor_pool(
-            &vk::DescriptorPoolCreateInfo::default()
-                .pool_sizes(&[vk::DescriptorPoolSize::default()
-                    .ty(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
-                    .descriptor_count(MAX_FRAMES_IN_FLIGHT)])
-                .max_sets(MAX_FRAMES_IN_FLIGHT),
-            None,
-        )
-    }?, device.clone()));
+    let desc_pool = Arc::new(VulkanDescriptorPoolHandle::new(
+        unsafe {
+            device.create_descriptor_pool(
+                &vk::DescriptorPoolCreateInfo::default()
+                    .pool_sizes(&[vk::DescriptorPoolSize::default()
+                        .ty(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+                        .descriptor_count(MAX_FRAMES_IN_FLIGHT)])
+                    .max_sets(MAX_FRAMES_IN_FLIGHT),
+                None,
+            )
+        }?,
+        device.clone(),
+    ));
 
     let sampler = VulkanSamplerHandle::new(
         unsafe {
@@ -278,15 +280,18 @@ pub fn create_pass(
         device.clone(),
     );
 
-    let desc_sets = Arc::new(DescriptorSetPool::new(unsafe {
-        device.allocate_descriptor_sets(
-            &vk::DescriptorSetAllocateInfo::default()
-                .descriptor_pool(**desc_pool)
-                .set_layouts(&[*set_layout; MAX_FRAMES_IN_FLIGHT as usize]),
-        )
-    }?.iter().map(|s| {
-        VulkanDescriptorSet::new(*s, desc_pool.clone(), device.clone())
-    }).collect()));
+    let desc_sets = Arc::new(DescriptorSetPool::new(
+        unsafe {
+            device.allocate_descriptor_sets(
+                &vk::DescriptorSetAllocateInfo::default()
+                    .descriptor_pool(**desc_pool)
+                    .set_layouts(&[*set_layout; MAX_FRAMES_IN_FLIGHT as usize]),
+            )
+        }?
+        .iter()
+        .map(|s| VulkanDescriptorSet::new(*s, desc_pool.clone(), device.clone()))
+        .collect(),
+    ));
 
     let command_pool = VulkanCommandPoolHandle::new(
         unsafe {
@@ -313,30 +318,28 @@ pub fn create_pass(
     })
 }
 
+/// Resources for HardwareBuffer blit that need to be kept alive until GPU completes
 #[allow(dead_code)]
-// resources need to be retained until blit is finished
-struct BlitResources {
+struct HardwareBufferBlitResources {
     command_buffer: VulkanCommandBuffer,
-    semaphore_acquire: SemaphoreGuard,
-    semaphore: SemaphoreGuard,
     pass: Arc<PreprocessRenderPass>,
-    target: Arc<VulkanSwapchainTaget>,
     src_view: VulkanImageViewHandle,
     fence: FenceGuard,
     desc_set: DescriptorSetGuard,
 }
 
-struct DescriptorSetLock {
-    desc_set: vk::DescriptorSet,
-    device: Arc<ash::Device>,
-}
-
-pub fn blit(
+/// Blit source image to a HardwareBuffer-backed frame
+/// Returns a Future that completes when GPU work is done
+pub fn blit_to_hardware_buffer(
     cx: &GlobalContext,
     src: &vk::Image,
-    surface: &VulkanSurface,
-    timestamp_ns: u64,
-) -> Result<Option<impl Future<Output = Result<()>>>> {
+    src_width: u32,
+    src_height: u32,
+    src_graphics_format: u32,
+    flip_vertically: bool,
+    is_gamma_workflow: bool,
+    frame: &HardwareBufferFrame,
+) -> Result<impl Future<Output = Result<()>>> {
     let markers = MARKERS.get().unwrap();
     let _guard = markers.preprocess_blit.get();
     let vulkan = &cx.vulkan;
@@ -347,39 +350,32 @@ pub fn blit(
         return Err(anyhow!("No available descriptor sets in preprocess blit"));
     };
 
-    let rec_state = vulkan
-        .command_recording_state(VulkanGraphicsQueueAccess::Allow)
-        .context("Failed to get command recording state")?;
-
-    let frame = rec_state.current_frame_number();
-
-    let semaphore_acquire = cx.semaphore_pool.pop()?;
-
-    let Some(target) = ({
-        let _guard = markers.preprocess_blit_acquire.get();
-        surface.acquire_next_framebuffer(**semaphore_acquire.get())?
-    }) else {
-        return Ok(None);
-    };
-
-    let framebuffer = &target.framebuffer;
-
-    /*
-    let src_accessed = unsafe {
-        vulkan.access_texture(
-            src as *const vk::Image as *mut c_void,
-            None, // whole image
-            vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
-            vk::PipelineStageFlags::FRAGMENT_SHADER,
-            vk::AccessFlags::SHADER_READ,
-            VulkanResourceAccessMode::PipelineBarrier,
-        )
-    }
-        .context(format!("Failed to access source texture: {src:?}"))?;
-     */
-
-    let (src_view, queue, mut command_buffers, fence, semaphore) = {
+    let (src_view, queue, mut command_buffers, fence) = {
         let _guard = markers.preprocess_blit_resources.get();
+
+        let format = *GRAPHICS_FORMAT_TO_VULKAN
+            .get(src_graphics_format as usize)
+            .iter()
+            .copied()
+            .flatten()
+            .next()
+            .context(format!("Unsupported graphics format: {}", src_graphics_format))?;
+
+        // A format of AHardwareBuffer doesn't seem to be mapped to SRGB formats directly while MediaCodec accepts sRGB pixels.
+        // (mapping table: https://docs.vulkan.org/spec/latest/chapters/memory.html#memory-external-android-hardware-buffer-formats)
+
+        let view_format = if is_gamma_workflow {
+            // With gamma workflow we don't need to do anything special here because input image is always sRGB stored as UNORM
+            format
+        } else {
+            // With linear workflow we need to create vkImage with sRGB format
+            // because input image is sRGB stored as SRGB or linear stored as UNORM
+            match format {
+                vk::Format::R8G8B8A8_SRGB => vk::Format::R8G8B8A8_UNORM,
+                vk::Format::R8G8B8_SRGB => vk::Format::R8G8B8_UNORM,
+                _ => format,
+            }
+        };
 
         let src_view = VulkanImageViewHandle::new(
             unsafe {
@@ -387,7 +383,7 @@ pub fn blit(
                     &vk::ImageViewCreateInfo::default()
                         .image(*src)
                         .view_type(vk::ImageViewType::TYPE_2D)
-                        .format(vk::Format::R8G8B8A8_UNORM)
+                        .format(view_format)
                         .components(
                             vk::ComponentMapping::default()
                                 .r(vk::ComponentSwizzle::IDENTITY)
@@ -424,12 +420,9 @@ pub fn blit(
             )
         };
 
-        // println!("({frame}) accessing queue");
-
         let queue = vulkan.instance().graphics_queue();
 
-        // println!("({frame}) allocate_command_buffers");
-        let mut command_buffers = unsafe {
+        let command_buffers = unsafe {
             device.allocate_command_buffers(
                 &vk::CommandBufferAllocateInfo::default()
                     .command_pool(**pass.command_pool)
@@ -437,46 +430,60 @@ pub fn blit(
                     .command_buffer_count(1),
             )
         }
-            .map(|v| {
-                v.iter()
-                    .map(|c| VulkanCommandBuffer::new(pass.command_pool.clone(), *c, device.clone()))
-                    .collect::<Vec<VulkanCommandBuffer>>()
-            })?;
-        // println!("({frame}) create_fence");
+        .map(|v| {
+            v.iter()
+                .map(|c| VulkanCommandBuffer::new(pass.command_pool.clone(), *c, device.clone()))
+                .collect::<Vec<VulkanCommandBuffer>>()
+        })?;
 
         let fence = cx.fence_pool.pop()?;
 
-        // println!("({frame}) create_semaphore");
-        let semaphore = cx.semaphore_pool.pop()?;
-        (src_view, queue, command_buffers, fence, semaphore)
+        (src_view, queue, command_buffers, fence)
     };
 
     let command_buffer = command_buffers.swap_remove(0);
     {
         let _guard = markers.preprocess_blit_commands.get();
-        let command_buffer = &command_buffer.command_buffer;
-        /*
-        let command_buffer = &vulkan
-            .command_recording_state(VulkanGraphicsQueueAccess::DontCare)
-            .context("Failed to get command recording state")?
-            .command_buffer();
-        */
+        let cb = &command_buffer.command_buffer;
 
-        // println!("({frame}) begin_command_buffer");
+        unsafe { device.begin_command_buffer(*cb, &vk::CommandBufferBeginInfo::default()) }?;
+
+        let width = frame.width;
+        let height = frame.height;
+
+        // Transition HardwareBuffer image to COLOR_ATTACHMENT_OPTIMAL
         unsafe {
-            device.begin_command_buffer(*command_buffer, &vk::CommandBufferBeginInfo::default())
-        }?;
+            device.cmd_pipeline_barrier(
+                *cb,
+                vk::PipelineStageFlags::TOP_OF_PIPE,
+                vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT,
+                vk::DependencyFlags::empty(),
+                &[],
+                &[],
+                &[vk::ImageMemoryBarrier::default()
+                    .src_access_mask(vk::AccessFlags::empty())
+                    .dst_access_mask(vk::AccessFlags::COLOR_ATTACHMENT_WRITE)
+                    .old_layout(vk::ImageLayout::UNDEFINED)
+                    .new_layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL)
+                    .src_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
+                    .dst_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
+                    .image(frame.vk_image_handle())
+                    .subresource_range(vk::ImageSubresourceRange {
+                        aspect_mask: vk::ImageAspectFlags::COLOR,
+                        base_mip_level: 0,
+                        level_count: 1,
+                        base_array_layer: 0,
+                        layer_count: 1,
+                    })],
+            );
+        }
 
-        let width = surface.width();
-        let height = surface.height();
-
-        // println!("({frame}) cmd_begin_render_pass");
         unsafe {
             device.cmd_begin_render_pass(
-                *command_buffer,
+                *cb,
                 &vk::RenderPassBeginInfo::default()
                     .render_pass(*pass.render_pass)
-                    .framebuffer(*framebuffer.framebuffer)
+                    .framebuffer(frame.vk_framebuffer())
                     .render_area(vk::Rect2D {
                         offset: vk::Offset2D { x: 0, y: 0 },
                         extent: vk::Extent2D { width, height },
@@ -485,23 +492,31 @@ pub fn blit(
             )
         };
 
-        let push_constants_vert = VertPushConstants {
-            scale_and_tiling: [1.0, 1.0, 0.0, 0.0],
+        // scale to fit
+        let pixel_scale = f32::min(
+            width as f32 / src_width as f32,
+            height as f32 / src_height as f32,
+        );
+        let render_scale_x = pixel_scale * src_width as f32 / width as f32;
+        let render_scale_y = pixel_scale * src_height as f32 / height as f32;
+
+        let push_constants_vert = if flip_vertically {
+            VertPushConstants {
+                scale_and_tiling: [1f32 / render_scale_x, -1f32 / render_scale_y, 0.0, 1.0],
+            }
+        } else {
+            VertPushConstants {
+                scale_and_tiling: [1f32 / render_scale_x, 1f32 / render_scale_y, 0.0, 0.0],
+            }
         };
 
-        // println!("({frame}) cmd_bind_pipeline");
         unsafe {
-            device.cmd_bind_pipeline(
-                *command_buffer,
-                vk::PipelineBindPoint::GRAPHICS,
-                *pass.pipelines[0],
-            )
+            device.cmd_bind_pipeline(*cb, vk::PipelineBindPoint::GRAPHICS, *pass.pipelines[0])
         };
 
-        // println!("({frame}) cmd_push_constants (vert)");
         unsafe {
             device.cmd_push_constants(
-                *command_buffer,
+                *cb,
                 *pass.pipeline_layout,
                 vk::ShaderStageFlags::VERTEX,
                 0,
@@ -511,10 +526,9 @@ pub fn blit(
             )
         };
 
-        // println!("({frame}) cmd_bind_descriptor_sets");
         unsafe {
             device.cmd_bind_descriptor_sets(
-                *command_buffer,
+                *cb,
                 vk::PipelineBindPoint::GRAPHICS,
                 *pass.pipeline_layout,
                 0,
@@ -532,9 +546,8 @@ pub fn blit(
             max_depth: 1.0,
         };
 
-        // println!("({frame}) cmd_set_viewport");
         unsafe {
-            device.cmd_set_viewport(*command_buffer, 0, &[viewport]);
+            device.cmd_set_viewport(*cb, 0, &[viewport]);
         }
 
         let scissor = vk::Rect2D {
@@ -542,70 +555,82 @@ pub fn blit(
             extent: vk::Extent2D { width, height },
         };
 
-        // println!("({frame}) cmd_set_scissor");
         unsafe {
-            device.cmd_set_scissor(*command_buffer, 0, &[scissor]);
+            device.cmd_set_scissor(*cb, 0, &[scissor]);
         }
 
-        // println!("({frame}) cmd_draw");
         unsafe {
-            device.cmd_draw(*command_buffer, 3, 1, 0, 0);
+            device.cmd_draw(*cb, 3, 1, 0, 0);
         }
 
-        // println!("({frame}) cmd_end_render_pass");
         unsafe {
-            device.cmd_end_render_pass(*command_buffer);
+            device.cmd_end_render_pass(*cb);
         }
 
-        // println!("({frame}) end_command_buffer");
-        unsafe { device.end_command_buffer(*command_buffer) }?;
+        // Transition HardwareBuffer image to GENERAL for external access
+        unsafe {
+            device.cmd_pipeline_barrier(
+                *cb,
+                vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT,
+                vk::PipelineStageFlags::BOTTOM_OF_PIPE,
+                vk::DependencyFlags::empty(),
+                &[],
+                &[],
+                &[vk::ImageMemoryBarrier::default()
+                    .src_access_mask(vk::AccessFlags::COLOR_ATTACHMENT_WRITE)
+                    .dst_access_mask(vk::AccessFlags::empty())
+                    .old_layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL)
+                    .new_layout(vk::ImageLayout::GENERAL)
+                    .src_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
+                    .dst_queue_family_index(vk::QUEUE_FAMILY_EXTERNAL)
+                    .image(frame.vk_image_handle())
+                    .subresource_range(vk::ImageSubresourceRange {
+                        aspect_mask: vk::ImageAspectFlags::COLOR,
+                        base_mip_level: 0,
+                        level_count: 1,
+                        base_array_layer: 0,
+                        layer_count: 1,
+                    })],
+            );
+        }
+
+        unsafe { device.end_command_buffer(*cb) }?;
 
         {
             let _guard = markers.preprocess_blit_submit.get();
             unsafe {
                 device.queue_submit(
                     queue,
-                    &[vk::SubmitInfo::default()
-                        .command_buffers(&[*command_buffer])
-                        .wait_semaphores(&[**semaphore_acquire.get()])
-                        .wait_dst_stage_mask(&[vk::PipelineStageFlags::FRAGMENT_SHADER])
-                        .signal_semaphores(&[**semaphore.get()])],
+                    &[vk::SubmitInfo::default().command_buffers(&[*cb])],
                     **fence.get(),
                 )
             }
-                .context("queue_submit failed")?;
+            .context("queue_submit failed")?;
         }
     }
 
-    {
-        let _guard = markers.preprocess_blit_present.get();
-        // present
-        surface.present(&cx, target.clone(), &[**semaphore.get()], timestamp_ns);
-    }
-
     let device = device.clone();
-    let resources = BlitResources {
+    let resources = HardwareBufferBlitResources {
         command_buffer,
-        semaphore_acquire,
-        semaphore,
         pass: pass.clone(),
-        target,
         src_view,
         fence,
         desc_set,
     };
 
-    let now = std::time::Instant::now();
+    // let now = std::time::Instant::now();
 
-
-    tokio::task::spawn_blocking(move || {
-        unsafe { device.wait_for_fences(&[**resources.fence.get()], true, u64::MAX) };
+    let join_handle = tokio::task::spawn_blocking(move || {
+        let _ = unsafe { device.wait_for_fences(&[**resources.fence.get()], true, u64::MAX) };
         drop(resources);
-        let elapsed = now.elapsed();
-        println!("Fence signaled in {:?}", elapsed);
+        // let elapsed = now.elapsed();
+        // println!("HardwareBuffer blit fence signaled in {:?}", elapsed);
     });
 
     Ok(async move {
+        join_handle
+            .await
+            .map_err(|e| anyhow!("Failed to wait for fence: {:?}", e))?;
         Ok(())
-    }.into())
+    })
 }

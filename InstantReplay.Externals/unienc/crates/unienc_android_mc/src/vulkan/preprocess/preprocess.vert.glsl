@@ -11,12 +11,12 @@ void main()
 {
     if(gl_VertexIndex == 0) {
         gl_Position = vec4(-1.0, 1.0, 0.0, 1.0);
-        vs_TEXCOORD0 = vec2(0.0, 0.0) * _ScaleAndTiling.xy + _ScaleAndTiling.zw;
+        vs_TEXCOORD0 = vec2(0.0, 1.0) * _ScaleAndTiling.xy + _ScaleAndTiling.zw;
     } else if(gl_VertexIndex == 1) {
         gl_Position = vec4(3.0, 1.0, 0.0, 1.0);
-        vs_TEXCOORD0 = vec2(2.0, 0.0) * _ScaleAndTiling.xy + _ScaleAndTiling.zw;
+        vs_TEXCOORD0 = vec2(2.0, 1.0) * _ScaleAndTiling.xy + _ScaleAndTiling.zw;
     } else if(gl_VertexIndex == 2) {
         gl_Position = vec4(-1.0, -3.0, 0.0, 1.0);
-        vs_TEXCOORD0 = vec2(0.0, 2.0) * _ScaleAndTiling.xy + _ScaleAndTiling.zw;
+        vs_TEXCOORD0 = vec2(0.0, -1.0) * _ScaleAndTiling.xy + _ScaleAndTiling.zw;
     }
 }

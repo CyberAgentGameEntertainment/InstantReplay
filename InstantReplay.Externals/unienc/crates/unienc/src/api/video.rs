@@ -44,7 +44,11 @@ pub unsafe extern "C" fn unienc_video_encoder_push_blit_source(
     runtime: *mut Runtime,
     input: SendPtr<Mutex<Option<VideoEncoderInput>>>,
     source_native_texture_ptr: *mut c_void,
-    // flip_vertically: bool,
+    width: u32,
+    height: u32,
+    graphics_format: u32,
+    flip_vertically: bool,
+    is_gamma_workflow: bool,
     timestamp: f64,
     issue_graphics_event_callback: usize, /* UniencIssueGraphicsEventCallback */
     callback: usize,                      /*UniencCallback*/
@@ -60,7 +64,7 @@ pub unsafe extern "C" fn unienc_video_encoder_push_blit_source(
         std::mem::transmute(issue_graphics_event_callback);
 
     // weak runtime for graphics event
-    let Some(weak) = runtime.as_ref().and_then(|r| Some(r.weak())) else {
+    let Some(weak) = runtime.as_ref().map(|r| r.weak()) else {
         UniencError::invalid_input_error("Invalid runtime pointer")
             .apply_callback(callback, user_data);
         return;
@@ -71,6 +75,11 @@ pub unsafe extern "C" fn unienc_video_encoder_push_blit_source(
             let sample = VideoSample {
                 frame: VideoFrame::BlitSource {
                     source: blit_source,
+                    width,
+                    height,
+                    graphics_format,
+                    flip_vertically,
+                    is_gamma_workflow,
                     event_issuer: Box::new(UniencGraphicsEventIssuer::new(
                         unienc_issue_graphics_event_callback,
                         weak
