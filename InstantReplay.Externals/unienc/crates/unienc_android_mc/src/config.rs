@@ -22,6 +22,8 @@ pub mod format_keys {
     pub const KEY_I_FRAME_INTERVAL: &str = "i-frame-interval";
     pub const KEY_PROFILE: &str = "profile";
     pub const KEY_LEVEL: &str = "level";
+    pub const KEY_PRIORITY: &str = "priority";
+    pub const KEY_OPERATING_RATE: &str = "operating-rate";
     
     // Audio keys
     pub const KEY_SAMPLE_RATE: &str = "sample-rate";
@@ -29,6 +31,7 @@ pub mod format_keys {
     pub const KEY_AAC_PROFILE: &str = "aac-profile";
 }
 
+pub const COLOR_FORMAT_SURFACE: jint = 0x7F000789;
 pub const COLOR_FORMAT_YUV420_FLEXIBLE: jint = 0x7F420888;
 pub const AAC_OBJECT_TYPE_AAC_LC: jint = 2;
 

@@ -1,7 +1,7 @@
 using System;
 using System.Text;
-using UniEnc.Internal;
 using UniEnc.Native;
+using Mutex = UniEnc.Native.Mutex;
 
 namespace UniEnc
 {
@@ -74,7 +74,7 @@ namespace UniEnc
 
                     var success = NativeMethods.unienc_new_video_encoder(
                         runtime.Runtime,
-                        (void*)_handle.DangerousGetHandle(),
+                        (PlatformEncodingSystem*)_handle.DangerousGetHandle(),
                         &input,
                         &output,
                         CallbackHelper.GetSimpleCallbackPtr(),
@@ -114,7 +114,7 @@ namespace UniEnc
 
                     var success = NativeMethods.unienc_new_audio_encoder(
                         runtime.Runtime,
-                        (void*)_handle.DangerousGetHandle(),
+                        (PlatformEncodingSystem*)_handle.DangerousGetHandle(),
                         &input,
                         &output,
                         CallbackHelper.GetSimpleCallbackPtr(),
@@ -161,7 +161,7 @@ namespace UniEnc
 
                         var success = NativeMethods.unienc_new_muxer(
                             runtime.Runtime,
-                            (void*)_handle.DangerousGetHandle(),
+                            (PlatformEncodingSystem*)_handle.DangerousGetHandle(),
                             pathPtr,
                             &videoInput,
                             &audioInput,
@@ -204,7 +204,7 @@ namespace UniEnc
 
             protected override unsafe bool ReleaseHandle()
             {
-                NativeMethods.unienc_free_encoding_system((void*)handle);
+                NativeMethods.unienc_free_encoding_system((PlatformEncodingSystem*)handle);
                 return true;
             }
         }

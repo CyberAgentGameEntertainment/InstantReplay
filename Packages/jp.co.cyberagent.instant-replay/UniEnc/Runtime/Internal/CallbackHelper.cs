@@ -6,7 +6,7 @@ using System.Threading.Tasks.Sources;
 using AOT;
 using UniEnc.Native;
 
-namespace UniEnc.Internal
+namespace UniEnc
 {
     /// <summary>
     ///     Helper class for managing native callbacks with zero-allocation ValueTask support.
@@ -20,17 +20,11 @@ namespace UniEnc.Internal
         private static readonly unsafe DataCallbackDelegate<UniencSampleData> SSampleDataCallbackDelegate =
             SampleDataCallback;
 
-        private static readonly unsafe DataCallbackDelegate<UniencBlitTargetData> SBlitTargetDataCallbackDelegate =
-            BlitTargetDataCallback;
-
         private static readonly IntPtr SimpleCallbackPtr =
             Marshal.GetFunctionPointerForDelegate(SSimpleCallbackDelegate);
 
         private static readonly IntPtr DataCallbackPtr =
             Marshal.GetFunctionPointerForDelegate(SSampleDataCallbackDelegate);
-
-        private static readonly IntPtr BlitTargetDataCallbackPtr =
-            Marshal.GetFunctionPointerForDelegate(SBlitTargetDataCallbackDelegate);
 
         /// <summary>
         ///     Native callback for simple operations.
@@ -93,31 +87,6 @@ namespace UniEnc.Internal
         }
 
         /// <summary>
-        ///     Native callback for data operations.
-        /// </summary>
-        [MonoPInvokeCallback(typeof(DataCallbackDelegate<UniencBlitTargetData>))]
-        private static unsafe void BlitTargetDataCallback(UniencBlitTargetData blitTargetData, void* userData,
-            UniencErrorNative error)
-        {
-            var handle = GCHandle.FromIntPtr((IntPtr)userData);
-            var context = (DataCallbackContext<BlitTargetHandle>)handle.Target;
-            handle.Free();
-
-            if (error.kind == UniencErrorKind.Success)
-            {
-                context.SetResult(new BlitTargetHandle((nint)blitTargetData.data));
-            }
-            else
-            {
-                string errorMessage = null;
-                if (error.message != null)
-                    errorMessage = Marshal.PtrToStringUTF8((IntPtr)error.message);
-
-                context.SetException(new UniEncException(error.kind, errorMessage ?? "Operation failed"));
-            }
-        }
-
-        /// <summary>
         ///     Creates a GCHandle for the context and returns it as SendPtr.
         /// </summary>
         internal static SendPtr CreateSendPtr<T>(T context) where T : class
@@ -140,14 +109,6 @@ namespace UniEnc.Internal
         internal static nuint GetDataCallbackPtr()
         {
             return (nuint)(nint)DataCallbackPtr;
-        }
-
-        /// <summary>
-        ///     Gets the function pointer for data callbacks.
-        /// </summary>
-        internal static nuint GetBlitTargetDataCallbackPtr()
-        {
-            return (nuint)(nint)BlitTargetDataCallbackPtr;
         }
 
         /// <summary>

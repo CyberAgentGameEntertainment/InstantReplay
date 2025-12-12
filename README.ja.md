@@ -53,7 +53,7 @@ Instant Replay は Unity で直近のゲームプレイ動画をいつでも保�
 Platform|OS version|aarch64|x86_64|Other requirements
 -|-|-|-|-
 iOS|10.0+|✅|N/A|
-Android|5.0+|✅|✅|
+Android|8.0+|✅|✅|
 macOS|11.0+|✅|✅|
 Windows|Windows 10+, Windows Server 2016+|-|✅|
 Linux|kernel 3.2+, glibc 2.17+|-|✅|`ffmpeg` in PATH

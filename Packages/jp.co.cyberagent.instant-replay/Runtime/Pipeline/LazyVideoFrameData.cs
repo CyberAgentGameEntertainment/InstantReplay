@@ -4,6 +4,8 @@
 
 using System.Threading.Tasks;
 using UniEnc;
+using UnityEngine;
+using UnityEngine.Experimental.Rendering;
 
 namespace InstantReplay
 {
@@ -18,7 +20,10 @@ namespace InstantReplay
         public readonly int Height;
 
         public readonly ValueTask<SharedBuffer> ReadbackTask;
-        public readonly ValueTask<BlitTargetHandle> BlitTask;
+        public readonly Texture BlitSource;
+        public readonly GraphicsFormat BlitSourceFormat;
+        public readonly nint NativeBlitSourceHandle;
+        public readonly bool IsGammaWorkflow;
 
         public LazyVideoFrameData(ValueTask<SharedBuffer> readbackTask, int width, int height, double timestamp)
         {
@@ -28,24 +33,30 @@ namespace InstantReplay
             Height = height;
             Timestamp = timestamp;
 
-            BlitTask = default;
+            BlitSource = null;
+            BlitSourceFormat = default;
+            NativeBlitSourceHandle = default;
+            IsGammaWorkflow = QualitySettings.activeColorSpace == ColorSpace.Gamma;
         }
 
-        public LazyVideoFrameData(ValueTask<BlitTargetHandle> blitTask, int width, int height, double timestamp)
+        public LazyVideoFrameData(Texture texture, double timestamp)
         {
-            Kind = DataKind.BlitTarget;
-            BlitTask = blitTask;
-            Width = width;
-            Height = height;
+            Kind = DataKind.BlitSource;
+            BlitSource = texture;
+            BlitSourceFormat = texture.graphicsFormat;
+            NativeBlitSourceHandle = texture.GetNativeTexturePtr();
             Timestamp = timestamp;
 
             ReadbackTask = default;
+            Width = texture.width;
+            Height = texture.height;
+            IsGammaWorkflow = QualitySettings.activeColorSpace == ColorSpace.Gamma;
         }
 
         public enum DataKind
         {
             SharedBuffer,
-            BlitTarget
+            BlitSource
         }
     }
 }

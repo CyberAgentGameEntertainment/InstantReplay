@@ -4,8 +4,8 @@ use std::{path::Path, sync::Arc};
 use tokio::sync::{oneshot, RwLock};
 use unienc_common::{CompletionHandle, Muxer, MuxerInput};
 
-use crate::config::{MUXER_OUTPUT_FORMAT_MPEG_4};
-use crate::{common::*};
+use crate::common::*;
+use crate::config::MUXER_OUTPUT_FORMAT_MPEG_4;
 
 use crate::java::*;
 
@@ -18,7 +18,7 @@ pub struct MediaMuxer {
 enum MuxerSharedState {
     None,
     Partial(oneshot::Sender<Result<()>>), // either video or audio has started (sender is used to signal the other side to start)
-    Started, // both video and audio have started
+    Started,                              // both video and audio have started
 }
 
 pub struct MediaMuxerVideoInput {
@@ -129,7 +129,6 @@ async fn push(
                     crate::common::MediaFormatValue::Integer(height as i32),
                 );
             }
-            println!("acquiring shared state lock");
 
             let mut shared_state_lock = shared_state.write().await;
             let shared_state = &mut *shared_state_lock;
@@ -144,12 +143,10 @@ async fn push(
                     let (tx, rx) = oneshot::channel();
                     *shared_state = MuxerSharedState::Partial(tx);
                     drop(shared_state_lock);
-                    println!("waiting until other side starts");
                     rx.await??;
                 }
                 MuxerSharedState::Partial(_sender) => {
                     let mut env = attach_current_thread()?;
-                    println!("starting muxer");
                     start_muxer(&mut env, muxer)?;
                     let prev = std::mem::replace(shared_state, MuxerSharedState::Started);
                     let MuxerSharedState::Partial(sender) = prev else {
@@ -174,7 +171,7 @@ async fn push(
             // println!("writing sample data: is_video: {}, flags({}): {:?}, length: {}, timestamp: {}", is_video, track_index, flags, data.len(), timestamp_us);
 
             write_sample_data(env, muxer, *track_index, &data, timestamp_us, flags)?;
-        },
+        }
     }
     Ok(())
 }

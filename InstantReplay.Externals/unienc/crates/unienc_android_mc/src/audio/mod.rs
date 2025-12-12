@@ -121,18 +121,27 @@ impl EncoderInput for MediaCodecAudioEncoderInput {
                         get_direct_buffer_info(env, input_buffer.as_obj())?;
 
                     let bytes_to_write = std::cmp::min(byte_data.len(), capacity - position);
-                    crate::common::write_to_buffer(env, &input_buffer, &byte_data[..bytes_to_write])?;
+                    crate::common::write_to_buffer(
+                        env,
+                        &input_buffer,
+                        &byte_data[..bytes_to_write],
+                    )?;
                     byte_data = &byte_data[bytes_to_write..];
 
                     // Calculate timestamp in microseconds
-                    let timestamp_us =
-                        (data.timestamp_in_samples as f64 / self.sample_rate as f64 * 1_000_000.0) as i64;
-        
+                    let timestamp_us = (data.timestamp_in_samples as f64 / self.sample_rate as f64
+                        * 1_000_000.0) as i64;
+
                     self.last_timestamp = timestamp_us;
-        
+
                     // Queue input buffer
-                    self.codec
-                        .queue_input_buffer(buffer_index, 0, bytes_to_write, timestamp_us, 0)?;
+                    self.codec.queue_input_buffer(
+                        buffer_index,
+                        0,
+                        bytes_to_write,
+                        timestamp_us,
+                        0,
+                    )?;
                 }
             } else if buffer_index == media_codec_errors::INFO_TRY_AGAIN_LATER {
                 std::thread::sleep(Duration::from_millis(10));

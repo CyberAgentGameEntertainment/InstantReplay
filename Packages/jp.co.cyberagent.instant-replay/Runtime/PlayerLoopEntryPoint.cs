@@ -8,7 +8,7 @@ using UnityEngine;
 using UnityEngine.LowLevel;
 using UnityEngine.PlayerLoop;
 
-namespace UniEnc
+namespace InstantReplay
 {
     internal static class PlayerLoopEntryPoint
     {

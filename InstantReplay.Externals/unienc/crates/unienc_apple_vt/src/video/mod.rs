@@ -1,7 +1,7 @@
 mod serialization;
 use std::{ffi::c_void, ptr::NonNull};
 
-use anyhow::{Context, Result};
+use anyhow::{anyhow, Context, Result};
 use objc2::rc::Retained;
 use objc2_core_foundation::{
     kCFAllocatorDefault, kCFBooleanFalse, kCFBooleanTrue, CFBoolean, CFDictionary, CFNumber,
@@ -17,11 +17,9 @@ use objc2_video_toolbox::{
     VTEncodeInfoFlags, VTSessionSetProperty,
 };
 use tokio::sync::mpsc;
-use unienc_common::{
-    buffer::SharedBuffer, EncodedData, Encoder, EncoderInput, EncoderOutput, VideoSample,
-};
+use unienc_common::{buffer::SharedBuffer, EncodedData, Encoder, EncoderInput, EncoderOutput, VideoSample};
 
-use crate::{OsStatus, common::UnsafeSendRetained, metal::SharedTexture};
+use crate::{OsStatus, common::UnsafeSendRetained, metal, MetalTexture};
 
 pub struct VideoToolboxEncoder {
     input: VideoToolboxEncoderInput,
@@ -135,7 +133,7 @@ impl Encoder for VideoToolboxEncoder {
 }
 
 impl EncoderInput for VideoToolboxEncoderInput {
-    type Data = VideoSample<SharedTexture>;
+    type Data = VideoSample<MetalTexture>;
 
     async fn push(&mut self, data: Self::Data) -> Result<()> {
         let buffer = match data.frame {
@@ -169,7 +167,30 @@ impl EncoderInput for VideoToolboxEncoderInput {
 
                 unsafe { Retained::from_raw(buffer) }.context("CVPixelBuffer is null")?
             }
-            unienc_common::VideoFrame::BlitTarget(texture) => {
+            unienc_common::VideoFrame::BlitSource {
+                source,
+                width: _,
+                height: _,
+                graphics_format: _,
+                flip_vertically,
+                is_gamma_workflow,
+                event_issuer,
+            } => {
+                let width = self.width;
+                let height = self.height;
+                
+                let (tx, rx) = tokio::sync::oneshot::channel();
+                event_issuer
+                    .issue_graphics_event(Box::new(move || {
+                        let r = metal::custom_blit(&source.texture, width, height, flip_vertically, is_gamma_workflow);
+                        tx.send(r).map_err(|_e| anyhow!("Failed to send blit future")).unwrap();
+                    }), *crate::metal::EVENT_ID
+                        .get()
+                        .context("Event ID is not reserved")?);
+                
+                let texture = rx.await? // failed to receive
+                    ? // failed to issue blit
+                    .await?; // blit failed
                 texture.pixel_buffer()
             },
         };

@@ -49,27 +49,19 @@ namespace InstantReplay
 
                     break;
                 }
-                case LazyVideoFrameData.DataKind.BlitTarget:
+                case LazyVideoFrameData.DataKind.BlitSource:
                 {
-                    var blitTarget = await value.BlitTask;
+                    if (!value.BlitSource)
+                        throw new ArgumentException("Frame data is invalid", nameof(value));
+
                     try
                     {
-                        if (!blitTarget.IsValid)
-                            throw new ArgumentException("Frame data is invalid", nameof(value));
-
-                        try
-                        {
-                            await _videoEncoder.PushFrameAsync(blitTarget, value.Timestamp);
-                        }
-                        catch (ObjectDisposedException)
-                        {
-                            // ignore
-                        }
+                        await _videoEncoder.PushFrameAsync(value.NativeBlitSourceHandle, (uint)value.Width,
+                            (uint)value.Height, value.BlitSourceFormat, value.IsGammaWorkflow, value.Timestamp);
                     }
-                    finally
+                    catch (ObjectDisposedException)
                     {
-                        // If frame data is moved out by encoder, this will be no-op
-                        blitTarget.Dispose();
+                        // ignore
                     }
 
                     break;

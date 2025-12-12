@@ -1,11 +1,15 @@
-use std::{ffi::c_void, future::Future, path::Path, pin::Pin};
+
+#[cfg(not(any(target_vendor = "apple")))]
+compile_error!("This crate can only be compiled for Apple platforms.");
+
+use std::{ffi::c_void, path::Path};
 
 use objc2::{rc::Retained, runtime::ProtocolObject};
 use objc2_metal::MTLTexture;
-use unienc_common::{BlitOptions, EncodingSystem, TryFromUnityNativeTexturePointer};
+use unienc_common::{EncodingSystem, TryFromUnityNativeTexturePointer};
 
 use crate::{
-    audio::AudioToolboxEncoder, common::UnsafeSendRetained, metal::SharedTexture, mux::AVFMuxer,
+    audio::AudioToolboxEncoder, common::UnsafeSendRetained, mux::AVFMuxer,
     video::VideoToolboxEncoder,
 };
 use anyhow::Result;
@@ -37,7 +41,13 @@ impl<V: unienc_common::VideoEncoderOptions, A: unienc_common::AudioEncoderOption
     type MuxerType = mux::AVFMuxer;
 
     type BlitSourceType = MetalTexture;
-    type BlitTargetType = SharedTexture;
+
+    fn new(video_options: &V, audio_options: &A) -> Self {
+        Self {
+            video_options: *video_options,
+            audio_options: *audio_options,
+        }
+    }
 
     fn new_video_encoder(&self) -> Result<Self::VideoEncoderType> {
         VideoToolboxEncoder::new(&self.video_options)
@@ -51,36 +61,14 @@ impl<V: unienc_common::VideoEncoderOptions, A: unienc_common::AudioEncoderOption
         AVFMuxer::new(output_path, &self.video_options, &self.audio_options)
     }
 
-    fn new(video_options: &V, audio_options: &A) -> Self {
-        Self {
-            video_options: *video_options,
-            audio_options: *audio_options,
-        }
-    }
-
     fn is_blit_supported(&self) -> bool {
-        true
+        metal::is_initialized()
     }
 
-    fn new_blit_closure(
-        &self,
-        source: Self::BlitSourceType,
-        options: BlitOptions,
-    ) -> Result<
-        Box<dyn FnOnce() -> Pin<Box<dyn Future<Output = Result<Self::BlitTargetType>> + Send>> + Send>,
-    > {
-        let tex = UnsafeSendRetained::from((*source.texture).clone());
-        Ok(Box::new(move || {
-            let tex = tex.clone();
-            let res = metal::custom_blit(&tex, options);
-            Box::pin(async move {
-                match res {
-                    Ok(future) => future.await,
-                    Err(err) => Err(anyhow::anyhow!("Failed to perform blit operation: {}", err)),
-                }
-            })
-        }))
+    fn unity_plugin_load(interfaces: &unity_native_plugin::interface::UnityInterfaces) {
+        metal::unity_plugin_load(interfaces);
     }
+    fn unity_plugin_unload() {}
 }
 
 pub struct MetalTexture {

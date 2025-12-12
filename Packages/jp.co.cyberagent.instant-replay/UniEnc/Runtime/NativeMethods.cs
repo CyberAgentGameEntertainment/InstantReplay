@@ -36,17 +36,12 @@ namespace UniEnc.Native
     {
     }
 
-    // opaque
-    internal struct BlitTargetType
+    internal struct PlatformEncodingSystem
     {
     }
 
-    partial struct UniencBlitTargetData
+    internal struct Runtime
     {
-        public unsafe UniencBlitTargetData(BlitTargetType* data)
-        {
-            this.data = data;
-        }
     }
 }
 

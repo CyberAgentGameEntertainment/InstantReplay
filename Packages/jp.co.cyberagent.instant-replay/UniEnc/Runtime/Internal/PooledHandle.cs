@@ -6,7 +6,7 @@ using System;
 using System.Threading;
 using Microsoft.Win32.SafeHandles;
 
-namespace UniEnc.Internal
+namespace UniEnc
 {
     internal abstract class PooledHandle : SafeHandleZeroOrMinusOneIsInvalid
     {

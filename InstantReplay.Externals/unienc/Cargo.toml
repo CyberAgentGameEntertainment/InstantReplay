@@ -14,6 +14,7 @@ unienc_ffmpeg = { path = "./crates/unienc_ffmpeg" }
 
 [patch.crates-io]
 unity-native-plugin = { path = "./external/unity-native-plugin-rs/unity-native-plugin" }
+unity-native-plugin-vulkan = { path = "./external/unity-native-plugin-rs/unity-native-plugin-vulkan" }
 
 [workspace.package]
 edition = "2021"

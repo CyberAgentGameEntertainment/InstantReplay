@@ -1,7 +1,13 @@
 using System;
+using System.Runtime.InteropServices;
+using System.Threading;
 using System.Threading.Tasks;
-using UniEnc.Internal;
+using AOT;
 using UniEnc.Native;
+using UnityEngine;
+using UnityEngine.Experimental.Rendering;
+using UnityEngine.Rendering;
+using Object = UnityEngine.Object;
 
 namespace UniEnc
 {
@@ -73,7 +79,14 @@ namespace UniEnc
             }
         }
 
-        public ValueTask PushFrameAsync(in BlitTargetHandle blitTarget, double timestamp)
+        public ValueTask PushFrameAsync(Texture source, bool isGammaWorkflow, double timestamp)
+        {
+            return PushFrameAsync(source.GetNativeTexturePtr(), (uint)source.width, (uint)source.height,
+                source.graphicsFormat, isGammaWorkflow, timestamp);
+        }
+
+        public ValueTask PushFrameAsync(nint sourceTexturePtr, uint width, uint height, GraphicsFormat format,
+            bool isGammaWorkflow, double timestamp)
         {
             lock (_lock)
             {
@@ -89,11 +102,17 @@ namespace UniEnc
                     {
                         using var runtime = RuntimeWrapper.GetScope();
 
-                        NativeMethods.unienc_video_encoder_push_blit_target(
+                        NativeMethods.unienc_video_encoder_push_blit_source(
                             runtime.Runtime,
                             _inputHandle.DangerousGetHandle(),
-                            new UniencBlitTargetData((BlitTargetType*)blitTarget.MoveOut()),
+                            (void*)sourceTexturePtr,
+                            width,
+                            height,
+                            (uint)format,
+                            false,
+                            isGammaWorkflow,
                             timestamp,
+                            (nuint)OnIssueGraphicsEventPtr,
                             CallbackHelper.GetSimpleCallbackPtr(),
                             contextHandle);
                     }
@@ -193,6 +212,49 @@ namespace UniEnc
             {
                 NativeMethods.unienc_free_video_encoder_output((nint)handle);
                 return true;
+            }
+        }
+
+        private static Action<nint, int, nint> _onIssueGraphicsEvent;
+        private static nint? _onIssueGraphicsEventPtr;
+
+        private static nint OnIssueGraphicsEventPtr =>
+            _onIssueGraphicsEventPtr ??=
+                Marshal.GetFunctionPointerForDelegate(_onIssueGraphicsEvent ??= OnIssueGraphicsEvent);
+
+        private static CommandBuffer _sharedCommandBuffer;
+
+        [MonoPInvokeCallback(typeof(Action<nint, int, nint>))]
+        private static void OnIssueGraphicsEvent(nint eventFuncPtr, int eventId, nint context)
+        {
+            try
+            {
+                if (SynchronizationContext.Current?.GetType().Assembly != typeof(Object).Assembly)
+                {
+                    // not on main thread
+                    PlayerLoopEntryPoint.PostAfterUpdate(static ctx =>
+                    {
+                        var (eventFuncPtr, eventId, context) = ((nint, int, nint))ctx;
+                        OnIssueGraphicsEvent(eventFuncPtr, eventId, context);
+                    }, (eventFuncPtr, eventId, context));
+                }
+                else
+                {
+                    _sharedCommandBuffer ??= new CommandBuffer();
+                    _sharedCommandBuffer.Clear();
+                    _sharedCommandBuffer.IssuePluginEventAndData(eventFuncPtr, eventId, context);
+                    Graphics.ExecuteCommandBuffer(_sharedCommandBuffer);
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.LogException(ex);
+
+                // free
+                unsafe
+                {
+                    NativeMethods.unienc_free_graphics_event_context((void*)context);
+                }
             }
         }
     }
