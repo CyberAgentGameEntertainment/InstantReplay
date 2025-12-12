@@ -27,7 +27,6 @@ pub struct PreprocessRenderPass {
     sampler: VulkanSamplerHandle,
     pub(crate) render_pass: VulkanRenderPassHandle,
     command_pool: Arc<VulkanCommandPoolHandle>,
-    // src_view_cache: Mutex<>
 }
 
 struct DescriptorSetPool {
@@ -111,7 +110,6 @@ pub fn create_pass(
         )
     }?;
 
-    // cx.deref_mut().
     // create pipeline
     let shader_vert = create_shader_module(&device, VERT)?;
     let shader_frag = create_shader_module(&device, FRAG)?;
@@ -614,13 +612,9 @@ pub fn blit_to_hardware_buffer(
         desc_set,
     };
 
-    // let now = std::time::Instant::now();
-
     let join_handle = tokio::task::spawn_blocking(move || {
         let _ = unsafe { device.wait_for_fences(&[**resources.fence.get()], true, u64::MAX) };
         drop(resources);
-        // let elapsed = now.elapsed();
-        // println!("HardwareBuffer blit fence signaled in {:?}", elapsed);
     });
 
     Ok(async move {

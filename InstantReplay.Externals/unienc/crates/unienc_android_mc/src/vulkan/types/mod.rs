@@ -4,6 +4,8 @@ use std::sync::Arc;
 
 pub use handles::*;
 
+// Handle wrappers for Vulkan resources to manage dependencies and lifetimes safely
+
 pub struct VulkanImage {
     pub(crate) image: VulkanImageHandle,
     pub(crate) memory: Option<VulkanMemoryHandle>,

@@ -231,6 +231,7 @@ namespace UniEnc
             {
                 if (SynchronizationContext.Current?.GetType().Assembly != typeof(Object).Assembly)
                 {
+                    // not on main thread
                     PlayerLoopEntryPoint.PostAfterUpdate(static ctx =>
                     {
                         var (eventFuncPtr, eventId, context) = ((nint, int, nint))ctx;

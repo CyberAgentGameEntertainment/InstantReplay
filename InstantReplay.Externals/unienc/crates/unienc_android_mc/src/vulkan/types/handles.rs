@@ -1,6 +1,7 @@
 use ash::vk;
 use super::*;
 
+// Macro to define Vulkan handle wrapper structs with automatic resource cleanup
 macro_rules! define_handle {
     ($name:ident, $handle_type:ty,  $destroy_fn:ident, $device_type:ty) => {
         pub struct $name($handle_type, Option<Arc<$device_type>>);
