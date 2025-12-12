@@ -334,8 +334,8 @@ pub fn blit_to_hardware_buffer(
     is_gamma_workflow: bool,
     frame: &HardwareBufferFrame,
 ) -> Result<impl Future<Output = Result<()>>> {
-    let markers = MARKERS.get().unwrap();
-    let _guard = markers.preprocess_blit.get();
+    let markers = MARKERS.get();
+    let _guard = markers.map(|m| m.preprocess_blit.get());
     let vulkan = &cx.vulkan;
     let device = &cx.device;
     let pass = &cx.render_pass;
@@ -345,7 +345,7 @@ pub fn blit_to_hardware_buffer(
     };
 
     let (src_view, queue, mut command_buffers, fence) = {
-        let _guard = markers.preprocess_blit_resources.get();
+        let _guard = markers.map(|m| m.preprocess_blit_resources.get());
 
         let format = *GRAPHICS_FORMAT_TO_VULKAN
             .get(src_graphics_format as usize)
@@ -437,7 +437,7 @@ pub fn blit_to_hardware_buffer(
 
     let command_buffer = command_buffers.swap_remove(0);
     {
-        let _guard = markers.preprocess_blit_commands.get();
+        let _guard = markers.map(|m| m.preprocess_blit_commands.get());
         let cb = &command_buffer.command_buffer;
 
         unsafe { device.begin_command_buffer(*cb, &vk::CommandBufferBeginInfo::default()) }?;
@@ -591,7 +591,7 @@ pub fn blit_to_hardware_buffer(
         unsafe { device.end_command_buffer(*cb) }?;
 
         {
-            let _guard = markers.preprocess_blit_submit.get();
+            let _guard = markers.map(|m| m.preprocess_blit_submit.get());
             unsafe {
                 device.queue_submit(
                     queue,
