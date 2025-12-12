@@ -840,11 +840,41 @@ pub struct ImageWriter {
 }
 
 impl ImageWriter {
-    /// Create a new ImageWriter using ImageWriter.Builder (API 29+)
-    /// with explicit HardwareBuffer usage flags for VIDEO_ENCODE
+    /// Create a new ImageWriter
+    /// - API 33+: Uses ImageWriter.Builder with explicit HardwareBuffer usage flags for VIDEO_ENCODE
+    /// - API 29-32: Uses ImageWriter.newInstance(Surface, int, int) with RGBA_8888 format
+    /// - API 28 and below: Not supported (caller should use Bgra32 mode instead)
     pub fn new(surface: &SafeGlobalRef, max_images: i32, width: i32, height: i32) -> Result<Self> {
         let env = &mut attach_current_thread()?;
 
+        // Check API level to determine which method to use (uses cached value)
+        let api_level = get_android_api_level()?;
+
+        let writer = if api_level >= 33 {
+            // API 33+: Use ImageWriter.Builder with explicit usage flags
+            println!("Using ImageWriter.Builder for API level {}", api_level);
+            Self::new_with_builder(env, surface, max_images, width, height)?
+        } else {
+            // API 29-32: Use ImageWriter.newInstance with format parameter
+            println!(
+                "Using ImageWriter.newInstance with RGBA_8888 format for API level {}",
+                api_level
+            );
+            Self::new_with_static_method(env, surface, max_images)?
+        };
+
+        let writer = SafeGlobalRef::new(env, writer)?;
+        Ok(Self { writer })
+    }
+
+    /// Create ImageWriter using Builder (API 33+)
+    fn new_with_builder<'a>(
+        env: &mut JNIEnv<'a>,
+        surface: &SafeGlobalRef,
+        max_images: i32,
+        width: i32,
+        height: i32,
+    ) -> Result<JObject<'a>> {
         // Create ImageWriter.Builder
         let builder_class = env.find_class("android/media/ImageWriter$Builder")?;
         let builder = env.new_object(
@@ -904,8 +934,35 @@ impl ImageWriter {
             .call_method(&builder, "build", "()Landroid/media/ImageWriter;", &[])?
             .l()?;
 
-        let writer = SafeGlobalRef::new(env, writer)?;
-        Ok(Self { writer })
+        Ok(writer)
+    }
+
+    /// Create ImageWriter using static newInstance method (API 29-32)
+    /// Uses newInstance(Surface, int, int) to specify RGBA_8888 format
+    fn new_with_static_method<'a>(
+        env: &mut JNIEnv<'a>,
+        surface: &SafeGlobalRef,
+        max_images: i32,
+    ) -> Result<JObject<'a>> {
+        // PixelFormat.RGBA_8888 = 0x1 (1)
+        const PIXEL_FORMAT_RGBA_8888: i32 = 0x1;
+
+        let writer_class = env.find_class("android/media/ImageWriter")?;
+        // Use newInstance(Surface, int, int) which allows specifying format (API 29+)
+        let writer = env
+            .call_static_method(
+                &writer_class,
+                "newInstance",
+                "(Landroid/view/Surface;II)Landroid/media/ImageWriter;",
+                &[
+                    JValue::Object(surface.as_obj()),
+                    JValue::Int(max_images),
+                    JValue::Int(PIXEL_FORMAT_RGBA_8888),
+                ],
+            )?
+            .l()?;
+
+        Ok(writer)
     }
 
     /// Dequeue an available input image
@@ -1122,4 +1179,24 @@ pub(crate) fn map_to_format<'a>(
         }
     }
     Ok(format)
+}
+
+/// Cached Android API level
+static API_LEVEL_CACHE: std::sync::OnceLock<i32> = std::sync::OnceLock::new();
+
+/// Get Android API level from Build.VERSION.SDK_INT (cached)
+pub fn get_android_api_level() -> Result<i32> {
+    if let Some(&level) = API_LEVEL_CACHE.get() {
+        return Ok(level);
+    }
+
+    let env = &mut attach_current_thread()?;
+    let version_class = env.find_class("android/os/Build$VERSION")?;
+    let sdk_int = env
+        .get_static_field(&version_class, "SDK_INT", "I")?
+        .i()?;
+
+    // Cache the result (ignore if already set by another thread)
+    let _ = API_LEVEL_CACHE.set(sdk_int);
+    Ok(sdk_int)
 }

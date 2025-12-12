@@ -64,8 +64,11 @@ impl<V: unienc_common::VideoEncoderOptions, A: unienc_common::AudioEncoderOption
     }
 
     fn is_blit_supported(&self) -> bool {
-        
-        vulkan::is_initialized()
+        // HardwareBuffer mode requires API 29+ (ImageWriter.newInstance with format)
+        // API 28 and below must use Bgra32 mode because ImageWriter.newInstance
+        // without format parameter may create YUV HardwareBuffers
+        let api_level = common::get_android_api_level().unwrap_or(0);
+        api_level >= 29 && vulkan::is_initialized()
     }
     fn unity_plugin_load(interfaces: &unity_native_plugin::interface::UnityInterfaces) {
         vulkan::unity_plugin_load(interfaces);
