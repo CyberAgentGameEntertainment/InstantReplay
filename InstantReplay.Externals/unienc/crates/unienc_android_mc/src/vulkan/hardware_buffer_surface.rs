@@ -72,7 +72,7 @@ impl HardwareBufferSurface {
         );
 
         Ok(HardwareBufferFrame {
-            image: image,
+            image,
             vk_image,
             framebuffer,
             width: self.width,

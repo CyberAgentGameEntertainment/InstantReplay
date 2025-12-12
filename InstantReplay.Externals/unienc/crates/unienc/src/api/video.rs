@@ -103,7 +103,6 @@ unsafe fn video_encoder_push_video_sample(
     user_data: SendPtr<c_void>,
 ) {
     let _guard = (*runtime).enter();
-    let callback: UniencCallback = std::mem::transmute(callback);
 
     let input = arc_from_raw_retained(*input);
 

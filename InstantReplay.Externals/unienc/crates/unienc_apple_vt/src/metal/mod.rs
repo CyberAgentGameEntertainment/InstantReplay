@@ -8,7 +8,7 @@ use std::os::raw::c_int;
 use block2::RcBlock;
 use objc2::{rc::Retained, runtime::ProtocolObject};
 use objc2_core_foundation::{kCFAllocatorDefault, kCFBooleanTrue, CFDictionary};
-use objc2_core_video::{kCVPixelBufferMetalCompatibilityKey, kCVPixelBufferPixelFormatTypeKey, kCVPixelFormatType_32BGRA, CVMetalTexture, CVMetalTextureCache, CVMetalTextureGetTexture, CVPixelBuffer, CVPixelBufferCreate};
+use objc2_core_video::{kCVPixelBufferMetalCompatibilityKey, kCVPixelFormatType_32BGRA, CVMetalTexture, CVMetalTextureCache, CVMetalTextureGetTexture, CVPixelBuffer, CVPixelBufferCreate};
 use objc2_foundation::NSString;
 use objc2_metal::{
     MTLBuffer, MTLCommandBuffer, MTLCommandEncoder, MTLCullMode, MTLDevice, MTLIndexType,
@@ -469,7 +469,7 @@ impl SharedTexture {
     }
 
     pub fn metal_texture(&self) -> Retained<ProtocolObject<dyn MTLTexture>> {
-        unsafe { CVMetalTextureGetTexture(&self.inner.lock().unwrap().texture).unwrap() }
+        CVMetalTextureGetTexture(&self.inner.lock().unwrap().texture).unwrap()
     }
 
     pub fn pixel_buffer(&self) -> Retained<CVPixelBuffer> {

@@ -17,9 +17,9 @@ use objc2_video_toolbox::{
     VTEncodeInfoFlags, VTSessionSetProperty,
 };
 use tokio::sync::mpsc;
-use unienc_common::{buffer::SharedBuffer, EncodedData, Encoder, EncoderInput, EncoderOutput, GraphicsEventIssuer, VideoSample};
+use unienc_common::{buffer::SharedBuffer, EncodedData, Encoder, EncoderInput, EncoderOutput, VideoSample};
 
-use crate::{OsStatus, common::UnsafeSendRetained, metal::SharedTexture, metal, MetalTexture};
+use crate::{OsStatus, common::UnsafeSendRetained, metal, MetalTexture};
 
 pub struct VideoToolboxEncoder {
     input: VideoToolboxEncoderInput,
@@ -169,9 +169,9 @@ impl EncoderInput for VideoToolboxEncoderInput {
             }
             unienc_common::VideoFrame::BlitSource {
                 source,
-                width,
-                height,
-                graphics_format,
+                width: _,
+                height: _,
+                graphics_format: _,
                 flip_vertically,
                 is_gamma_workflow,
                 event_issuer,
@@ -182,7 +182,7 @@ impl EncoderInput for VideoToolboxEncoderInput {
                 let (tx, rx) = tokio::sync::oneshot::channel();
                 event_issuer
                     .issue_graphics_event(Box::new(move || {
-                        let r = metal::custom_blit(&*source.texture, width, height, flip_vertically, is_gamma_workflow);
+                        let r = metal::custom_blit(&source.texture, width, height, flip_vertically, is_gamma_workflow);
                         tx.send(r).map_err(|_e| anyhow!("Failed to send blit future")).unwrap();
                     }), *crate::metal::EVENT_ID
                         .get()

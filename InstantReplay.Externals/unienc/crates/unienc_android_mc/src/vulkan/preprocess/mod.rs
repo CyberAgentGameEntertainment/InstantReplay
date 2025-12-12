@@ -47,14 +47,10 @@ impl DescriptorSetPool {
     }
     pub fn pop(self: &Arc<Self>) -> Option<DescriptorSetGuard> {
         let mut sets = self.sets.lock().unwrap();
-        if let Some(desc_set) = sets.pop() {
-            Some(DescriptorSetGuard {
+        sets.pop().map(|desc_set| DescriptorSetGuard {
                 desc_set: Some(desc_set),
                 pool: self.clone(),
             })
-        } else {
-            None
-        }
     }
 
     pub fn push(&self, desc_set: VulkanDescriptorSet) {

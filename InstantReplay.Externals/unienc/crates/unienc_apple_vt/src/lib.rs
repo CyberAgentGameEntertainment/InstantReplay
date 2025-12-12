@@ -2,14 +2,14 @@
 #[cfg(not(any(target_vendor = "apple")))]
 compile_error!("This crate can only be compiled for Apple platforms.");
 
-use std::{ffi::c_void, future::Future, path::Path, pin::Pin};
+use std::{ffi::c_void, path::Path};
 
 use objc2::{rc::Retained, runtime::ProtocolObject};
 use objc2_metal::MTLTexture;
 use unienc_common::{EncodingSystem, TryFromUnityNativeTexturePointer};
 
 use crate::{
-    audio::AudioToolboxEncoder, common::UnsafeSendRetained, metal::SharedTexture, mux::AVFMuxer,
+    audio::AudioToolboxEncoder, common::UnsafeSendRetained, mux::AVFMuxer,
     video::VideoToolboxEncoder,
 };
 use anyhow::Result;

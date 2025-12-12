@@ -14,6 +14,8 @@ mod entry_points {
     }
 }
 
+// statically linked for iOS
+// we add `unienc_` prefix to avoid name collision with other plugins
 #[cfg(target_os = "ios")]
 mod entry_points {
     use unienc_common::EncodingSystem;

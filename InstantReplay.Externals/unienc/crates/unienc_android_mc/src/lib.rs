@@ -64,8 +64,8 @@ impl<V: unienc_common::VideoEncoderOptions, A: unienc_common::AudioEncoderOption
     }
 
     fn is_blit_supported(&self) -> bool {
-        let s = vulkan::is_initialized();
-        s
+        
+        vulkan::is_initialized()
     }
     fn unity_plugin_load(interfaces: &unity_native_plugin::interface::UnityInterfaces) {
         vulkan::unity_plugin_load(interfaces);
