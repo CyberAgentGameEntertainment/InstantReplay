@@ -37,6 +37,7 @@ Instant Replay は Unity で直近のゲームプレイ動画をいつでも保�
     * [音声ソースの設定](#音声ソースの設定)
     * [録画状態を取得する](#録画状態を取得する)
   * [CRI サポート](#cri-サポート)
+  * [無制限録画](#無制限録画)
   * [レガシーモード](#レガシーモード)
     * [録画時間とフレームレートの設定](#録画時間とフレームレートの設定)
     * [サイズの設定](#サイズの設定)
@@ -119,8 +120,12 @@ Package Manager から "User Interfaces" サンプルをインポートしてく
 録画を行うには `RealtimeInstantReplaySession` を使用します。
 
 ```csharp
+using InstantReplay;
+
+var ct = destroyCancellationToken;
+
 // 録画開始
-using var session = RealtimeInstantReplaySession().CreateDefault();
+using var session = RealtimeInstantReplaySession.CreateDefault();
 
 // 〜 ゲームプレイ 〜
 await Task.Delay(10000, ct);
@@ -160,7 +165,7 @@ var options = new RealtimeEncodingOptions
     AudioInputQueueSizeSeconds = 1.0 // エンコード前にバッファリングされる最大音声入力時間（秒）
 };
 
-using var session = new RealtimeInstantReplaySession(options)
+using var session = new RealtimeInstantReplaySession(options);
 ```
 
 ### ポーズと再開
@@ -234,6 +239,25 @@ InstantReplay は [CRIWARE](https://game.criware.jp/) からの音声をキャ�
 2. Player Settings でシンボル `INSTANTREPLAY_CRI` を追加します。
 3. 必要な場合は `InstantReplay.Cri` アセンブリ参照を追加します。
 4. `RealtimeInstantReplaySession` コンストラクタの `audioSampleProvider` に `InstantReplay.Cri.CriAudioSampleProvider` を指定します。
+
+## 無制限録画
+
+`UnboundedRecordingSession` を使用すると、エンコードしたデータをメモリに保持せず直接ディスク上の MP4 ファイルに書き出します。これによって時間の制限なしに録画が行えます。コンストラクタで出力ファイルパスの指定が必要な以外は `RealtimeInstantReplaySession` と同様に使用できます。
+
+```csharp
+using InstantReplay;
+
+var ct = destroyCancellationToken;
+
+// 録画開始
+using var session = new UnboundedRecordingSession("out.mp4", RealtimeEncodingOptions.Default);
+
+// 〜 ゲームプレイ 〜
+await Task.Delay(10000, ct);
+
+// 録画停止と書き出し
+await session.CompleteAsync();
+```
 
 ## レガシーモード
 
