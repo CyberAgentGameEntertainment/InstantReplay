@@ -1,7 +1,7 @@
 mod serialization;
 use std::{ffi::c_void, ptr::NonNull};
 
-use anyhow::{anyhow, Context, Result};
+use crate::error::{AppleError, Result, OsStatusExt};
 use objc2::rc::Retained;
 use objc2_core_foundation::{
     kCFAllocatorDefault, kCFBooleanFalse, kCFBooleanTrue, CFBoolean, CFDictionary, CFNumber,
@@ -19,7 +19,7 @@ use objc2_video_toolbox::{
 use tokio::sync::mpsc;
 use unienc_common::{buffer::SharedBuffer, EncodedData, Encoder, EncoderInput, EncoderOutput, VideoSample};
 
-use crate::{OsStatus, common::UnsafeSendRetained, metal, MetalTexture};
+use crate::{common::UnsafeSendRetained, metal, MetalTexture};
 
 pub struct VideoToolboxEncoder {
     input: VideoToolboxEncoderInput,
@@ -127,7 +127,7 @@ impl Encoder for VideoToolboxEncoder {
 
     type OutputType = VideoToolboxEncoderOutput;
 
-    fn get(self) -> Result<(Self::InputType, Self::OutputType)> {
+    fn get(self) -> unienc_common::Result<(Self::InputType, Self::OutputType)> {
         Ok((self.input, self.output))
     }
 }
@@ -135,7 +135,7 @@ impl Encoder for VideoToolboxEncoder {
 impl EncoderInput for VideoToolboxEncoderInput {
     type Data = VideoSample<MetalTexture>;
 
-    async fn push(&mut self, data: Self::Data) -> Result<()> {
+    async fn push(&mut self, data: Self::Data) -> unienc_common::Result<()> {
         let buffer = match data.frame {
             unienc_common::VideoFrame::Bgra32(bgra32) => {
                 let buffer = bgra32.buffer;
@@ -151,12 +151,12 @@ impl EncoderInput for VideoToolboxEncoderInput {
                         bgra32.height as usize,
                         kCVPixelFormatType_32BGRA,
                         NonNull::new(pixel_data_ptr as *mut c_void)
-                            .context("Failed to create NonNull from pixel data pointer")?,
+                            .ok_or(AppleError::NonNullCreationFailed)?,
                         (bgra32.width * 4) as usize,
                         Some(release_pixel_buffer),
                         buffer_boxed_raw as *mut _,
                         None,
-                        NonNull::new(&mut buffer).context("Failed to create CVPixelBuffer")?,
+                        NonNull::new(&mut buffer).ok_or(AppleError::NonNullCreationFailed)?,
                     )
                 }
                 .to_result()
@@ -165,7 +165,7 @@ impl EncoderInput for VideoToolboxEncoderInput {
                     _ = unsafe { Box::from_raw(buffer_boxed_raw) };
                 })?;
 
-                unsafe { Retained::from_raw(buffer) }.context("CVPixelBuffer is null")?
+                unsafe { Retained::from_raw(buffer) }.ok_or(AppleError::PixelBufferNull)?
             }
             unienc_common::VideoFrame::BlitSource {
                 source,
@@ -178,17 +178,17 @@ impl EncoderInput for VideoToolboxEncoderInput {
             } => {
                 let width = self.width;
                 let height = self.height;
-                
+
                 let (tx, rx) = tokio::sync::oneshot::channel();
                 event_issuer
                     .issue_graphics_event(Box::new(move || {
                         let r = metal::custom_blit(&source.texture, width, height, flip_vertically, is_gamma_workflow);
-                        tx.send(r).map_err(|_e| anyhow!("Failed to send blit future")).unwrap();
+                        tx.send(r).map_err(|_e| AppleError::BlitFutureSendFailed).unwrap();
                     }), *crate::metal::EVENT_ID
                         .get()
-                        .context("Event ID is not reserved")?);
-                
-                let texture = rx.await? // failed to receive
+                        .ok_or(AppleError::EventIdNotReserved)?);
+
+                let texture = rx.await.map_err(|e| AppleError::from(e))? // failed to receive
                     ? // failed to issue blit
                     .await?; // blit failed
                 texture.pixel_buffer()
@@ -228,7 +228,7 @@ impl EncoderInput for VideoToolboxEncoderInput {
 impl EncoderOutput for VideoToolboxEncoderOutput {
     type Data = VideoEncodedData;
 
-    async fn pull(&mut self) -> Result<Option<Self::Data>> {
+    async fn pull(&mut self) -> unienc_common::Result<Option<Self::Data>> {
         Ok(self.rx.recv().await)
     }
 }
@@ -270,13 +270,13 @@ impl CompressionSession {
                 Some(handle_video_encode_output),
                 tx as *mut c_void,
                 NonNull::new(&mut session)
-                    .context("Failed to create NonNull from session pointer")?,
+                    .ok_or(AppleError::NonNullCreationFailed)?,
             )
             .to_result()?;
         }
 
         let session =
-            unsafe { Retained::from_raw(session).context("VTCompressionSession is null.")? };
+            unsafe { Retained::from_raw(session).ok_or(AppleError::CompressionSessionNull)? };
         unsafe {
             VTSessionSetProperty(
                 &session,

@@ -1,4 +1,3 @@
-use anyhow::Result;
 use jni::sys::JNI_VERSION_1_6;
 use jni::JavaVM;
 use std::ffi::{c_int, c_void};
@@ -9,10 +8,13 @@ use unienc_common::{EncodingSystem, TryFromUnityNativeTexturePointer};
 pub mod audio;
 pub mod common;
 pub mod config;
+pub mod error;
 mod java;
 pub mod mux;
 pub mod video;
 mod vulkan;
+
+pub use error::{AndroidError, Result};
 
 use audio::MediaCodecAudioEncoder;
 use mux::MediaMuxer;
@@ -51,16 +53,16 @@ impl<V: unienc_common::VideoEncoderOptions, A: unienc_common::AudioEncoderOption
         }
     }
 
-    fn new_video_encoder(&self) -> Result<Self::VideoEncoderType> {
-        MediaCodecVideoEncoder::new(&self.video_options)
+    fn new_video_encoder(&self) -> unienc_common::Result<Self::VideoEncoderType> {
+        MediaCodecVideoEncoder::new(&self.video_options).map_err(Into::into)
     }
 
-    fn new_audio_encoder(&self) -> Result<Self::AudioEncoderType> {
-        MediaCodecAudioEncoder::new(&self.audio_options)
+    fn new_audio_encoder(&self) -> unienc_common::Result<Self::AudioEncoderType> {
+        MediaCodecAudioEncoder::new(&self.audio_options).map_err(Into::into)
     }
 
-    fn new_muxer(&self, output_path: &Path) -> Result<Self::MuxerType> {
-        MediaMuxer::new(output_path, &self.video_options, &self.audio_options)
+    fn new_muxer(&self, output_path: &Path) -> unienc_common::Result<Self::MuxerType> {
+        MediaMuxer::new(output_path, &self.video_options, &self.audio_options).map_err(Into::into)
     }
 
     fn is_blit_supported(&self) -> bool {
@@ -81,11 +83,13 @@ pub struct VulkanTexture {
 }
 
 impl TryFromUnityNativeTexturePointer for VulkanTexture {
-    fn try_from_unity_native_texture_ptr(ptr: *mut c_void) -> Result<Self> {
+    fn try_from_unity_native_texture_ptr(
+        ptr: *mut c_void,
+    ) -> unienc_common::Result<Self> {
         // ptr is VkImage*
         let ptr = ptr as *mut ash::vk::Image;
         if ptr.is_null() {
-            return Err(anyhow::anyhow!("Null Vulkan texture pointer"));
+            return Err(AndroidError::NullVulkanTexture.into());
         }
         Ok(VulkanTexture {
             tex: unsafe { *ptr },

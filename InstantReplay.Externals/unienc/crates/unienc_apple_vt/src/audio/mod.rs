@@ -1,6 +1,6 @@
 use std::{ffi::c_void, ptr::NonNull};
 
-use anyhow::Result;
+use crate::error::{AppleError, Result, OsStatusExt};
 use bincode::{Decode, Encode};
 use objc2_audio_toolbox::{
     kAudioConverterCompressionMagicCookie, kAudioConverterEncodeBitRate,
@@ -18,7 +18,6 @@ use unienc_common::{
     AudioSample, EncodedData, Encoder, EncoderInput, EncoderOutput, UniencSampleKind,
 };
 
-use crate::OsStatus;
 
 pub struct AudioToolboxEncoder {
     input: AudioToolboxEncoderInput,
@@ -52,7 +51,7 @@ impl Encoder for AudioToolboxEncoder {
 
     type OutputType = AudioToolboxEncoderOutput;
 
-    fn get(self) -> anyhow::Result<(Self::InputType, Self::OutputType)> {
+    fn get(self) -> unienc_common::Result<(Self::InputType, Self::OutputType)> {
         Ok((self.input, self.output))
     }
 }
@@ -60,7 +59,7 @@ impl Encoder for AudioToolboxEncoder {
 impl EncoderInput for AudioToolboxEncoderInput {
     type Data = AudioSample;
 
-    async fn push(&mut self, data: Self::Data) -> anyhow::Result<()> {
+    async fn push(&mut self, data: Self::Data) -> unienc_common::Result<()> {
         let mut output_buffer_data = vec![0; self.max_output_packet_size as usize];
 
         let max_output_packets = 1;
@@ -92,7 +91,7 @@ impl EncoderInput for AudioToolboxEncoderInput {
                     sample_rate: self.sample_rate,
                     magic_cookie: magic_cookie.clone(),
                 };
-                self.tx.send(packet).await?;
+                self.tx.send(packet).await.map_err(|e| AppleError::from(e))?;
             }
 
             sample.is_some()
@@ -105,7 +104,7 @@ impl EncoderInput for AudioToolboxEncoderInput {
 }
 
 impl AudioToolboxEncoder {
-    pub fn new(options: &impl unienc_common::AudioEncoderOptions) -> anyhow::Result<Self> {
+    pub fn new(options: &impl unienc_common::AudioEncoderOptions) -> Result<Self> {
         let mut from = AudioStreamBasicDescription {
             mSampleRate: options.sample_rate() as f64,
             mFormatID: kAudioFormatLinearPCM,
@@ -158,7 +157,7 @@ impl AudioToolboxEncoder {
 impl EncoderOutput for AudioToolboxEncoderOutput {
     type Data = AudioPacket;
 
-    async fn pull(&mut self) -> Result<Option<Self::Data>> {
+    async fn pull(&mut self) -> unienc_common::Result<Option<Self::Data>> {
         Ok(self.rx.recv().await)
     }
 }

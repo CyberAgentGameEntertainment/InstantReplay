@@ -1,10 +1,9 @@
 use std::ffi::c_void;
 
 use crate::*;
-use anyhow::Context;
 use tokio::sync::Mutex;
 use unienc_common::{
-    buffer::SharedBuffer, EncoderInput, EncoderOutput, TryFromUnityNativeTexturePointer,
+    buffer::SharedBuffer, EncoderInput, EncoderOutput, ResultExt, TryFromUnityNativeTexturePointer,
     VideoFrame, VideoFrameBgra32, VideoSample,
 };
 
@@ -90,7 +89,7 @@ pub unsafe extern "C" fn unienc_video_encoder_push_blit_source(
             video_encoder_push_video_sample(runtime, input, sample, callback, user_data);
         }
         Err(err) => {
-            UniencError::from_anyhow(err).apply_callback(callback, user_data);
+            UniencError::from_common(err).apply_callback(callback, user_data);
         }
     }
 }
@@ -117,7 +116,7 @@ unsafe fn video_encoder_push_video_sample(
                 .push(sample)
                 .await
                 .context("Failed to push video sample")
-                .map_err(UniencError::from_anyhow),
+                .map_err(UniencError::from_common),
             Err(err) => Err(err),
         };
 
@@ -153,7 +152,7 @@ pub unsafe extern "C" fn unienc_video_encoder_pull(
                     .pull()
                     .await
                     .context("Failed to pull video sample")
-                    .map_err(UniencError::from_anyhow);
+                    .map_err(UniencError::from_common);
                 result
             }
             Err(err) => Err(err),

@@ -2,15 +2,17 @@
 #[cfg(not(any(target_os = "windows")))]
 compile_error!("This crate can only be compiled for Windows platforms.");
 
-use anyhow::Result;
-use std::{future::Future, path::Path};
+use std::path::Path;
 use unienc_common::{EncodingSystem, UnsupportedBlitData};
 
 pub mod audio;
 mod common;
+pub mod error;
 pub(crate) mod mft;
 pub mod mux;
 pub mod video;
+
+pub use error::{WindowsError, Result};
 
 use audio::MediaFoundationAudioEncoder;
 use mux::MediaFoundationMuxer;
@@ -49,16 +51,16 @@ impl<V: unienc_common::VideoEncoderOptions, A: unienc_common::AudioEncoderOption
         }
     }
 
-    fn new_video_encoder(&self) -> Result<Self::VideoEncoderType> {
-        MediaFoundationVideoEncoder::new(&self.video_options)
+    fn new_video_encoder(&self) -> unienc_common::Result<Self::VideoEncoderType> {
+        MediaFoundationVideoEncoder::new(&self.video_options).map_err(|e| e.into())
     }
 
-    fn new_audio_encoder(&self) -> Result<Self::AudioEncoderType> {
-        MediaFoundationAudioEncoder::new(&self.audio_options)
+    fn new_audio_encoder(&self) -> unienc_common::Result<Self::AudioEncoderType> {
+        MediaFoundationAudioEncoder::new(&self.audio_options).map_err(|e| e.into())
     }
 
-    fn new_muxer(&self, output_path: &Path) -> Result<Self::MuxerType> {
-        MediaFoundationMuxer::new(output_path, &self.video_options, &self.audio_options)
+    fn new_muxer(&self, output_path: &Path) -> unienc_common::Result<Self::MuxerType> {
+        MediaFoundationMuxer::new(output_path, &self.video_options, &self.audio_options).map_err(|e| e.into())
     }
 }
 

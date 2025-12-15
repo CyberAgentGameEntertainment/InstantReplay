@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::{fmt::Display, ops::Deref};
 
-use anyhow::Result;
+use crate::error::Result;
 use bincode::{BorrowDecode, Decode, Encode};
 use windows::core::GUID;
 use windows::core::{Interface, BSTR};
@@ -56,7 +56,7 @@ impl std::fmt::Debug for Payload {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let serializable: SerializablePayload = self
             .try_into()
-            .map_err(|e: anyhow::Error| bincode::error::EncodeError::OtherString(e.to_string())).unwrap();
+            .map_err(|e: crate::error::WindowsError| bincode::error::EncodeError::OtherString(e.to_string())).unwrap();
         serializable.fmt(f)
     }
 }
@@ -65,10 +65,10 @@ impl Encode for Payload {
     fn encode<E: bincode::enc::Encoder>(
         &self,
         encoder: &mut E,
-    ) -> Result<(), bincode::error::EncodeError> {
+    ) -> std::result::Result<(), bincode::error::EncodeError> {
         let serializable: SerializablePayload = self
             .try_into()
-            .map_err(|e: anyhow::Error| bincode::error::EncodeError::OtherString(e.to_string()))?;
+            .map_err(|e: crate::error::WindowsError| bincode::error::EncodeError::OtherString(e.to_string()))?;
         serializable.encode(encoder)
     }
 }
@@ -76,22 +76,22 @@ impl Encode for Payload {
 impl<Context> Decode<Context> for Payload {
     fn decode<D: bincode::de::Decoder<Context = Context>>(
         decoder: &mut D,
-    ) -> Result<Self, bincode::error::DecodeError> {
+    ) -> std::result::Result<Self, bincode::error::DecodeError> {
         let serializable = &SerializablePayload::decode(decoder)?;
         serializable
             .try_into()
-            .map_err(|e: anyhow::Error| bincode::error::DecodeError::OtherString(e.to_string()))
+            .map_err(|e: crate::error::WindowsError| bincode::error::DecodeError::OtherString(e.to_string()))
     }
 }
 
 impl<'de, Context> BorrowDecode<'de, Context> for Payload {
     fn borrow_decode<D: bincode::de::BorrowDecoder<'de, Context = Context>>(
         decoder: &mut D,
-    ) -> Result<Self, bincode::error::DecodeError> {
+    ) -> std::result::Result<Self, bincode::error::DecodeError> {
         let serializable = &SerializablePayload::borrow_decode(decoder)?;
         serializable
             .try_into()
-            .map_err(|e: anyhow::Error| bincode::error::DecodeError::OtherString(e.to_string()))
+            .map_err(|e: crate::error::WindowsError| bincode::error::DecodeError::OtherString(e.to_string()))
     }
 }
 
@@ -102,7 +102,7 @@ enum SerializablePayload {
 }
 
 impl TryFrom<&Payload> for SerializablePayload {
-    type Error = anyhow::Error;
+    type Error = crate::error::WindowsError;
 
     fn try_from(value: &Payload) -> std::result::Result<Self, Self::Error> {
         match value {
@@ -115,7 +115,7 @@ impl TryFrom<&Payload> for SerializablePayload {
 }
 
 impl TryFrom<&SerializablePayload> for Payload {
-    type Error = anyhow::Error;
+    type Error = crate::error::WindowsError;
 
     fn try_from(value: &SerializablePayload) -> std::result::Result<Self, Self::Error> {
         match value {
@@ -180,7 +180,7 @@ enum AttributeValue {
 }
 
 impl TryFrom<&IMFSample> for SerializableMFSample {
-    type Error = anyhow::Error;
+    type Error = crate::error::WindowsError;
 
     fn try_from(value: &IMFSample) -> std::result::Result<Self, Self::Error> {
         let attributes: SerializableMFAttributes = (&value.cast::<IMFAttributes>()?).try_into()?;
@@ -210,7 +210,7 @@ impl TryFrom<&IMFSample> for SerializableMFSample {
 }
 
 impl TryInto<IMFSample> for &SerializableMFSample {
-    type Error = anyhow::Error;
+    type Error = crate::error::WindowsError;
 
     fn try_into(self) -> std::result::Result<IMFSample, Self::Error> {
         let sample = unsafe { MFCreateSample()? };
@@ -236,9 +236,9 @@ impl TryInto<IMFSample> for &SerializableMFSample {
 }
 
 impl TryFrom<&IMFAttributes> for SerializableMFAttributes {
-    type Error = anyhow::Error;
+    type Error = crate::error::WindowsError;
 
-    fn try_from(from: &IMFAttributes) -> Result<Self, Self::Error> {
+    fn try_from(from: &IMFAttributes) -> std::result::Result<Self, Self::Error> {
         let count = unsafe { from.GetCount()? };
         let mut map = HashMap::<Guid, AttributeValue>::new();
         for i in 0..count {
@@ -282,7 +282,7 @@ impl TryFrom<&IMFAttributes> for SerializableMFAttributes {
 }
 
 impl SerializableMFAttributes {
-    pub fn apply(&self, target: &IMFAttributes) -> Result<()> {
+    pub fn apply(&self, target: &IMFAttributes) -> std::result::Result<(), crate::error::WindowsError> {
         for (guid, value) in &self.attributes {
             let guid = GUID::from_u128(guid.0);
             match value {

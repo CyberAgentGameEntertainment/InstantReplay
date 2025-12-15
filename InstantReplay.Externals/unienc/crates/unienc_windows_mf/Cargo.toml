@@ -6,7 +6,7 @@ license.workspace = true
 authors.workspace = true
 
 [dependencies]
-anyhow = { workspace = true }
+thiserror = { workspace = true }
 tokio = { version = "1.45.1", features = ["rt", "time", "macros", "sync"] }
 unienc_common = { workspace = true }
 bincode = { workspace = true }

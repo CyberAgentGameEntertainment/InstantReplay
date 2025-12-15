@@ -1,8 +1,7 @@
 use std::ffi::c_void;
 
-use anyhow::Context;
 use tokio::sync::Mutex;
-use unienc_common::{AudioSample, EncoderInput, EncoderOutput};
+use unienc_common::{AudioSample, EncoderInput, EncoderOutput, ResultExt};
 use crate::*;
 
 // Audio encoder input/output functions
@@ -41,7 +40,7 @@ pub unsafe extern "C" fn unienc_audio_encoder_push(
                     .push(sample)
                     .await
                     .context("Failed to push audio sample")
-                    .map_err(UniencError::from_anyhow),
+                    .map_err(UniencError::from_common),
                 Err(err) => Err(err),
             };
             result.apply_callback(callback, user_data);
@@ -75,7 +74,7 @@ pub unsafe extern "C" fn unienc_audio_encoder_pull(
                 .pull()
                 .await
                 .context("Failed to pull audio sample")
-                .map_err(UniencError::from_anyhow),
+                .map_err(UniencError::from_common),
             Err(err) => Err(err),
         };
         result.apply_callback(callback, user_data);

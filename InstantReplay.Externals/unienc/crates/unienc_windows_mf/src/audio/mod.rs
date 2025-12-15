@@ -1,4 +1,4 @@
-use anyhow::Result;
+use crate::error::Result;
 use bincode::{Decode, Encode};
 use tokio::sync::mpsc;
 use unienc_common::{
@@ -67,7 +67,7 @@ impl Encoder for MediaFoundationAudioEncoder {
     type InputType = AudioEncoderInputImpl;
     type OutputType = AudioEncoderOutputImpl;
 
-    fn get(self) -> Result<(Self::InputType, Self::OutputType)> {
+    fn get(self) -> unienc_common::Result<(Self::InputType, Self::OutputType)> {
         let media_type = Some(UnsafeSend(self.transform.output_type()?.clone()));
         Ok((
             AudioEncoderInputImpl {
@@ -97,7 +97,7 @@ pub struct AudioEncoderOutputImpl {
 impl EncoderInput for AudioEncoderInputImpl {
     type Data = AudioSample;
 
-    async fn push(&mut self, data: Self::Data) -> Result<()> {
+    async fn push(&mut self, data: Self::Data) -> unienc_common::Result<()> {
         let sample = UnsafeSend(unsafe { MFCreateSample()? });
 
         // BGRA to NV12
@@ -142,7 +142,7 @@ impl EncoderInput for AudioEncoderInputImpl {
 impl EncoderOutput for AudioEncoderOutputImpl {
     type Data = AudioEncodedData;
 
-    async fn pull(&mut self) -> Result<Option<Self::Data>> {
+    async fn pull(&mut self) -> unienc_common::Result<Option<Self::Data>> {
         if let Some(media_type) = self.media_type.take() {
             return Ok(Some(AudioEncodedData {
                 payload: Payload::Format(media_type),

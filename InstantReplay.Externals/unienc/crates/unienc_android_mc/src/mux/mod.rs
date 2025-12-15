@@ -1,4 +1,3 @@
-use anyhow::Result;
 use jni::{objects::JValue, sys::jint, JNIEnv};
 use std::{path::Path, sync::Arc};
 use tokio::sync::{oneshot, RwLock};
@@ -6,7 +5,7 @@ use unienc_common::{CompletionHandle, Muxer, MuxerInput};
 
 use crate::common::*;
 use crate::config::MUXER_OUTPUT_FORMAT_MPEG_4;
-
+use crate::error::{AndroidError, Result};
 use crate::java::*;
 
 pub struct MediaMuxer {
@@ -51,7 +50,7 @@ impl Muxer for MediaMuxer {
 
     fn get_inputs(
         self,
-    ) -> Result<(
+    ) -> unienc_common::Result<(
         Self::VideoInputType,
         Self::AudioInputType,
         Self::CompletionHandleType,
@@ -154,16 +153,16 @@ async fn push(
                     };
                     sender
                         .send(Ok(()))
-                        .map_err(|_| anyhow::anyhow!("failed to send start signal"))?;
+                        .map_err(|_| AndroidError::ChannelSendFailed("start"))?;
                 }
                 MuxerSharedState::Started => {
-                    return Err(anyhow::anyhow!("muxer already started"));
+                    return Err(AndroidError::MuxerAlreadyStarted);
                 }
             };
         }
         CommonEncodedDataContent::Buffer { data, buffer_flag } => {
             let Some(track_index) = track_index else {
-                return Err(anyhow::anyhow!("track does not have metadata"));
+                return Err(AndroidError::MissingTrackMetadata);
             };
             let env = &mut attach_current_thread()?;
             let flags = buffer_flag;
@@ -178,7 +177,7 @@ async fn push(
 impl MuxerInput for MediaMuxerVideoInput {
     type Data = CommonEncodedData;
 
-    async fn push(&mut self, data: Self::Data) -> Result<()> {
+    async fn push(&mut self, data: Self::Data) -> unienc_common::Result<()> {
         push(
             data,
             self.shared_state.clone(),
@@ -188,12 +187,13 @@ impl MuxerInput for MediaMuxerVideoInput {
             Some(self.original_height),
         )
         .await
+        .map_err(Into::into)
     }
 
-    async fn finish(self) -> Result<()> {
+    async fn finish(self) -> unienc_common::Result<()> {
         self.finish_tx
             .send(Ok(()))
-            .map_err(|_| anyhow::anyhow!("failed to send finish signal"))?;
+            .map_err(|_| unienc_common::CommonError::from(AndroidError::ChannelSendFailed("finish")))?;
         Ok(())
     }
 }
@@ -201,7 +201,7 @@ impl MuxerInput for MediaMuxerVideoInput {
 impl MuxerInput for MediaMuxerAudioInput {
     type Data = CommonEncodedData;
 
-    async fn push(&mut self, data: Self::Data) -> Result<()> {
+    async fn push(&mut self, data: Self::Data) -> unienc_common::Result<()> {
         push(
             data,
             self.shared_state.clone(),
@@ -211,33 +211,40 @@ impl MuxerInput for MediaMuxerAudioInput {
             None,
         )
         .await
+        .map_err(Into::into)
     }
 
-    async fn finish(self) -> Result<()> {
+    async fn finish(self) -> unienc_common::Result<()> {
         self.finish_tx
             .send(Ok(()))
-            .map_err(|_| anyhow::anyhow!("failed to send finish signal"))?;
+            .map_err(|_| unienc_common::CommonError::from(AndroidError::ChannelSendFailed("finish")))?;
         Ok(())
     }
 }
 
 impl CompletionHandle for MediaMuxerCompletionHandle {
-    async fn finish(self) -> Result<()> {
-        println!("waiting for all tracks to finish");
-
-        self.video_finish_rx.await??;
-        self.audio_finish_rx.await??;
-        // Stop and release muxer
-        let shared_state = self.shared_state.read().await;
-        let env = &mut attach_current_thread()?;
-        if let MuxerSharedState::Started = *shared_state {
-            stop_muxer(env, &self.muxer)?;
-        }
-
-        release_muxer(env, &self.muxer)?;
-
-        Ok(())
+    async fn finish(self) -> unienc_common::Result<()> {
+        finish_completion_handle_impl(self).await.map_err(Into::into)
     }
+}
+
+async fn finish_completion_handle_impl(
+    handle: MediaMuxerCompletionHandle,
+) -> Result<()> {
+    println!("waiting for all tracks to finish");
+
+    handle.video_finish_rx.await??;
+    handle.audio_finish_rx.await??;
+    // Stop and release muxer
+    let shared_state = handle.shared_state.read().await;
+    let env = &mut attach_current_thread()?;
+    if let MuxerSharedState::Started = *shared_state {
+        stop_muxer(env, &handle.muxer)?;
+    }
+
+    release_muxer(env, &handle.muxer)?;
+
+    Ok(())
 }
 
 // Helper functions for MediaMuxer
@@ -247,7 +254,7 @@ fn create_media_muxer(env: &mut JNIEnv, output_path: &Path) -> Result<SafeGlobal
 
     let path_str = output_path
         .to_str()
-        .ok_or_else(|| anyhow::anyhow!("Invalid output path"))?;
+        .ok_or(AndroidError::InvalidOutputPath)?;
     let path_java = to_java_string(env, path_str)?;
 
     let muxer = env.new_object(

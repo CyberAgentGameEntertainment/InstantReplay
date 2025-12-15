@@ -1,4 +1,4 @@
-use anyhow::Result;
+use crate::error::{CommonError, Result};
 use std::{sync::Arc, sync::Weak};
 
 pub struct SharedBufferPool {
@@ -32,7 +32,7 @@ impl SharedBufferPool {
 
         // limit=0 means unlimited
         if self.limit > 0 && current + size > self.limit {
-            return Err(anyhow::anyhow!("Buffer pool limit exceeded"));
+            return Err(CommonError::BufferPoolExceeded);
         }
 
         let len = Arc::new(size);

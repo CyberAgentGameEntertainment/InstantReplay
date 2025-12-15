@@ -3,7 +3,7 @@ use std::ops::Deref;
 use std::os::raw::c_void;
 use std::sync::Arc;
 use unity_native_plugin::graphics::RenderingEventAndData;
-use unienc_common::{EncodedData, UniencSampleKind};
+use unienc_common::{CategorizedError, EncodedData, ErrorCategory, UniencSampleKind};
 use crate::*;
 
 
@@ -62,6 +62,23 @@ pub enum UniencErrorKind {
     PlatformError = 10,
 }
 
+impl From<ErrorCategory> for UniencErrorKind {
+    fn from(category: ErrorCategory) -> Self {
+        match category {
+            ErrorCategory::General => UniencErrorKind::Error,
+            ErrorCategory::Initialization => UniencErrorKind::InitializationError,
+            ErrorCategory::Configuration => UniencErrorKind::ConfigurationError,
+            ErrorCategory::ResourceAllocation => UniencErrorKind::ResourceAllocationError,
+            ErrorCategory::Encoding => UniencErrorKind::EncodingError,
+            ErrorCategory::Muxing => UniencErrorKind::MuxingError,
+            ErrorCategory::Communication => UniencErrorKind::CommunicationError,
+            ErrorCategory::Timeout => UniencErrorKind::TimeoutError,
+            ErrorCategory::InvalidInput => UniencErrorKind::InvalidInput,
+            ErrorCategory::Platform => UniencErrorKind::PlatformError,
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct UniencError {
     pub kind: UniencErrorKind,
@@ -102,52 +119,13 @@ impl UniencError {
         drop(message);
     }
 
-    /// Convert an anyhow::Error to UniencError with appropriate categorization
-    pub fn from_anyhow(err: anyhow::Error) -> Self {
-        let message = format!("{err:?}").to_string();
-        let kind = Self::categorize_error(&message);
+    /// Convert a CommonError to UniencError using the error's category
+    pub fn from_common(err: unienc_common::CommonError) -> Self {
+        let kind = UniencErrorKind::from(err.category());
+        let message = err.to_string();
         Self {
             kind,
             message: Some(message),
-        }
-    }
-
-    /// Categorize error based on error message content
-    fn categorize_error(message: &str) -> UniencErrorKind {
-        // Convert to lowercase for case-insensitive matching
-        let lower_message = message.to_lowercase();
-
-        if lower_message.contains("failed to create")
-            || lower_message.contains("failed to initialize")
-        {
-            UniencErrorKind::InitializationError
-        } else if lower_message.contains("failed to configure")
-            || lower_message.contains("configuration")
-        {
-            UniencErrorKind::ConfigurationError
-        } else if lower_message.contains("null")
-            || lower_message.contains("buffer too small")
-            || lower_message.contains("no input buffer")
-            || lower_message.contains("memory")
-        {
-            UniencErrorKind::ResourceAllocationError
-        } else if lower_message.contains("encoding") || lower_message.contains("encode") {
-            UniencErrorKind::EncodingError
-        } else if lower_message.contains("mux") || lower_message.contains("writing") {
-            UniencErrorKind::MuxingError
-        } else if lower_message.contains("failed to send")
-            || lower_message.contains("channel")
-            || lower_message.contains("communication")
-        {
-            UniencErrorKind::CommunicationError
-        } else if lower_message.contains("timeout") {
-            UniencErrorKind::TimeoutError
-        } else if lower_message.contains("invalid") || lower_message.contains("unsupported") {
-            UniencErrorKind::InvalidInput
-        } else if lower_message.contains("osstatus") || lower_message.contains("media") {
-            UniencErrorKind::PlatformError
-        } else {
-            UniencErrorKind::Error // Default fallback
         }
     }
 
@@ -237,7 +215,7 @@ impl ApplyCallback<UniencCallback> for UniencError {
     }
 }
 
-impl ApplyCallback<UniencCallback> for anyhow::Result<(), UniencError> {
+impl ApplyCallback<UniencCallback> for Result<(), UniencError> {
     fn apply_callback(&self, callback: UniencCallback, user_data: SendPtr<c_void>) {
         match self {
             Ok(()) => unsafe { callback(user_data.into(), UniencErrorNative::SUCCESS) },
@@ -252,7 +230,7 @@ impl<Data: Default> ApplyCallback<UniencDataCallback<Data>> for UniencError {
     }
 }
 impl<T: EncodedData> ApplyCallback<UniencDataCallback<UniencSampleData>>
-for anyhow::Result<Option<T>, UniencError>
+for Result<Option<T>, UniencError>
 {
     fn apply_callback(
         &self,

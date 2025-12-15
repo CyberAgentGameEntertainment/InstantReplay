@@ -1,7 +1,8 @@
 use std::io::Cursor;
 
-use anyhow::{anyhow, Result};
-use cros_codecs::codec::h264::{nalu, parser::Nalu};
+use cros_codecs::codec::h264::parser::Nalu;
+
+use crate::error::{FFmpegError, Result};
 
 #[derive(Default)]
 pub struct NaluReader {
@@ -37,12 +38,12 @@ impl NaluReader {
     fn drain(&mut self, emit: &mut impl FnMut(&NalUnit)) -> Result<()> {
         if let Some((start_pos, mut nalu_pos)) = get_start_position(&self.current) {
             if start_pos != 0 {
-                return Err(anyhow!("Invalid start code"));
+                return Err(FFmpegError::Other("Invalid start code".into()));
             }
 
             while let Some((next, next_nalu_pos)) = get_start_position(&self.current[nalu_pos..]) {
                 let Ok(nalu) = Nalu::next(&mut Cursor::new(&self.current)) else {
-                    return Err(anyhow!("Invalid NALU"));
+                    return Err(FFmpegError::Other("Invalid NALU".into()));
                 };
 
                 let nal_unit = NalUnit {
@@ -71,7 +72,7 @@ impl NaluReader {
                 emit(&nal_unit);
                 Ok(())
             }
-            Err(err) => Err(anyhow!("{}", err)),
+            Err(err) => Err(FFmpegError::Other(format!("{}", err))),
         }
     }
 }
