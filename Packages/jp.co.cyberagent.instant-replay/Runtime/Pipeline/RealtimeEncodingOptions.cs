@@ -54,5 +54,28 @@ namespace InstantReplay
         public double? AudioLagAdjustmentThreshold { get; set; }
 
         public bool ForceReadback { get; set; }
+
+        public static ref readonly RealtimeEncodingOptions Default => ref DefaultValue; 
+        private static readonly RealtimeEncodingOptions DefaultValue =
+            new()
+            {
+                VideoOptions = new VideoEncoderOptions
+                {
+                    Width = 1280,
+                    Height = 720,
+                    FpsHint = 30,
+                    Bitrate = 2500000 // 2.5 Mbps
+                },
+                AudioOptions = new AudioEncoderOptions
+                {
+                    SampleRate = 44100,
+                    Channels = 2,
+                    Bitrate = 128000 // 128 kbps
+                },
+                MaxMemoryUsageBytesForCompressedFrames = 20 * 1024 * 1024, // 20 MiB
+                FixedFrameRate = 30.0,
+                VideoInputQueueSize = 5,
+                AudioInputQueueSizeSeconds = 1.0
+            };
     }
 }

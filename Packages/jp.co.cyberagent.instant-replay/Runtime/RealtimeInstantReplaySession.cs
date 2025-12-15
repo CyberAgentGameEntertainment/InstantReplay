@@ -173,28 +173,7 @@ namespace InstantReplay
         /// </summary>
         public static RealtimeInstantReplaySession CreateDefault()
         {
-            var options = new RealtimeEncodingOptions
-            {
-                VideoOptions = new VideoEncoderOptions
-                {
-                    Width = 1280,
-                    Height = 720,
-                    FpsHint = 30,
-                    Bitrate = 2500000 // 2.5 Mbps
-                },
-                AudioOptions = new AudioEncoderOptions
-                {
-                    SampleRate = 44100,
-                    Channels = 2,
-                    Bitrate = 128000 // 128 kbps
-                },
-                MaxMemoryUsageBytesForCompressedFrames = 20 * 1024 * 1024, // 20 MiB
-                FixedFrameRate = 30.0,
-                VideoInputQueueSize = 5,
-                AudioInputQueueSizeSeconds = 1.0
-            };
-
-            return new RealtimeInstantReplaySession(options);
+            return new RealtimeInstantReplaySession(RealtimeEncodingOptions.Default);
         }
 
         /// <summary>
