@@ -2,6 +2,7 @@
 // Copyright 2025 CyberAgent, Inc.
 // --------------------------------------------------------------
 
+using System;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -15,21 +16,29 @@ namespace InstantReplay
         private IAudioSampleProvider.ProvideAudioSamples _delegate;
 
         public AudioSampleProviderSubscription(IAudioSampleProvider provider, bool disposeProvider,
-            IPipelineInput<InputAudioFrame> next)
+            Action<Exception> onException, IPipelineInput<InputAudioFrame> next)
         {
             _provider = provider;
             _disposeProvider = disposeProvider;
             _next = next;
             provider.OnProvideAudioSamples += _delegate = (samples, channels, sampleRate, timestamp) =>
             {
-                if (!next.WillAccept()) return;
-
-                unsafe
+                try
                 {
-                    fixed (float* samplesPtr = samples)
+                    if (!next.WillAccept()) return;
+
+                    unsafe
                     {
-                        next.Push(new InputAudioFrame(samplesPtr, samples.Length, channels, sampleRate, timestamp));
+                        fixed (float* samplesPtr = samples)
+                        {
+                            next.Push(new InputAudioFrame(samplesPtr, samples.Length, channels, sampleRate, timestamp));
+                        }
                     }
+                }
+                catch (Exception ex)
+                {
+                    Unregister();
+                    onException?.Invoke(ex);
                 }
             };
         }

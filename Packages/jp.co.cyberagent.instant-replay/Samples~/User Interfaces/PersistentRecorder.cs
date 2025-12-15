@@ -70,7 +70,8 @@ namespace InstantReplay.Examples
                 }
             }
 
-            _currentSession = new RealtimeInstantReplaySession(new RealtimeEncodingOptions
+            var box = new Box<RealtimeInstantReplaySession>();
+            box.Value = _currentSession = new RealtimeInstantReplaySession(new RealtimeEncodingOptions
             {
                 VideoOptions = new VideoEncoderOptions
                 {
@@ -97,6 +98,13 @@ namespace InstantReplay.Examples
                 VideoInputQueueSize = 5, // Maximum number of raw frames to keep before encoding
                 AudioInputQueueSizeSeconds =
                     1.0 // Max queued audio input duration to be buffered before encoding, in seconds
+            }, onException: ex =>
+            {
+                Debug.LogException(ex);
+                if (box.Value == null || box.Value == _currentSession)
+                {
+                    NewSession();
+                }
             });
         }
 
@@ -142,6 +150,11 @@ namespace InstantReplay.Examples
         public void Resume()
         {
             _currentSession?.Resume();
+        }
+
+        private class Box<T>
+        {
+            public T Value;
         }
     }
 }
