@@ -12,6 +12,7 @@ namespace InstantReplay
     {
         private readonly AudioEncoder _audioEncoder;
         private readonly double _sampleRateInOptions;
+        private readonly IAsyncPipelineInput<EncodedFrame> _next;
         private readonly Task _transferTask;
 
         internal AudioEncoderInput(AudioEncoder audioEncoder, double sampleRateInOptions,
@@ -19,6 +20,7 @@ namespace InstantReplay
         {
             _audioEncoder = audioEncoder ?? throw new ArgumentNullException(nameof(audioEncoder));
             _sampleRateInOptions = sampleRateInOptions;
+            _next = next;
             _transferTask = TransferAsync(next);
         }
 
@@ -50,6 +52,7 @@ namespace InstantReplay
         public void Dispose()
         {
             _audioEncoder?.Dispose();
+            _next.Dispose();
         }
 
         private async Task TransferAsync(IAsyncPipelineInput<EncodedFrame> next)

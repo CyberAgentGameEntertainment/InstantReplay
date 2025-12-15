@@ -12,10 +12,12 @@ namespace InstantReplay
     {
         private readonly Task _transferTask;
         private readonly VideoEncoder _videoEncoder;
+        private readonly IAsyncPipelineInput<EncodedFrame> _next;
 
         internal VideoEncoderInput(VideoEncoder videoEncoder, IAsyncPipelineInput<EncodedFrame> next)
         {
             _videoEncoder = videoEncoder ?? throw new ArgumentNullException(nameof(videoEncoder));
+            _next = next;
             _transferTask = TransferAsync(next);
         }
 
@@ -80,6 +82,7 @@ namespace InstantReplay
         public void Dispose()
         {
             _videoEncoder?.Dispose();
+            _next?.Dispose();
         }
 
         private async Task TransferAsync(IAsyncPipelineInput<EncodedFrame> next)
