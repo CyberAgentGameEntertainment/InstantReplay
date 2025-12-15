@@ -83,6 +83,8 @@ namespace InstantReplay
                     ILogger.LogExceptionCore(ex);
                 }
             };
+            
+            
 
             if (!options.ForceReadback && encodingSystem.IsBlitSupported())
             {
@@ -91,10 +93,7 @@ namespace InstantReplay
                         _temporalController,
                         fixedFrameInterval,
                         options.VideoLagAdjustmentThreshold).AsInput(
-                        new NativeBlitTransform(
-                            encodingSystem,
-                            options.VideoOptions.Width,
-                            options.VideoOptions.Height).AsInput(
+                        new DirectFrameDataTransform().AsInput(
                             new DroppingChannelInput<LazyVideoFrameData>(
                                 options.VideoInputQueueSize,
                                 onLazyVideoFrameDataDropped,

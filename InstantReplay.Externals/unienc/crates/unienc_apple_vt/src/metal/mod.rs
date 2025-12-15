@@ -4,11 +4,11 @@ use std::{
     ptr::NonNull,
     sync::{Arc, Mutex, OnceLock},
 };
-
+use std::os::raw::c_int;
 use block2::RcBlock;
 use objc2::{rc::Retained, runtime::ProtocolObject};
 use objc2_core_foundation::{kCFAllocatorDefault, kCFBooleanTrue, CFDictionary};
-use objc2_core_video::{kCVPixelBufferMetalCompatibilityKey, kCVPixelBufferPixelFormatTypeKey, kCVPixelFormatType_32BGRA, CVMetalTexture, CVMetalTextureCache, CVMetalTextureGetTexture, CVPixelBuffer, CVPixelBufferCreate};
+use objc2_core_video::{kCVPixelBufferMetalCompatibilityKey, kCVPixelFormatType_32BGRA, CVMetalTexture, CVMetalTextureCache, CVMetalTextureGetTexture, CVPixelBuffer, CVPixelBufferCreate};
 use objc2_foundation::NSString;
 use objc2_metal::{
     MTLBuffer, MTLCommandBuffer, MTLCommandEncoder, MTLCullMode, MTLDevice, MTLIndexType,
@@ -20,7 +20,6 @@ use objc2_metal::{
     MTLVertexFormat, MTLVertexStepFunction,
 };
 use tokio::sync::oneshot;
-use unienc_common::{BlitOptions, IntoRaw, TryFromRaw};
 use unity_native_plugin::{
     graphics::{GfxDeviceEventType, UnityGraphics},
     metal::objc2::{UnityGraphicsMetalV1, UnityGraphicsMetalV1Interface},
@@ -32,6 +31,7 @@ use crate::{common::UnsafeSendRetained, OsStatus};
 
 static GRAPHICS: OnceLock<Mutex<UnityGraphics>> = OnceLock::new();
 static CONTEXT: OnceLock<Mutex<GlobalContext>> = OnceLock::new();
+pub static EVENT_ID: OnceLock<c_int> = OnceLock::new();
 
 pub(crate) fn is_initialized() -> bool {
     CONTEXT.get().is_some()
@@ -46,18 +46,7 @@ struct GlobalContext {
     indices: UnsafeSendRetained<ProtocolObject<dyn MTLBuffer>>,
 }
 
-mod entry_points {
-    unity_native_plugin::unity_native_plugin_entry_point! {
-        fn unity_plugin_load(interfaces: &unity_native_plugin::interface::UnityInterfaces) {
-            super::unity_plugin_load(interfaces);
-        }
-        fn unity_plugin_unload() {
-            super::unity_plugin_unload();
-        }
-    }
-}
-
-fn unity_plugin_load(interfaces: &unity_native_plugin::interface::UnityInterfaces) {
+pub(crate) fn unity_plugin_load(interfaces: &unity_native_plugin::interface::UnityInterfaces) {
     println!("unienc: unity_plugin_load");
     let graphics = interfaces.interface::<UnityGraphics>().unwrap();
 
@@ -71,7 +60,6 @@ fn unity_plugin_load(interfaces: &unity_native_plugin::interface::UnityInterface
     // "load on startup" is unreliable
     on_device_event(GfxDeviceEventType::Initialize);
 }
-fn unity_plugin_unload() {}
 
 #[repr(C)]
 struct VertexUniforms {
@@ -82,13 +70,20 @@ extern "system" fn on_device_event(ev_type: GfxDeviceEventType) {
     println!("unienc: on_device_event {ev_type:?}");
     match ev_type {
         unity_native_plugin::graphics::GfxDeviceEventType::Initialize => {
-            let renderer = GRAPHICS.get().unwrap().lock().unwrap().renderer();
+            let graphics = GRAPHICS.get().unwrap().lock().unwrap();
+            let renderer = graphics.renderer();
 
             if renderer == unity_native_plugin::graphics::GfxRenderer::Metal {
                 if CONTEXT.get().is_some() {
                     // already initialized
                     return;
                 }
+
+                let event_id = graphics.reserve_event_id_range(1);
+
+                EVENT_ID.set(event_id).unwrap();
+                println!("unienc: reserved event id {event_id}");
+
                 let interfaces = unity_native_plugin::interface::UnityInterfaces::get();
                 let metal = interfaces.interface::<UnityGraphicsMetalV1>().unwrap();
                 let device = metal.metal_device().unwrap();
@@ -257,7 +252,10 @@ fragment FShaderOutput fragment_main(VertexOut in [[stage_in]],
 
 pub(crate) fn custom_blit(
     source: &ProtocolObject<dyn MTLTexture>,
-    options: BlitOptions,
+    dst_width: u32,
+    dst_height: u32,
+    flip_vertically: bool,
+    is_gamma_workflow: bool,
 ) -> Result<impl Future<Output = Result<SharedTexture>> + Send> {
     let context = CONTEXT
         .get()
@@ -283,10 +281,10 @@ pub(crate) fn custom_blit(
         Retained::from_raw(cache).context("Failed to create Retained for CVMetalTextureCache")?
     };
 
-    let width = options.dst_width;
-    let height = options.dst_height;
+    let width = dst_width;
+    let height = dst_height;
 
-    let shared_texture = SharedTexture::new(&cache, width as usize, height as usize, !options.is_gamma_workflow)?; // with gamma workflow, input is unorm with gamma color space
+    let shared_texture = SharedTexture::new(&cache, width as usize, height as usize, !is_gamma_workflow)?; // with gamma workflow, input is unorm with gamma color space
 
     let command_buffer = metal
         .current_command_buffer()
@@ -320,7 +318,7 @@ pub(crate) fn custom_blit(
         .newSamplerStateWithDescriptor(&sampler_desc)
         .context("Failed to create sampler state")?;
 
-    if options.is_gamma_workflow {
+    if is_gamma_workflow {
         encoder.setRenderPipelineState(&context.pipeline_state);
     } else {
         encoder.setRenderPipelineState(&context.pipeline_state_srgb);
@@ -333,12 +331,11 @@ pub(crate) fn custom_blit(
 
     // scale to fit
     let pixel_scale = f32::min(
-        options.dst_width as f32 / source.width() as f32,
-        options.dst_height as f32 / source.height() as f32,
+        dst_width as f32 / source.width() as f32,
+        dst_height as f32 / source.height() as f32,
     );
-    let render_scale_x = pixel_scale * source.width() as f32 / options.dst_width as f32;
-    let render_scale_y = pixel_scale * source.height() as f32 / options.dst_height as f32;
-    let flip_vertically = options.flip_vertically;
+    let render_scale_x = pixel_scale * source.width() as f32 / dst_width as f32;
+    let render_scale_y = pixel_scale * source.height() as f32 / dst_height as f32;
 
     let mut vert_uniforms = if flip_vertically {
         VertexUniforms {
@@ -418,20 +415,6 @@ struct SharedTextureInner {
     pixel_buffer: UnsafeSendRetained<CVPixelBuffer>,
 }
 
-impl TryFromRaw for SharedTexture {
-    unsafe fn try_from_raw(ptr: *mut Self) -> Result<Self> {
-        Ok(SharedTexture {
-            inner: Arc::from_raw(ptr as *mut Mutex<SharedTextureInner>),
-        })
-    }
-}
-
-impl IntoRaw for SharedTexture {
-    fn into_raw(self) -> *mut Self {
-        Arc::into_raw(self.inner) as *mut Self
-    }
-}
-
 impl SharedTexture {
     pub fn new(cache: &CVMetalTextureCache, width: usize, height: usize, srgb: bool) -> Result<Self> {
         let pixel_format = kCVPixelFormatType_32BGRA;
@@ -486,7 +469,7 @@ impl SharedTexture {
     }
 
     pub fn metal_texture(&self) -> Retained<ProtocolObject<dyn MTLTexture>> {
-        unsafe { CVMetalTextureGetTexture(&self.inner.lock().unwrap().texture).unwrap() }
+        CVMetalTextureGetTexture(&self.inner.lock().unwrap().texture).unwrap()
     }
 
     pub fn pixel_buffer(&self) -> Retained<CVPixelBuffer> {

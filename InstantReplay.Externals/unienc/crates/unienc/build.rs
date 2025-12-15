@@ -3,12 +3,15 @@ use csbindgen::Builder;
 fn main() {
     common_builder()
         .input_extern_file("src/lib.rs")
-        .input_extern_file("src/audio.rs")
-        .input_extern_file("src/mux.rs")
-        .input_extern_file("src/video.rs")
-        .input_extern_file("src/public_types.rs")
+        .input_extern_file("src/api/audio.rs")
+        .input_extern_file("src/api/mux.rs")
+        .input_extern_file("src/api/video.rs")
+        .input_extern_file("src/api/runtime.rs")
+        .input_extern_file("src/api/encoding_system.rs")
+        .input_extern_file("src/types.rs")
         .input_extern_file("src/buffer.rs")
-        .input_extern_file("src/blit.rs")
+        .input_extern_file("src/graphics.rs")
+        .input_extern_file("src/ffi.rs")
         .generate_csharp_file("../../../../Packages/jp.co.cyberagent.instant-replay/UniEnc/Runtime/Generated/NativeMethods.g.cs")
         .unwrap();
 }

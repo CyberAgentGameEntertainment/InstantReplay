@@ -2,7 +2,8 @@ use anyhow::Result;
 use bincode::{Decode, Encode};
 use jni::{
     objects::{JByteArray, JObject, JString, JValue},
-    sys::{jboolean, jint, jlong}, JNIEnv,
+    sys::{jboolean, jint, jlong},
+    JNIEnv,
 };
 use std::{collections::HashMap, fmt::Display, sync::Arc, time::Duration};
 use unienc_common::{EncodedData, UniencSampleKind, VideoFrameBgra32};
@@ -44,9 +45,7 @@ impl MediaCodec {
         let codec = SafeGlobalRef::new(env, codec.l()?)?;
 
         Ok(Self {
-            inner: Arc::new(MediaCodecInner {
-                codec,
-            }),
+            inner: Arc::new(MediaCodecInner { codec }),
         })
     }
 
@@ -220,6 +219,107 @@ impl MediaCodec {
         let format_obj = format.l()?;
         format_to_map(env, &format_obj)
     }
+
+    pub fn create_input_surface(&self) -> Result<SafeGlobalRef> {
+        let env = &mut attach_current_thread()?;
+        let surface = call_object_method(
+            env,
+            self.inner.codec.as_obj(),
+            "createInputSurface",
+            "()Landroid/view/Surface;",
+            &[],
+        )?;
+        SafeGlobalRef::new(env, surface)
+    }
+
+    pub fn signal_end_of_input_stream(&self) -> Result<()> {
+        let env = &attach_current_thread()?;
+        call_void_method(
+            env,
+            self.inner.codec.as_obj(),
+            "signalEndOfInputStream",
+            "()V",
+            &[],
+        )
+    }
+
+    pub fn print_codec_info(&self) -> Result<()> {
+        let env = &mut attach_current_thread()?;
+        let codec_info = call_object_method(
+            env,
+            self.inner.codec.as_obj(),
+            "getCodecInfo",
+            "()Landroid/media/MediaCodecInfo;",
+            &[],
+        )?;
+
+        // getCanonicalName
+        let canonical_name = env
+            .call_method(&codec_info, "getCanonicalName", "()Ljava/lang/String;", &[])?
+            .l()?;
+        let canonical_name_str = JString::from(canonical_name);
+        let canonical_name_rust = env.get_string(&canonical_name_str)?.to_str()?.to_string();
+
+        // isHardwareAccelerated
+        let is_hardware_accelerated = env
+            .call_method(codec_info, "isHardwareAccelerated", "()Z", &[])?
+            .z()?;
+
+        println!(
+            "MediaCodec Info: Canonical Name: {}, Hardware Accelerated: {}",
+            canonical_name_rust, is_hardware_accelerated
+        );
+
+        Ok(())
+    }
+
+    pub fn print_metrics(&self) -> Result<()> {
+        let env = &mut attach_current_thread()?;
+        let metrics = call_object_method(
+            env,
+            self.inner.codec.as_obj(),
+            "getMetrics",
+            "()Landroid/os/PersistableBundle;",
+            &[],
+        )?;
+
+        // Get the key set
+        let key_set = env
+            .call_method(&metrics, "keySet", "()Ljava/util/Set;", &[])?
+            .l()?;
+
+        let iterator = env
+            .call_method(&key_set, "iterator", "()Ljava/util/Iterator;", &[])?
+            .l()?;
+
+        println!("MediaCodec Metrics:");
+        while env.call_method(&iterator, "hasNext", "()Z", &[])?.z()? {
+            let key = env
+                .call_method(&iterator, "next", "()Ljava/lang/Object;", &[])?
+                .l()?;
+            let key_str = JString::from(key);
+            let key_rust = env.get_string(&key_str)?.to_str()?.to_string();
+
+            let value = env
+                .call_method(
+                    &metrics,
+                    "get",
+                    "(Ljava/lang/String;)Ljava/lang/Object;",
+                    &[JValue::Object(&key_str)],
+                )?
+                .l()?;
+
+            let value_str = env
+                .call_method(&value, "toString", "()Ljava/lang/String;", &[])?
+                .l()?;
+            let value_jstr = JString::from(value_str);
+            let value_rust = env.get_string(&value_jstr)?.to_str()?.to_string();
+
+            println!("  {}: {}", key_rust, value_rust);
+        }
+
+        Ok(())
+    }
 }
 
 impl Drop for MediaCodecInner {
@@ -317,7 +417,11 @@ pub struct ImagePlane {
 
 impl Display for ImagePlane {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "ImagePlane(ptr: {:?}, pixel_stride: {}, row_stride: {})", self.ptr, self.pixel_stride, self.row_stride)
+        write!(
+            f,
+            "ImagePlane(ptr: {:?}, pixel_stride: {}, row_stride: {})",
+            self.ptr, self.pixel_stride, self.row_stride
+        )
     }
 }
 
@@ -412,7 +516,6 @@ pub enum MediaFormatValue {
     String(String),
     ByteBuffer(Vec<u8>),
 }
-
 
 /// Create MediaCodec BufferInfo
 pub fn create_buffer_info(env: &mut JNIEnv) -> Result<SafeGlobalRef> {
@@ -630,7 +733,7 @@ pub(crate) async fn pull_encoded_data_with_codec(
             }
         }
         if sleep {
-            tokio::time::sleep(Duration::from_millis(10)).await;
+            tokio::task::yield_now().await;
         }
     }
 }
@@ -728,6 +831,242 @@ pub(crate) fn format_to_map(
         }
     }
     Ok(map)
+}
+
+/// ImageWriter wrapper (API 29+)
+/// Used to write HardwareBuffer-backed images to MediaCodec input surface
+pub struct ImageWriter {
+    writer: SafeGlobalRef,
+}
+
+impl ImageWriter {
+    /// Create a new ImageWriter
+    /// - API 33+: Uses ImageWriter.Builder with explicit HardwareBuffer usage flags for VIDEO_ENCODE
+    /// - API 29-32: Uses ImageWriter.newInstance(Surface, int, int) with RGBA_8888 format
+    /// - API 28 and below: Not supported (caller should use Bgra32 mode instead)
+    pub fn new(surface: &SafeGlobalRef, max_images: i32, width: i32, height: i32) -> Result<Self> {
+        let env = &mut attach_current_thread()?;
+
+        // Check API level to determine which method to use (uses cached value)
+        let api_level = get_android_api_level()?;
+
+        let writer = if api_level >= 33 {
+            // API 33+: Use ImageWriter.Builder with explicit usage flags
+            println!("Using ImageWriter.Builder for API level {}", api_level);
+            Self::new_with_builder(env, surface, max_images, width, height)?
+        } else {
+            // API 29-32: Use ImageWriter.newInstance with format parameter
+            println!(
+                "Using ImageWriter.newInstance with RGBA_8888 format for API level {}",
+                api_level
+            );
+            Self::new_with_static_method(env, surface, max_images)?
+        };
+
+        let writer = SafeGlobalRef::new(env, writer)?;
+        Ok(Self { writer })
+    }
+
+    /// Create ImageWriter using Builder (API 33+)
+    fn new_with_builder<'a>(
+        env: &mut JNIEnv<'a>,
+        surface: &SafeGlobalRef,
+        max_images: i32,
+        width: i32,
+        height: i32,
+    ) -> Result<JObject<'a>> {
+        // Create ImageWriter.Builder
+        let builder_class = env.find_class("android/media/ImageWriter$Builder")?;
+        let builder = env.new_object(
+            &builder_class,
+            "(Landroid/view/Surface;)V",
+            &[JValue::Object(surface.as_obj())],
+        )?;
+
+        // Set max images
+        let builder = env
+            .call_method(
+                &builder,
+                "setMaxImages",
+                "(I)Landroid/media/ImageWriter$Builder;",
+                &[JValue::Int(max_images)],
+            )?
+            .l()?;
+
+        // Set size
+        let builder = env
+            .call_method(
+                &builder,
+                "setWidthAndHeight",
+                "(II)Landroid/media/ImageWriter$Builder;",
+                &[JValue::Int(width), JValue::Int(height)],
+            )?
+            .l()?;
+
+        // Set HardwareBuffer format (RGBA_8888 = 1)
+        let builder = env
+            .call_method(
+                &builder,
+                "setHardwareBufferFormat",
+                "(I)Landroid/media/ImageWriter$Builder;",
+                &[JValue::Int(1)], // HardwareBuffer.RGBA_8888
+            )?
+            .l()?;
+
+        // Set usage flags:
+        // USAGE_GPU_SAMPLED_IMAGE (0x100) | USAGE_GPU_COLOR_OUTPUT (0x200) | USAGE_VIDEO_ENCODE (0x10000)
+        const USAGE_GPU_SAMPLED_IMAGE: i64 = 0x100;
+        const USAGE_GPU_COLOR_OUTPUT: i64 = 0x200;
+        const USAGE_VIDEO_ENCODE: i64 = 0x10000;
+        let usage = USAGE_GPU_SAMPLED_IMAGE | USAGE_GPU_COLOR_OUTPUT | USAGE_VIDEO_ENCODE;
+
+        let builder = env
+            .call_method(
+                &builder,
+                "setUsage",
+                "(J)Landroid/media/ImageWriter$Builder;",
+                &[JValue::Long(usage)],
+            )?
+            .l()?;
+
+        // Build the ImageWriter
+        let writer = env
+            .call_method(&builder, "build", "()Landroid/media/ImageWriter;", &[])?
+            .l()?;
+
+        Ok(writer)
+    }
+
+    /// Create ImageWriter using static newInstance method (API 29-32)
+    /// Uses newInstance(Surface, int, int) to specify RGBA_8888 format
+    fn new_with_static_method<'a>(
+        env: &mut JNIEnv<'a>,
+        surface: &SafeGlobalRef,
+        max_images: i32,
+    ) -> Result<JObject<'a>> {
+        // PixelFormat.RGBA_8888 = 0x1 (1)
+        const PIXEL_FORMAT_RGBA_8888: i32 = 0x1;
+
+        let writer_class = env.find_class("android/media/ImageWriter")?;
+        // Use newInstance(Surface, int, int) which allows specifying format (API 29+)
+        let writer = env
+            .call_static_method(
+                &writer_class,
+                "newInstance",
+                "(Landroid/view/Surface;II)Landroid/media/ImageWriter;",
+                &[
+                    JValue::Object(surface.as_obj()),
+                    JValue::Int(max_images),
+                    JValue::Int(PIXEL_FORMAT_RGBA_8888),
+                ],
+            )?
+            .l()?;
+
+        Ok(writer)
+    }
+
+    /// Dequeue an available input image
+    pub fn dequeue_input_image(&self) -> Result<ImageWriterImage> {
+        let env = &mut attach_current_thread()?;
+        let image = env
+            .call_method(
+                self.writer.as_obj(),
+                "dequeueInputImage",
+                "()Landroid/media/Image;",
+                &[],
+            )?
+            .l()?;
+
+        if image.is_null() {
+            return Err(anyhow::anyhow!("dequeueInputImage returned null"));
+        }
+
+        let image_ref = SafeGlobalRef::new(env, image)?;
+        Ok(ImageWriterImage { image: image_ref })
+    }
+
+    /// Queue an input image with timestamp
+    pub fn queue_input_image(&self, image: ImageWriterImage, timestamp_ns: i64) -> Result<()> {
+        let env = &mut attach_current_thread()?;
+
+        // Set timestamp on the image
+        env.call_method(
+            image.image.as_obj(),
+            "setTimestamp",
+            "(J)V",
+            &[JValue::Long(timestamp_ns)],
+        )?;
+
+        // Queue the image
+        env.call_method(
+            self.writer.as_obj(),
+            "queueInputImage",
+            "(Landroid/media/Image;)V",
+            &[JValue::Object(image.image.as_obj())],
+        )?;
+
+        Ok(())
+    }
+}
+
+impl Drop for ImageWriter {
+    fn drop(&mut self) {
+        if let Ok(env) = attach_current_thread() {
+            let _ = call_void_method(&env, self.writer.as_obj(), "close", "()V", &[]);
+        }
+    }
+}
+
+/// Image from ImageWriter
+pub struct ImageWriterImage {
+    image: SafeGlobalRef,
+}
+
+impl ImageWriterImage {
+    /// Get the HardwareBuffer associated with this image
+    pub fn get_hardware_buffer(&self) -> Result<*mut ndk_sys::AHardwareBuffer> {
+        let env = &mut attach_current_thread()?;
+
+        // Get HardwareBuffer from Image
+        let hardware_buffer = env
+            .call_method(
+                self.image.as_obj(),
+                "getHardwareBuffer",
+                "()Landroid/hardware/HardwareBuffer;",
+                &[],
+            )?
+            .l()?;
+
+        if hardware_buffer.is_null() {
+            return Err(anyhow::anyhow!("getHardwareBuffer returned null"));
+        }
+
+        // Convert Java HardwareBuffer to native AHardwareBuffer*
+        // This acquires a reference to the AHardwareBuffer
+        let ahb = unsafe {
+            ndk_sys::AHardwareBuffer_fromHardwareBuffer(env.get_raw(), hardware_buffer.as_raw())
+        };
+
+        // Close the Java HardwareBuffer object to prevent resource leak warning
+        // The native AHardwareBuffer reference is still valid
+        env.call_method(&hardware_buffer, "close", "()V", &[])?;
+
+        if ahb.is_null() {
+            return Err(anyhow::anyhow!(
+                "AHardwareBuffer_fromHardwareBuffer returned null"
+            ));
+        }
+
+        Ok(ahb)
+    }
+}
+
+impl Drop for ImageWriterImage {
+    fn drop(&mut self) {
+        if let Ok(mut env) = attach_current_thread() {
+            let _ = env.call_method(self.image.as_obj(), "close", "()V", &[]);
+        }
+    }
 }
 
 /// Write ARGB data to YUV image planes with padding for 16-byte alignment
@@ -840,4 +1179,24 @@ pub(crate) fn map_to_format<'a>(
         }
     }
     Ok(format)
+}
+
+/// Cached Android API level
+static API_LEVEL_CACHE: std::sync::OnceLock<i32> = std::sync::OnceLock::new();
+
+/// Get Android API level from Build.VERSION.SDK_INT (cached)
+pub fn get_android_api_level() -> Result<i32> {
+    if let Some(&level) = API_LEVEL_CACHE.get() {
+        return Ok(level);
+    }
+
+    let env = &mut attach_current_thread()?;
+    let version_class = env.find_class("android/os/Build$VERSION")?;
+    let sdk_int = env
+        .get_static_field(&version_class, "SDK_INT", "I")?
+        .i()?;
+
+    // Cache the result (ignore if already set by another thread)
+    let _ = API_LEVEL_CACHE.set(sdk_int);
+    Ok(sdk_int)
 }
