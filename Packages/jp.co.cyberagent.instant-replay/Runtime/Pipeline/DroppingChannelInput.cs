@@ -47,6 +47,20 @@ namespace InstantReplay
 
         public void Push(T value)
         {
+            if (_processVideoFramesTask is { IsCompleted: true, Exception: { } ex })
+            {
+                try
+                {
+                    _onDrop?.Invoke(value);
+                }
+                catch (Exception ex1)
+                {
+                    ILogger.LogExceptionCore(ex1);
+                }
+
+                throw ex;
+            }
+
             if (!_inner.TryWrite(value))
                 _onDrop?.Invoke(value);
         }
@@ -75,19 +89,12 @@ namespace InstantReplay
         {
             try
             {
-                try
-                {
-                    await foreach (var value in reader.ReadAllAsync().ConfigureAwait(false))
-                        await _next.PushAsync(value).ConfigureAwait(false);
-                }
-                finally
-                {
-                    await _next.CompleteAsync();
-                }
+                await foreach (var value in reader.ReadAllAsync().ConfigureAwait(false))
+                    await _next.PushAsync(value).ConfigureAwait(false);
             }
-            catch (Exception ex) when (ex is not OperationCanceledException)
+            finally
             {
-                ILogger.LogExceptionCore(ex);
+                await _next.CompleteAsync();
             }
         }
     }

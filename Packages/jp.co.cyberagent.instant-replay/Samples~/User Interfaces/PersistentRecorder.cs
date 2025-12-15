@@ -4,6 +4,7 @@
 
 using System;
 using System.IO;
+using System.Threading;
 using System.Threading.Tasks;
 using UniEnc;
 using UnityEngine;
@@ -57,6 +58,9 @@ namespace InstantReplay.Examples
                 return;
             }
 
+            // We are on the main thread because isActiveAndEnabled is successfully called
+            var mainThread = SynchronizationContext.Current;
+
             if (_currentSession != null)
             {
                 if (allowStopCurrentSession)
@@ -103,7 +107,7 @@ namespace InstantReplay.Examples
                 Debug.LogException(ex);
                 if (box.Value == null || box.Value == _currentSession)
                 {
-                    NewSession();
+                    mainThread.Post(_ => NewSession(), null);
                 }
             });
         }

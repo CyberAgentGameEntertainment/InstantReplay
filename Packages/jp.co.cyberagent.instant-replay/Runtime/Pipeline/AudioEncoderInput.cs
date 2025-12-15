@@ -11,8 +11,8 @@ namespace InstantReplay
     internal class AudioEncoderInput : IAsyncPipelineInput<PcmAudioFrame>
     {
         private readonly AudioEncoder _audioEncoder;
-        private readonly double _sampleRateInOptions;
         private readonly IAsyncPipelineInput<EncodedFrame> _next;
+        private readonly double _sampleRateInOptions;
         private readonly Task _transferTask;
 
         internal AudioEncoderInput(AudioEncoder audioEncoder, double sampleRateInOptions,
@@ -24,7 +24,24 @@ namespace InstantReplay
             _transferTask = TransferAsync(next);
         }
 
-        public async ValueTask PushAsync(PcmAudioFrame value)
+        public ValueTask PushAsync(PcmAudioFrame value)
+        {
+            return ValueTaskUtils.WhenAny(PushCoreAsync(value), new ValueTask(_transferTask));
+        }
+
+        public ValueTask CompleteAsync(Exception exception = null)
+        {
+            _audioEncoder.CompleteInput();
+            return new ValueTask(_transferTask);
+        }
+
+        public void Dispose()
+        {
+            _audioEncoder?.Dispose();
+            _next.Dispose();
+        }
+
+        public async ValueTask PushCoreAsync(PcmAudioFrame value)
         {
             using var _ = value;
 
@@ -43,31 +60,7 @@ namespace InstantReplay
             }
         }
 
-        public ValueTask CompleteAsync(Exception exception = null)
-        {
-            _audioEncoder.CompleteInput();
-            return new ValueTask(_transferTask);
-        }
-
-        public void Dispose()
-        {
-            _audioEncoder?.Dispose();
-            _next.Dispose();
-        }
-
         private async Task TransferAsync(IAsyncPipelineInput<EncodedFrame> next)
-        {
-            try
-            {
-                await TransformAsyncCore(next);
-            }
-            catch (Exception ex)
-            {
-                ILogger.LogExceptionCore(ex);
-            }
-        }
-
-        private async Task TransformAsyncCore(IAsyncPipelineInput<EncodedFrame> next)
         {
             try
             {
