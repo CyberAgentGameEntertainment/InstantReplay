@@ -1,13 +1,12 @@
 using System;
+using System.Collections.Concurrent;
 using System.Runtime.InteropServices;
-using System.Threading;
 using System.Threading.Tasks;
 using AOT;
 using UniEnc.Native;
 using UnityEngine;
 using UnityEngine.Experimental.Rendering;
 using UnityEngine.Rendering;
-using Object = UnityEngine.Object;
 
 namespace UniEnc
 {
@@ -215,6 +214,8 @@ namespace UniEnc
             }
         }
 
+        #region Graphics Event
+
         private static Action<nint, int, nint> _onIssueGraphicsEvent;
         private static nint? _onIssueGraphicsEventPtr;
 
@@ -229,14 +230,22 @@ namespace UniEnc
         {
             try
             {
-                if (SynchronizationContext.Current?.GetType().Assembly != typeof(Object).Assembly)
+                if (!PlayerLoopEntryPoint.IsMainThread)
                 {
                     // not on main thread
-                    PlayerLoopEntryPoint.PostAfterUpdate(static ctx =>
+                    if (!GraphicsEventArguments.Pool.TryDequeue(out var dequeued))
+                        dequeued = new GraphicsEventArguments();
+
+                    dequeued.EventFuncPtr = eventFuncPtr;
+                    dequeued.EventId = eventId;
+                    dequeued.Context = context;
+
+                    PlayerLoopEntryPoint.MainThreadContext.Post(static ctx =>
                     {
-                        var (eventFuncPtr, eventId, context) = ((nint, int, nint))ctx;
-                        OnIssueGraphicsEvent(eventFuncPtr, eventId, context);
-                    }, (eventFuncPtr, eventId, context));
+                        if (ctx is not GraphicsEventArguments args) return;
+                        OnIssueGraphicsEvent(args.EventFuncPtr, args.EventId, args.Context);
+                        GraphicsEventArguments.Pool.Enqueue(args);
+                    }, dequeued);
                 }
                 else
                 {
@@ -257,5 +266,15 @@ namespace UniEnc
                 }
             }
         }
+
+        private class GraphicsEventArguments
+        {
+            public static readonly ConcurrentQueue<GraphicsEventArguments> Pool = new();
+            public nint Context;
+            public nint EventFuncPtr;
+            public int EventId;
+        }
+
+        #endregion
     }
 }

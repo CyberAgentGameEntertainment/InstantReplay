@@ -4,6 +4,7 @@
 
 using System;
 using System.Linq;
+using System.Threading;
 using UnityEngine;
 using UnityEngine.LowLevel;
 using UnityEngine.PlayerLoop;
@@ -12,11 +13,16 @@ namespace UniEnc
 {
     internal static class PlayerLoopEntryPoint
     {
+        private static Thread _mainThread;
+        public static bool IsMainThread => Thread.CurrentThread == _mainThread;
+        public static SynchronizationContext MainThreadContext { get; private set; }
         public static event Action OnAfterUpdate;
 
         [RuntimeInitializeOnLoadMethod]
         private static void Initialize()
         {
+            _mainThread = Thread.CurrentThread;
+            MainThreadContext = SynchronizationContext.Current;
             var system = PlayerLoop.GetCurrentPlayerLoop();
 
             InsertAfter<Update.ScriptRunBehaviourUpdate>(
@@ -65,18 +71,6 @@ namespace UniEnc
 
         private struct AfterUpdate
         {
-        }
-
-        public static void PostAfterUpdate<T>(Action<T> action, T context)
-        {
-            OnAfterUpdate += PooledActionOnce<(Action<T>, T)>.Get(static (ctx, wrapper) =>
-            {
-                OnAfterUpdate -= wrapper;
-
-                var (action, context) = ctx;
-                action(context);
-
-            }, (action, context)).Wrapper;
         }
     }
 }
