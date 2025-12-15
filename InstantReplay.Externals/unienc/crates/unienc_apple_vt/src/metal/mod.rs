@@ -25,9 +25,9 @@ use unity_native_plugin::{
     metal::objc2::{UnityGraphicsMetalV1, UnityGraphicsMetalV1Interface},
 };
 
-use anyhow::{anyhow, Context, Result};
+use crate::error::{AppleError, Result, OsStatusExt};
 
-use crate::{common::UnsafeSendRetained, OsStatus};
+use crate::common::UnsafeSendRetained;
 
 static GRAPHICS: OnceLock<Mutex<UnityGraphics>> = OnceLock::new();
 static CONTEXT: OnceLock<Mutex<GlobalContext>> = OnceLock::new();
@@ -52,7 +52,7 @@ pub(crate) fn unity_plugin_load(interfaces: &unity_native_plugin::interface::Uni
 
     GRAPHICS
         .set(Mutex::new(graphics))
-        .map_err(|_e| anyhow!("Failed to set graphics"))
+        .map_err(|_e| AppleError::GlobalStateSetFailed)
         .unwrap();
 
     graphics.register_device_event_callback(Some(on_device_event));
@@ -240,7 +240,7 @@ fragment FShaderOutput fragment_main(VertexOut in [[stage_in]],
                         vertices: vertices.into(),
                         indices: indices.into(),
                     }))
-                    .map_err(|_e| anyhow!("Failed to set metal"))
+                    .map_err(|_e| AppleError::GlobalStateSetFailed)
                     .unwrap();
             }
         }
@@ -259,9 +259,9 @@ pub(crate) fn custom_blit(
 ) -> Result<impl Future<Output = Result<SharedTexture>> + Send> {
     let context = CONTEXT
         .get()
-        .context("Context is not initialized")?
+        .ok_or(AppleError::MetalNotInitialized)?
         .lock()
-        .map_err(|e| anyhow!(e.to_string()))?;
+        .map_err(|e| AppleError::Other(e.to_string()))?;
     let metal = context.metal;
     let device = &context.device;
 
@@ -272,13 +272,13 @@ pub(crate) fn custom_blit(
             None,
             device,
             None,
-            NonNull::new(&mut cache).context("Failed to get NonNull for CVMetalTextureCache")?,
+            NonNull::new(&mut cache).ok_or(AppleError::MetalTextureCacheCreationFailed)?,
         )
         .to_result()?
     };
 
     let cache = unsafe {
-        Retained::from_raw(cache).context("Failed to create Retained for CVMetalTextureCache")?
+        Retained::from_raw(cache).ok_or(AppleError::MetalTextureCacheNull)?
     };
 
     let width = dst_width;
@@ -288,7 +288,7 @@ pub(crate) fn custom_blit(
 
     let command_buffer = metal
         .current_command_buffer()
-        .context("Failed to get current command buffer")?;
+        .ok_or(AppleError::CommandBufferNotAvailable)?;
     metal.end_current_command_encoder();
 
     let color_attachment_desc = MTLRenderPassColorAttachmentDescriptor::new();
@@ -305,7 +305,7 @@ pub(crate) fn custom_blit(
 
     let encoder = command_buffer
         .renderCommandEncoderWithDescriptor(&render_pass_descriptor)
-        .context("Failed to create render command encoder")?;
+        .ok_or(AppleError::RenderCommandEncoderCreationFailed)?;
 
     let sampler_desc = MTLSamplerDescriptor::new();
     sampler_desc.setSAddressMode(MTLSamplerAddressMode::ClampToEdge);
@@ -316,7 +316,7 @@ pub(crate) fn custom_blit(
 
     let sampler_state = device
         .newSamplerStateWithDescriptor(&sampler_desc)
-        .context("Failed to create sampler state")?;
+        .ok_or(AppleError::SamplerStateCreationFailed)?;
 
     if is_gamma_workflow {
         encoder.setRenderPipelineState(&context.pipeline_state);
@@ -350,12 +350,12 @@ pub(crate) fn custom_blit(
     let vert_uniforms = unsafe {
         device.newBufferWithBytes_length_options(
             NonNull::new(&mut vert_uniforms as *mut VertexUniforms as *mut _)
-                .context("Failed to create NonNull for vertex uniforms")?,
+                .ok_or(AppleError::NonNullCreationFailed)?,
             std::mem::size_of::<VertexUniforms>(),
             MTLResourceOptions::CPUCacheModeWriteCombined,
         )
     }
-    .context("Failed to create vertex uniforms buffer")?;
+    .ok_or(AppleError::VertexUniformsBufferCreationFailed)?;
 
     unsafe { encoder.setVertexBuffer_offset_atIndex(Some(&vert_uniforms), 0, 1) };
 
@@ -401,7 +401,7 @@ pub(crate) fn custom_blit(
     let block_ptr = RcBlock::into_raw(block);
 
     unsafe { command_buffer.addCompletedHandler(block_ptr) };
-    Ok(async move { rx.await.map_err(|e| anyhow!(e)) })
+    Ok(async move { rx.await.map_err(AppleError::from) })
 }
 
 #[derive(Debug)]
@@ -434,12 +434,12 @@ impl SharedTexture {
                 height,
                 pixel_format,
                 Some(pixel_buffer_attrs.as_opaque()),
-                NonNull::new(&mut buffer).context("Failed to create CVPixelBuffer")?,
+                NonNull::new(&mut buffer).ok_or(AppleError::NonNullCreationFailed)?,
             )
         }
         .to_result()?;
 
-        let buffer = unsafe { Retained::from_raw(buffer) }.context("CVPixelBuffer is null")?;
+        let buffer = unsafe { Retained::from_raw(buffer) }.ok_or(AppleError::PixelBufferNull)?;
 
         let mut texture: *mut CVMetalTexture = std::ptr::null_mut();
         unsafe {
@@ -452,13 +452,12 @@ impl SharedTexture {
                 width,
                 height,
                 0,
-                NonNull::new(&mut texture).context("Failed to create CVMetalTexture")?,
+                NonNull::new(&mut texture).ok_or(AppleError::NonNullCreationFailed)?,
             )
         }
-        .to_result()
-        .context("Failed to create CVMetalTexture")?;
+        .to_result()?;
         let texture = unsafe { Retained::from_raw(texture) }
-            .context("Failed to get MTLTexture from CVMetalTexture")?;
+            .ok_or(AppleError::MetalTextureGetFailed)?;
 
         Ok(Self {
             inner: Arc::new(Mutex::new(SharedTextureInner {

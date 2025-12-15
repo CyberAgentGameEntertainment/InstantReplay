@@ -1,4 +1,4 @@
-use anyhow::Result;
+use crate::error::{WindowsError, Result};
 use bincode::{Decode, Encode};
 use tokio::sync::mpsc;
 use unienc_common::{
@@ -73,7 +73,7 @@ impl Encoder for MediaFoundationVideoEncoder {
     type InputType = VideoEncoderInputImpl;
     type OutputType = VideoEncoderOutputImpl;
 
-    fn get(self) -> Result<(Self::InputType, Self::OutputType)> {
+    fn get(self) -> unienc_common::Result<(Self::InputType, Self::OutputType)> {
         let media_type = Some(UnsafeSend(self.transform.output_type()?.clone()));
         Ok((
             VideoEncoderInputImpl {
@@ -101,11 +101,9 @@ pub struct VideoEncoderOutputImpl {
 impl EncoderInput for VideoEncoderInputImpl {
     type Data = VideoSample<UnsupportedBlitData>;
 
-    async fn push(&mut self, data: Self::Data) -> Result<()> {
+    async fn push(&mut self, data: Self::Data) -> unienc_common::Result<()> {
         let VideoFrame::Bgra32(frame) = data.frame else {
-            return Err(anyhow::anyhow!(
-                "MediaFoundationVideoEncoder only supports Bgra32 frames"
-            ));
+            return Err(WindowsError::UnsupportedVideoFrameFormat.into());
         };
         let sample = UnsafeSend(unsafe { MFCreateSample()? });
 
@@ -145,7 +143,7 @@ impl EncoderInput for VideoEncoderInputImpl {
 impl EncoderOutput for VideoEncoderOutputImpl {
     type Data = VideoEncodedData;
 
-    async fn pull(&mut self) -> Result<Option<Self::Data>> {
+    async fn pull(&mut self) -> unienc_common::Result<Option<Self::Data>> {
         if let Some(media_type) = self.media_type.take() {
             return Ok(Some(VideoEncodedData {
                 payload: Payload::Format(media_type),

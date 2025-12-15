@@ -9,7 +9,7 @@ authors.workspace = true
 crate-type = ["cdylib", "staticlib", "rlib"]
 
 [dependencies]
-anyhow = { workspace = true, features = ["backtrace", "std"] }
+thiserror = { workspace = true }
 bincode = { version = "2.0.1", features = ["serde"] }
 futures = "0.3.31"
 rand = "0.9.1"

@@ -1,13 +1,20 @@
-use anyhow::Result;
+use std::io;
 use std::sync::{Arc, Weak};
+use thiserror::Error;
 use tokio::runtime::EnterGuard;
+
+#[derive(Error, Debug)]
+pub enum RuntimeError {
+    #[error("Failed to create tokio runtime: {0}")]
+    TokioRuntimeCreation(#[from] io::Error),
+}
 
 pub struct Runtime {
     tokio_runtime: Arc<tokio::runtime::Runtime>,
 }
 
 impl Runtime {
-    pub fn new() -> Result<Runtime> {
+    pub fn new() -> Result<Runtime, RuntimeError> {
         let tokio_runtime = Arc::new(tokio::runtime::Runtime::new()?);
         Ok(Self { tokio_runtime })
     }

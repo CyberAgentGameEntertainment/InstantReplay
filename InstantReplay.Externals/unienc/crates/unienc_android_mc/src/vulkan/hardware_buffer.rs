@@ -1,5 +1,5 @@
+use crate::error::{AndroidError, Result};
 use crate::vulkan::types::{VulkanImageHandle, VulkanImageViewHandle, VulkanMemoryHandle};
-use anyhow::{anyhow, Result};
 use ash::vk;
 use std::sync::Arc;
 
@@ -49,7 +49,7 @@ impl HardwareBufferImage {
                 &mut ahb_properties,
             )
         }
-        .map_err(|e| anyhow!("Failed to get AHardwareBuffer properties: {:?}", e))?;
+        .map_err(AndroidError::HardwareBufferPropertiesFailed)?;
 
         // Extract values after the mutable borrow ends
         let allocation_size = ahb_properties.allocation_size;
@@ -90,7 +90,7 @@ impl HardwareBufferImage {
 
         let image = VulkanImageHandle::new(
             unsafe { device.create_image(&image_create_info, None) }
-                .map_err(|e| anyhow!("Failed to create image from AHardwareBuffer: {:?}", e))?,
+                .map_err(AndroidError::HardwareBufferImageCreationFailed)?,
             device.clone(),
         );
 
@@ -111,13 +111,13 @@ impl HardwareBufferImage {
 
         let memory = VulkanMemoryHandle::new(
             unsafe { device.allocate_memory(&alloc_info, None) }
-                .map_err(|e| anyhow!("Failed to allocate memory for AHardwareBuffer: {:?}", e))?,
+                .map_err(AndroidError::HardwareBufferMemoryAllocationFailed)?,
             device.clone(),
         );
 
         // Bind memory to image
         unsafe { device.bind_image_memory(*image, *memory, 0) }
-            .map_err(|e| anyhow!("Failed to bind image memory: {:?}", e))?;
+            .map_err(AndroidError::ImageMemoryBindFailed)?;
 
         // Create image view
         let view_create_info = vk::ImageViewCreateInfo::default()
@@ -143,14 +143,12 @@ impl HardwareBufferImage {
         if format == vk::Format::UNDEFINED {
             // External format requires YCbCr conversion, which is more complex
             // For VIDEO_ENCODE usage with RGBA_8888, we shouldn't hit this path
-            return Err(anyhow!(
-                "External format (YUV) not yet supported, expected RGBA format"
-            ));
+            return Err(AndroidError::UnsupportedGraphicsFormat(0));
         }
 
         let view = VulkanImageViewHandle::new(
             unsafe { device.create_image_view(&view_create_info, None) }
-                .map_err(|e| anyhow!("Failed to create image view: {:?}", e))?,
+                .map_err(AndroidError::ImageViewCreationFailed)?,
             device.clone(),
         );
 
@@ -190,5 +188,5 @@ fn find_memory_type_index(
             return Ok(i);
         }
     }
-    Err(anyhow!("No suitable memory type found"))
+    Err(AndroidError::NoSuitableMemoryType)
 }

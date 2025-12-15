@@ -2,9 +2,8 @@ use std::ffi::{c_char, CStr};
 use std::os::raw::c_void;
 use std::path::Path;
 use std::sync::Arc;
-use anyhow::Context;
 use tokio::sync::Mutex;
-use unienc_common::{Encoder, EncodingSystem, Muxer};
+use unienc_common::{Encoder, EncodingSystem, Muxer, ResultExt};
 use crate::*;
 
 #[no_mangle]
@@ -56,12 +55,12 @@ pub unsafe extern "C" fn unienc_new_video_encoder(
                     true
                 }
                 Err(err) => {
-                    UniencError::from_anyhow(err).apply_callback(on_error, user_data);
+                    UniencError::from_common(err).apply_callback(on_error, user_data);
                     false
                 }
             },
             Err(err) => {
-                UniencError::from_anyhow(err).apply_callback(on_error, user_data);
+                UniencError::from_common(err).apply_callback(on_error, user_data);
                 false
             }
         }
@@ -95,12 +94,12 @@ pub unsafe extern "C" fn unienc_new_audio_encoder(
                     true
                 }
                 Err(err) => {
-                    UniencError::from_anyhow(err).apply_callback(on_error, user_data);
+                    UniencError::from_common(err).apply_callback(on_error, user_data);
                     false
                 }
             },
             Err(err) => {
-                UniencError::from_anyhow(err).apply_callback(on_error, user_data);
+                UniencError::from_common(err).apply_callback(on_error, user_data);
                 false
             }
         }
@@ -151,13 +150,13 @@ pub unsafe extern "C" fn unienc_new_muxer(
                         true
                     }
                     Err(err) => {
-                        UniencError::from_anyhow(err).apply_callback(on_error, user_data);
+                        UniencError::from_common(err).apply_callback(on_error, user_data);
                         false
                     }
                 }
             }
             Err(err) => {
-                UniencError::from_anyhow(err).apply_callback(on_error, user_data);
+                UniencError::from_common(err).apply_callback(on_error, user_data);
                 false
             }
         }

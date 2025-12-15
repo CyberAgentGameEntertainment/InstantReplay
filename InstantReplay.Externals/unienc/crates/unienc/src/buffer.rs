@@ -43,7 +43,7 @@ pub extern "C" fn unienc_shared_buffer_pool_alloc(
             true
         }
         Err(err) => {
-            UniencError::from_anyhow(err).apply_callback(on_error, user_data);
+            UniencError::from_common(err).apply_callback(on_error, user_data);
             false
         }
     }

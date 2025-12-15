@@ -3,11 +3,17 @@ use std::ffi::{c_int, CString};
 use std::io::{BufRead, BufReader, PipeReader};
 use std::os::unix::io::FromRawFd;
 use std::thread;
-use anyhow::Result;
+use thiserror::Error;
 
 use ndk_sys::__android_log_write;
 
 const ANDROID_LOG_INFO: c_int = 4;
+
+#[derive(Error, Debug)]
+pub enum AndroidApiError {
+    #[error("Failed to create pipe")]
+    PipeCreationFailed,
+}
 
 #[no_mangle]
 pub unsafe extern "C" fn JNI_OnLoad(vm: *mut c_void, reserved: *mut c_void) -> c_int {
@@ -26,10 +32,10 @@ pub fn log_to_logcat(tag: &str, message: &str) {
 }
 
 // redirect stdout to logcat
-pub unsafe fn set_stdout_redirect(log_tag: &'static str) -> Result<()> {
+pub unsafe fn set_stdout_redirect(log_tag: &'static str) -> Result<(), AndroidApiError> {
     let mut pipe_fds = [0; 2];
     if libc::pipe(pipe_fds.as_mut_ptr()) == -1 {
-        return Err(anyhow::anyhow!("Failed to create pipe"));
+        return Err(AndroidApiError::PipeCreationFailed);
     }
     libc::dup2(pipe_fds[1], libc::STDOUT_FILENO);
     libc::dup2(pipe_fds[1], libc::STDERR_FILENO);
@@ -38,7 +44,7 @@ pub unsafe fn set_stdout_redirect(log_tag: &'static str) -> Result<()> {
         let pipe_read_end = PipeReader::from_raw_fd(pipe_fds[0]);
         let reader = BufReader::new(pipe_read_end);
 
-        for line in reader.lines().map_while(Result::ok) {
+        for line in reader.lines().map_while(|r| r.ok()) {
             log_to_logcat(log_tag, &line);
         }
     });

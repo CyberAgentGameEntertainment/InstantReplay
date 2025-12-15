@@ -4,10 +4,12 @@ use std::future::Future;
 use std::path::Path;
 
 use crate::buffer::SharedBuffer;
-use anyhow::Result;
 use bincode::{Decode, Encode};
 
 pub mod buffer;
+pub mod error;
+
+pub use error::{CategorizedError, CommonError, ErrorCategory, OptionExt, Result, ResultExt};
 
 pub trait Encoder {
     type InputType: EncoderInput + 'static;
@@ -81,9 +83,7 @@ pub struct UnsupportedBlitData;
 
 impl TryFromUnityNativeTexturePointer for UnsupportedBlitData {
     fn try_from_unity_native_texture_ptr(_ptr: *mut c_void) -> Result<Self> {
-        Err(anyhow::anyhow!(
-            "Blit not supported in this encoding system"
-        ))
+        Err(CommonError::BlitNotSupported)
     }
 }
 

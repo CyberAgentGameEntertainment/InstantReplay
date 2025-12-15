@@ -1,8 +1,8 @@
-use anyhow::Result;
 use jni::{objects::JValue, signature::ReturnType, sys::jint, JNIEnv};
 use std::time::Duration;
 use unienc_common::{AudioSample, Encoder, EncoderInput, EncoderOutput};
 
+use crate::error::{AndroidError, Result};
 use crate::{
     common::{media_codec_buffer_flag::BUFFER_FLAG_END_OF_STREAM, *},
     config::{format_keys::*, *},
@@ -32,7 +32,7 @@ impl Encoder for MediaCodecAudioEncoder {
     type InputType = MediaCodecAudioEncoderInput;
     type OutputType = MediaCodecAudioEncoderOutput;
 
-    fn get(self) -> Result<(Self::InputType, Self::OutputType)> {
+    fn get(self) -> unienc_common::Result<(Self::InputType, Self::OutputType)> {
         Ok((self.input, self.output))
     }
 }
@@ -92,7 +92,7 @@ impl Drop for MediaCodecAudioEncoderInput {
                 if buffer_index == media_codec_errors::INFO_TRY_AGAIN_LATER {
                     std::thread::sleep(Duration::from_millis(10));
                 } else {
-                    return Err(anyhow::anyhow!("No input buffer available"));
+                    return Err(AndroidError::NoInputBuffer);
                 }
             }
         }()
@@ -103,63 +103,72 @@ impl Drop for MediaCodecAudioEncoderInput {
 impl EncoderInput for MediaCodecAudioEncoderInput {
     type Data = AudioSample;
 
-    async fn push(&mut self, data: Self::Data) -> Result<()> {
-        // Convert i16 samples to byte array
-        let byte_data_vec = i16_to_bytes(&data.data);
-        let mut byte_data = byte_data_vec.as_slice();
-
-        while !byte_data.is_empty() {
-            // Get input buffer
-            let buffer_index = self
-                .codec
-                .dequeue_input_buffer(Duration::from_millis(100))?;
-            if buffer_index >= 0 {
-                let input_buffer = self.codec.get_input_buffer(buffer_index)?;
-                {
-                    let env = &mut attach_current_thread()?;
-                    let (_base_ptr, capacity, position) =
-                        get_direct_buffer_info(env, input_buffer.as_obj())?;
-
-                    let bytes_to_write = std::cmp::min(byte_data.len(), capacity - position);
-                    crate::common::write_to_buffer(
-                        env,
-                        &input_buffer,
-                        &byte_data[..bytes_to_write],
-                    )?;
-                    byte_data = &byte_data[bytes_to_write..];
-
-                    // Calculate timestamp in microseconds
-                    let timestamp_us = (data.timestamp_in_samples as f64 / self.sample_rate as f64
-                        * 1_000_000.0) as i64;
-
-                    self.last_timestamp = timestamp_us;
-
-                    // Queue input buffer
-                    self.codec.queue_input_buffer(
-                        buffer_index,
-                        0,
-                        bytes_to_write,
-                        timestamp_us,
-                        0,
-                    )?;
-                }
-            } else if buffer_index == media_codec_errors::INFO_TRY_AGAIN_LATER {
-                std::thread::sleep(Duration::from_millis(10));
-                continue;
-            } else {
-                return Err(anyhow::anyhow!("No input buffer available"));
-            }
-        }
-
-        Ok(())
+    async fn push(&mut self, data: Self::Data) -> unienc_common::Result<()> {
+        push_impl(self, data).await.map_err(Into::into)
     }
+}
+
+async fn push_impl(
+    this: &mut MediaCodecAudioEncoderInput,
+    data: AudioSample,
+) -> Result<()> {
+    // Convert i16 samples to byte array
+    let byte_data_vec = i16_to_bytes(&data.data);
+    let mut byte_data = byte_data_vec.as_slice();
+
+    while !byte_data.is_empty() {
+        // Get input buffer
+        let buffer_index = this
+            .codec
+            .dequeue_input_buffer(Duration::from_millis(100))?;
+        if buffer_index >= 0 {
+            let input_buffer = this.codec.get_input_buffer(buffer_index)?;
+            {
+                let env = &mut attach_current_thread()?;
+                let (_base_ptr, capacity, position) =
+                    get_direct_buffer_info(env, input_buffer.as_obj())?;
+
+                let bytes_to_write = std::cmp::min(byte_data.len(), capacity - position);
+                crate::common::write_to_buffer(
+                    env,
+                    &input_buffer,
+                    &byte_data[..bytes_to_write],
+                )?;
+                byte_data = &byte_data[bytes_to_write..];
+
+                // Calculate timestamp in microseconds
+                let timestamp_us = (data.timestamp_in_samples as f64 / this.sample_rate as f64
+                    * 1_000_000.0) as i64;
+
+                this.last_timestamp = timestamp_us;
+
+                // Queue input buffer
+                this.codec.queue_input_buffer(
+                    buffer_index,
+                    0,
+                    bytes_to_write,
+                    timestamp_us,
+                    0,
+                )?;
+            }
+        } else if buffer_index == media_codec_errors::INFO_TRY_AGAIN_LATER {
+            std::thread::sleep(Duration::from_millis(10));
+            continue;
+        } else {
+            return Err(AndroidError::NoInputBuffer);
+        }
+    }
+
+    Ok(())
 }
 
 impl EncoderOutput for MediaCodecAudioEncoderOutput {
     type Data = CommonEncodedData;
 
-    async fn pull(&mut self) -> Result<Option<Self::Data>> {
-        pull_encoded_data_with_codec(&self.codec, &mut self.end_of_stream).await
+    async fn pull(&mut self) -> unienc_common::Result<Option<Self::Data>> {
+        pull_encoded_data_with_codec(&self.codec, &mut self.end_of_stream)
+            .await
+            .map_err(Into::into)
     }
 }
 

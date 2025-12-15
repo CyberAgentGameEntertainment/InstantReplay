@@ -1,8 +1,7 @@
 use std::ffi::c_void;
 
-use anyhow::Context;
 use tokio::sync::Mutex;
-use unienc_common::{CompletionHandle, EncodedData, MuxerInput};
+use unienc_common::{CompletionHandle, EncodedData, MuxerInput, ResultExt};
 use crate::*;
 
 // Muxer input functions
@@ -52,7 +51,7 @@ pub unsafe extern "C" fn unienc_muxer_push_video(
                     .push(decoded_data)
                     .await
                     .context("Failed to push encoded video sample to muxer")
-                    .map_err(UniencError::from_anyhow),
+                    .map_err(UniencError::from_common),
                 Err(err) => Err(err),
             };
             result.apply_callback(callback, user_data);
@@ -106,7 +105,7 @@ pub unsafe extern "C" fn unienc_muxer_push_audio(
                     .push(decoded_data)
                     .await
                     .context("Failed to push encoded audio sample to muxer")
-                    .map_err(UniencError::from_anyhow),
+                    .map_err(UniencError::from_common),
                 Err(err) => Err(err),
             };
             result.apply_callback(callback, user_data);
@@ -141,7 +140,7 @@ pub unsafe extern "C" fn unienc_muxer_finish_video(
                 .finish()
                 .await
                 .context("Failed to finish video of muxer")
-                .map_err(UniencError::from_anyhow),
+                .map_err(UniencError::from_common),
             Err(err) => Err(err),
         };
         result.apply_callback(callback, user_data);
@@ -171,7 +170,7 @@ pub unsafe extern "C" fn unienc_muxer_finish_audio(
             .take()
             .ok_or(UniencError::resource_allocation_error("Resource is None"))
         {
-            Ok(audio_input) => audio_input.finish().await.context("Failed to finish audio of muxer").map_err(UniencError::from_anyhow),
+            Ok(audio_input) => audio_input.finish().await.context("Failed to finish audio of muxer").map_err(UniencError::from_common),
             Err(err) => Err(err),
         };
         result.apply_callback(callback, user_data);
@@ -202,7 +201,7 @@ pub unsafe extern "C" fn unienc_muxer_complete(
             .take()
             .ok_or(UniencError::resource_allocation_error("Resource is None"))
         {
-            Ok(handle) => handle.finish().await.context("Failed to complete muxer").map_err(UniencError::from_anyhow),
+            Ok(handle) => handle.finish().await.context("Failed to complete muxer").map_err(UniencError::from_common),
             Err(err) => Err(err),
         };
         result.apply_callback(callback, user_data);
