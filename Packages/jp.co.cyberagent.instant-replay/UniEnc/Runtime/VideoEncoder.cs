@@ -1,13 +1,6 @@
 using System;
-using System.Runtime.InteropServices;
-using System.Threading;
 using System.Threading.Tasks;
-using AOT;
 using UniEnc.Native;
-using UnityEngine;
-using UnityEngine.Experimental.Rendering;
-using UnityEngine.Rendering;
-using Object = UnityEngine.Object;
 
 namespace UniEnc
 {
@@ -42,7 +35,8 @@ namespace UniEnc
         /// <param name="width">Frame width in pixels</param>
         /// <param name="height">Frame height in pixels</param>
         /// <param name="timestamp">Frame timestamp in seconds</param>
-        public ValueTask PushFrameAsync(in SharedBuffer frameData, uint width, uint height, double timestamp)
+        public ValueTask PushFrameAsync<T>(in SharedBuffer<T> frameData, uint width, uint height, double timestamp)
+            where T : struct, IDisposable
         {
             lock (_lock)
             {
@@ -79,14 +73,9 @@ namespace UniEnc
             }
         }
 
-        public ValueTask PushFrameAsync(Texture source, bool isGammaWorkflow, double timestamp)
-        {
-            return PushFrameAsync(source.GetNativeTexturePtr(), (uint)source.width, (uint)source.height,
-                source.graphicsFormat, isGammaWorkflow, timestamp);
-        }
-
-        public ValueTask PushFrameAsync(nint sourceTexturePtr, uint width, uint height, GraphicsFormat format,
-            bool isGammaWorkflow, double timestamp)
+        public ValueTask UnsafePushUnityFrameAsync(nint sourceTexturePtr, uint width, uint height,
+            uint unityGraphicsFormat,
+            bool isGammaWorkflow, double timestamp, nuint onIssueGraphicsEventPtr)
         {
             lock (_lock)
             {
@@ -108,11 +97,11 @@ namespace UniEnc
                             (void*)sourceTexturePtr,
                             width,
                             height,
-                            (uint)format,
+                            unityGraphicsFormat,
                             false,
                             isGammaWorkflow,
                             timestamp,
-                            (nuint)OnIssueGraphicsEventPtr,
+                            onIssueGraphicsEventPtr,
                             CallbackHelper.GetSimpleCallbackPtr(),
                             contextHandle);
                     }
@@ -125,6 +114,11 @@ namespace UniEnc
                     throw;
                 }
             }
+        }
+
+        public static unsafe void UnsafeReleaseGraphicsEventContext(nint context)
+        {
+            NativeMethods.unienc_free_graphics_event_context((void*)context);
         }
 
         /// <summary>
@@ -212,49 +206,6 @@ namespace UniEnc
             {
                 NativeMethods.unienc_free_video_encoder_output((nint)handle);
                 return true;
-            }
-        }
-
-        private static Action<nint, int, nint> _onIssueGraphicsEvent;
-        private static nint? _onIssueGraphicsEventPtr;
-
-        private static nint OnIssueGraphicsEventPtr =>
-            _onIssueGraphicsEventPtr ??=
-                Marshal.GetFunctionPointerForDelegate(_onIssueGraphicsEvent ??= OnIssueGraphicsEvent);
-
-        private static CommandBuffer _sharedCommandBuffer;
-
-        [MonoPInvokeCallback(typeof(Action<nint, int, nint>))]
-        private static void OnIssueGraphicsEvent(nint eventFuncPtr, int eventId, nint context)
-        {
-            try
-            {
-                if (SynchronizationContext.Current?.GetType().Assembly != typeof(Object).Assembly)
-                {
-                    // not on main thread
-                    PlayerLoopEntryPoint.PostAfterUpdate(static ctx =>
-                    {
-                        var (eventFuncPtr, eventId, context) = ((nint, int, nint))ctx;
-                        OnIssueGraphicsEvent(eventFuncPtr, eventId, context);
-                    }, (eventFuncPtr, eventId, context));
-                }
-                else
-                {
-                    _sharedCommandBuffer ??= new CommandBuffer();
-                    _sharedCommandBuffer.Clear();
-                    _sharedCommandBuffer.IssuePluginEventAndData(eventFuncPtr, eventId, context);
-                    Graphics.ExecuteCommandBuffer(_sharedCommandBuffer);
-                }
-            }
-            catch (Exception ex)
-            {
-                Debug.LogException(ex);
-
-                // free
-                unsafe
-                {
-                    NativeMethods.unienc_free_graphics_event_context((void*)context);
-                }
             }
         }
     }
