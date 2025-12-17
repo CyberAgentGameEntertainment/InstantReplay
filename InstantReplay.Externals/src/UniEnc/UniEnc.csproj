@@ -12,7 +12,6 @@
         <Copyright>Copyright $([System.DateTime]::UtcNow.ToString(yyyy)) CyberAgent, Inc.</Copyright>
         <Description>Universal video encoding .</Description>
         <PackageLicenseExpression>MIT</PackageLicenseExpression>
-        <PackageOutputPath>$(SolutionDir)/nugets</PackageOutputPath>
         <PackageReadmeFile>README.md</PackageReadmeFile>
     </PropertyGroup>
 
