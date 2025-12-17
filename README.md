@@ -244,7 +244,7 @@ InstantReplay provides the `IAudioSampleProvider` implementation to capture audi
 
 ## Unbounded Recording
 
-By using `UnboundedRecordingSession`, you can write the encoded data directly to an MP4 file on disk without keeping it in memory. This allows for recording without time limits. Other than specifying the output file path in the constructor, it can be used in the same way as `RealtimeInstantReplaySession`.
+By using `UnboundedRecordingSession`, you can write the encoded data directly to an MP4 file on disk without keeping it in memory. Old data is not discarded and is appended without limit, making it easier to record for longer periods. It can be used in the same way as `RealtimeInstantReplaySession`, except that you need to specify the output file path in the constructor.
 
 > [!WARNING]
 > If the app goes to the background during recording, the recording may stop and the recorded file may become corrupted. It is recommended to complete the recording when transitioning to the background.
