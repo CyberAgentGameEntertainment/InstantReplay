@@ -4,15 +4,6 @@ using Unity.Collections.LowLevel.Unsafe;
 
 namespace UniEnc.Unity
 {
-    public static class SharedBufferPoolExtensions
-    {
-        public static bool TryAlloc(this SharedBufferPool self, nuint size,
-            out SharedBuffer<NativeArrayWrapper> buffer)
-        {
-            return self.TryAlloc(size, out buffer, static (ptr, length) => new NativeArrayWrapper(ptr, length));
-        }
-    }
-
     public readonly struct NativeArrayWrapper : IDisposable
     {
         public readonly NativeArray<byte> Array;
@@ -32,7 +23,9 @@ namespace UniEnc.Unity
 
         void IDisposable.Dispose()
         {
+#if ENABLE_UNITY_COLLECTIONS_CHECKS
             AtomicSafetyHandle.Release(_handle);
+#endif
         }
     }
 }

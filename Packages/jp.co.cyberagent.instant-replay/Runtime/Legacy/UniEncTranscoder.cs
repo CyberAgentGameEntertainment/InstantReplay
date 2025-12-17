@@ -168,7 +168,7 @@ namespace InstantReplay
                         // convert from RGB24 to BGRA32
                         var outputLength = tex.width * tex.height * 4;
 
-                        if (!_sharedBufferPool.TryAlloc((nuint)outputLength, out var buffer))
+                        if (!_sharedBufferPool.TryAllocAsNativeArray((nuint)outputLength, out var buffer))
                             throw new InvalidOperationException("Shared buffer pool exhausted.");
 
                         var data = tex.GetRawTextureData<byte>();

@@ -52,6 +52,11 @@ namespace UniEnc
             _handle = new Handle((nint)poolPtr);
         }
 
+        public unsafe bool TryAlloc(nuint size, out SharedBuffer<SpanWrapper> buffer)
+        {
+            return TryAlloc(size, out buffer, static (ptr, size) => new SpanWrapper((byte*)ptr, size));
+        }
+
         public unsafe bool TryAlloc<T>(nuint size, out SharedBuffer<T> buffer, Func<nint, nint, T> createValue)
             where T : struct, IDisposable
         {

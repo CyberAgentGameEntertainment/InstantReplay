@@ -45,7 +45,7 @@ namespace InstantReplay
                 var size = GraphicsFormatUtility.ComputeMipmapSize(texture.width, texture.height,
                     texture.graphicsFormat);
 
-                if (!bufferPool.TryAlloc(size, out var buffer))
+                if (!bufferPool.TryAllocAsNativeArray(size, out var buffer))
                 {
                     task = default;
                     return false;
