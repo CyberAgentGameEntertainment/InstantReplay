@@ -137,14 +137,21 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: 'true'
       - uses: actions/download-artifact@v4
         with:
           path: ./Packages/jp.co.cyberagent.instant-replay/UniEnc/Plugins/
       - run: |
+          cargo install cargo-about
+          cargo about generate about.hbs > ../../THIRD-PARTY-NOTICES.md
+        working-directory: InstantReplay.Externals/unienc
+      - run: |
           git add ./Packages/jp.co.cyberagent.instant-replay/UniEnc/Plugins
+          git add ./THIRD-PARTY-NOTICES.md
           git config --local user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
-          git commit -m "Update unienc native binaries" Packages/jp.co.cyberagent.instant-replay/UniEnc/Plugins/**/*
+          git commit -m "Update unienc native binaries"
           git push origin ${{ github.ref_name }}
 
 permissions:
