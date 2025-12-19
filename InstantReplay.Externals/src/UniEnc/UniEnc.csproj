@@ -10,7 +10,7 @@
         <PackageId>UniEnc</PackageId>
         <Authors>CyberAgent</Authors>
         <Copyright>Copyright $([System.DateTime]::UtcNow.ToString(yyyy)) CyberAgent, Inc.</Copyright>
-        <Description>Universal video encoding .</Description>
+        <Description>Platform abstraction layer for video and audio encoding and muxing for Unity and .NET. It is part of Instant Replay for Unity.</Description>
         <PackageLicenseExpression>MIT</PackageLicenseExpression>
         <PackageReadmeFile>README.md</PackageReadmeFile>
     </PropertyGroup>

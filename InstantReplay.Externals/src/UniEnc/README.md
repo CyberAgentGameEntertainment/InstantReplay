@@ -1,23 +1,23 @@
 # UniEnc
 
 Platform abstraction layer for video and audio encoding and muxing for Unity and .NET. It is part
-of [InstantReplay](https://github.com/CyberAgentGameEntertainment/InstantReplay).
+of [Instant Replay for Unity](https://github.com/CyberAgentGameEntertainment/InstantReplay).
 
 ## Supported Platforms
 
-See [InstantReplay](https://github.com/CyberAgentGameEntertainment/InstantReplay?tab=readme-ov-file#requirements).
+See [Instant Replay for Unity](https://github.com/CyberAgentGameEntertainment/InstantReplay?tab=readme-ov-file#requirements).
 
 ## Installation
-
-### Unity
-
-Provided as a part of [InstantReplay](https://github.com/CyberAgentGameEntertainment/InstantReplay).
 
 ### .NET
 
 .NET 5 or higher is required.
 
 NuGet package: https://www.nuget.org/packages/UniEnc/
+
+### Unity
+
+Provided as a part of [Instant Replay for Unity](https://github.com/CyberAgentGameEntertainment/InstantReplay).
 
 ## Usage
 
@@ -113,9 +113,10 @@ async ValueTask ProduceAudioAsync()
 ```
 
 ### Muxing
-using var muxer = encodingSystem.CreateMuxer("out.mp4");
 
 ```csharp
+using var muxer = encodingSystem.CreateMuxer("out.mp4");
+
 async ValueTask TransferAsync()
 {
     await Task.WhenAll(TransferVideoSamplesAsync().AsTask(), TransferAudioSamplesAsync().AsTask());

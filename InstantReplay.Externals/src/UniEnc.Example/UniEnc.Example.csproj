@@ -8,7 +8,7 @@
     </PropertyGroup>
 
     <ItemGroup>
-      <ProjectReference Include="..\src\UniEnc\UniEnc.csproj" />
+      <ProjectReference Include="..\UniEnc\UniEnc.csproj" />
     </ItemGroup>
 
 </Project>
