@@ -8,11 +8,15 @@
         <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
 
         <PackageId>UniEnc</PackageId>
+        <Company>CyberAgent</Company>
         <Authors>CyberAgent</Authors>
         <Copyright>Copyright $([System.DateTime]::UtcNow.ToString(yyyy)) CyberAgent, Inc.</Copyright>
         <Description>Platform abstraction layer for video and audio encoding and muxing for Unity and .NET. It is part of Instant Replay for Unity.</Description>
         <PackageLicenseExpression>MIT</PackageLicenseExpression>
         <PackageReadmeFile>README.md</PackageReadmeFile>
+        <PackageProjectUrl>https://github.com/CyberAgentGameEntertainment/InstantReplay/tree/main/InstantReplay.Externals/src/UniEnc</PackageProjectUrl>
+        <RepositoryUrl>$(PackageProjectUrl)</RepositoryUrl>
+        <RepositoryType>git</RepositoryType>
     </PropertyGroup>
 
     <ItemDefinitionGroup>
@@ -21,6 +25,7 @@
 
     <ItemGroup>
         <None Include="$(MSBuildThisFileDirectory)\README.md" Pack="true" PackagePath="\"/>
+        <None Include="$(MSBuildThisFileDirectory)\..\..\..\THIRD-PARTY-NOTICES.md" Pack="true" PackagePath="\"/>
         <Compile Include="..\..\..\Packages\jp.co.cyberagent.instant-replay\UniEnc\**\*.cs" LinkBase="." />
         <UniEncNativeArtifactTarget Include="aarch64-apple-darwin" Rid="osx-arm64" Ext=".dylib"/>
         <UniEncNativeArtifactTarget Include="aarch64-apple-ios" Rid="ios-arm64" Ext=".a"/>
