@@ -1,0 +1,23 @@
+# THIRD-PARTY-NOTICES
+
+## Overview
+
+{{#each overview}}
+- {{name}} ({{count}})
+{{/each}}
+
+## Licenses
+
+{{#each licenses}}
+
+### {{name}}
+
+{{#each used_by}}
+- [{{crate.name}} {{crate.version}}]({{#if crate.repository}}{{crate.repository}}{{else}} https://crates.io/crates/{{crate.name}}{{/if}})
+{{/each}}
+
+```
+{{{text}}}
+```
+
+{{/each}}

@@ -18,6 +18,8 @@ unity-native-plugin-vulkan = { path = "./external/unity-native-plugin-rs/unity-n
 
 [workspace.package]
 edition = "2021"
+license = "MIT"
+authors = [ "CyberAgent" ]
 
 [profile.release]
 panic = "abort" # It helps making crash stacktraces readable
