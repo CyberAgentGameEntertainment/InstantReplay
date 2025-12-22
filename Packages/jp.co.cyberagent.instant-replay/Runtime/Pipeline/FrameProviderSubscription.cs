@@ -15,7 +15,7 @@ namespace InstantReplay
         private readonly IFrameProvider _provider;
         private IFrameProvider.ProvideFrame _delegate;
 
-        public FrameProviderSubscription(IFrameProvider provider, bool disposeProvider,
+        public FrameProviderSubscription(IFrameProvider provider, bool disposeProvider, Action<Exception> onException,
             IPipelineInput<IFrameProvider.Frame> next)
         {
             _provider = provider;
@@ -23,8 +23,16 @@ namespace InstantReplay
             _next = next;
             provider.OnFrameProvided += _delegate = frame =>
             {
-                if (!next.WillAccept()) return;
-                next.Push(frame);
+                try
+                {
+                    if (!next.WillAccept()) return;
+                    next.Push(frame);
+                }
+                catch (Exception ex)
+                {
+                    Unregister();
+                    onException?.Invoke(ex);
+                }
             };
         }
 

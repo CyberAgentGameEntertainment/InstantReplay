@@ -4,7 +4,7 @@ use std::fs;
 use std::sync::Mutex;
 use std::{path::Path, ptr::NonNull};
 
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use block2::RcBlock;
 use dispatch2::DispatchQueue;
 use objc2::rc::Retained;
@@ -95,19 +95,24 @@ pub struct AVFMuxerCompletionHandle {
 impl CompletionHandle for AVFMuxerCompletionHandle {
     async fn finish(self) -> Result<()> {
         let writer = self.writer;
+
+        let writer1 = writer.clone();
         let (tx, rx) = oneshot::channel();
         let tx = RefCell::new(Some(tx));
         unsafe {
             writer.finishWritingWithCompletionHandler(&RcBlock::new(move || {
                 if let Some(tx) = tx.borrow_mut().take() {
-                    tx.send(()).unwrap();
+                    if let Some(err) = writer1.error() {
+                        println!("Failed to finish writing: {}", err);
+                        tx.send(Err(anyhow!(err.to_string()))).unwrap();
+                    } else {
+                        tx.send(Ok(())).unwrap();
+                    }
                 }
             }));
         }
 
-        rx.await.unwrap();
-
-        Ok(())
+        rx.await?
     }
 }
 
@@ -141,8 +146,7 @@ impl AVFMuxer {
     ) -> Result<Self> {
         let path = output_path.as_ref();
         _ = fs::remove_file(path);
-        let url =
-            NSURL::fileURLWithPath(&NSString::from_str(path.to_string_lossy().as_ref()));
+        let url = NSURL::fileURLWithPath(&NSString::from_str(path.to_string_lossy().as_ref()));
 
         let file_type = unsafe { AVFileTypeMPEG4.unwrap() };
         let writer = unsafe {
@@ -242,7 +246,9 @@ impl AVFMuxer {
                 while unsafe { input_clone.isReadyForMoreMediaData() } {
                     match rx.borrow_mut().try_recv() {
                         Ok(sample_buffer) => {
-                            if !unsafe { input_clone.appendSampleBuffer(&sample_buffer.lock().unwrap()) } {
+                            if !unsafe {
+                                input_clone.appendSampleBuffer(&sample_buffer.lock().unwrap())
+                            } {
                                 // TODO: handle error
                                 println!(
                                     "failed to append sample buffer: {label_clone}, {}",

@@ -35,7 +35,6 @@ namespace InstantReplay
 
         public void Dispose()
         {
-            throw new NotImplementedException();
         }
     }
 }

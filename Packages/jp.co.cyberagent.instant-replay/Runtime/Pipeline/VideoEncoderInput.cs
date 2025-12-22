@@ -10,16 +10,35 @@ namespace InstantReplay
 {
     internal class VideoEncoderInput : IAsyncPipelineInput<LazyVideoFrameData>
     {
+        private readonly IAsyncPipelineInput<EncodedFrame> _next;
         private readonly Task _transferTask;
         private readonly VideoEncoder _videoEncoder;
 
         internal VideoEncoderInput(VideoEncoder videoEncoder, IAsyncPipelineInput<EncodedFrame> next)
         {
             _videoEncoder = videoEncoder ?? throw new ArgumentNullException(nameof(videoEncoder));
+            _next = next;
             _transferTask = TransferAsync(next);
         }
 
-        public async ValueTask PushAsync(LazyVideoFrameData value)
+        public ValueTask PushAsync(LazyVideoFrameData value)
+        {
+            return ValueTaskUtils.WhenAny(PushCoreAsync(value), new ValueTask(_transferTask));
+        }
+
+        public ValueTask CompleteAsync(Exception exception = null)
+        {
+            _videoEncoder.CompleteInput();
+            return new ValueTask(_transferTask);
+        }
+
+        public void Dispose()
+        {
+            _videoEncoder?.Dispose();
+            _next?.Dispose();
+        }
+
+        public async ValueTask PushCoreAsync(LazyVideoFrameData value)
         {
             switch (value.Kind)
             {
@@ -71,30 +90,7 @@ namespace InstantReplay
             }
         }
 
-        public ValueTask CompleteAsync(Exception exception = null)
-        {
-            _videoEncoder.CompleteInput();
-            return new ValueTask(_transferTask);
-        }
-
-        public void Dispose()
-        {
-            _videoEncoder?.Dispose();
-        }
-
         private async Task TransferAsync(IAsyncPipelineInput<EncodedFrame> next)
-        {
-            try
-            {
-                await TransferAsyncCore(next);
-            }
-            catch (Exception ex)
-            {
-                ILogger.LogExceptionCore(ex);
-            }
-        }
-
-        private async Task TransferAsyncCore(IAsyncPipelineInput<EncodedFrame> next)
         {
             try
             {

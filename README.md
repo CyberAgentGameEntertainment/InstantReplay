@@ -37,6 +37,7 @@ When a bug occurs, you can export the operations performed up to that point as a
     * [Setting the Audio Source](#setting-the-audio-source)
     * [Getting the Recording State](#getting-the-recording-state)
   * [CRI support](#cri-support)
+  * [Unbounded Recording](#unbounded-recording)
   * [Legacy Mode](#legacy-mode)
     * [Setting Recording Time and Frame Rate](#setting-recording-time-and-frame-rate)
     * [Setting the Size](#setting-the-size)
@@ -132,7 +133,7 @@ using var session = RealtimeInstantReplaySession.CreateDefault();
 await Task.Delay(10000, ct);
 
 // Stop recording and transcode
-var outputPath = await session.StopAndExportAsync(ct: ct);
+var outputPath = await session.StopAndExportAsync();
 File.Move(outputPath, Path.Combine(Application.persistentDataPath, Path.GetFileName(outputPath)));
 ```
 
@@ -240,6 +241,28 @@ InstantReplay provides the `IAudioSampleProvider` implementation to capture audi
 2. Add scripting define symbol `INSTANTREPLAY_CRI` in player settings
 3. Add `InstantReplay.Cri` assembly reference if necessary
 4. Use `InstantReplay.Cri.CriAudioSampleProvider` as `audioSampleProvider` in `RealtimeInstantReplaySession` constructor
+
+## Unbounded Recording
+
+By using `UnboundedRecordingSession`, you can write the encoded data directly to an MP4 file on disk without keeping it in memory. This allows for recording without time limits, as long as there is sufficient disk space. Other than specifying the output file path in the constructor, it can be used in the same way as `RealtimeInstantReplaySession`.
+
+> [!WARNING]
+> If the app goes to the background during recording, the recording may stop and the recorded file may become corrupted. It is recommended to complete the recording when transitioning to the background.
+
+```csharp
+using InstantReplay;
+
+var ct = destroyCancellationToken;
+
+// Start recording
+using var session = new UnboundedRecordingSession("out.mp4", RealtimeEncodingOptions.Default);
+
+// 〜 Gameplay 〜
+await Task.Delay(10000, ct);
+
+// Stop recording and export
+await session.CompleteAsync();
+```
 
 ## Legacy Mode
 

@@ -4,6 +4,7 @@
 
 using System;
 using System.IO;
+using System.Threading;
 using System.Threading.Tasks;
 using UniEnc;
 using UnityEngine;
@@ -57,6 +58,9 @@ namespace InstantReplay.Examples
                 return;
             }
 
+            // We are on the main thread because isActiveAndEnabled is successfully called
+            var mainThread = SynchronizationContext.Current;
+
             if (_currentSession != null)
             {
                 if (allowStopCurrentSession)
@@ -70,7 +74,8 @@ namespace InstantReplay.Examples
                 }
             }
 
-            _currentSession = new RealtimeInstantReplaySession(new RealtimeEncodingOptions
+            var box = new Box<RealtimeInstantReplaySession>();
+            box.Value = _currentSession = new RealtimeInstantReplaySession(new RealtimeEncodingOptions
             {
                 VideoOptions = new VideoEncoderOptions
                 {
@@ -97,6 +102,13 @@ namespace InstantReplay.Examples
                 VideoInputQueueSize = 5, // Maximum number of raw frames to keep before encoding
                 AudioInputQueueSizeSeconds =
                     1.0 // Max queued audio input duration to be buffered before encoding, in seconds
+            }, onException: ex =>
+            {
+                Debug.LogException(ex);
+                if (box.Value == null || box.Value == _currentSession)
+                {
+                    mainThread.Post(_ => NewSession(), null);
+                }
             });
         }
 
@@ -142,6 +154,11 @@ namespace InstantReplay.Examples
         public void Resume()
         {
             _currentSession?.Resume();
+        }
+
+        private class Box<T>
+        {
+            public T Value;
         }
     }
 }

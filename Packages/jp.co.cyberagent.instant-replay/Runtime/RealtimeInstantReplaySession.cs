@@ -34,7 +34,8 @@ namespace InstantReplay
             IFrameProvider frameProvider = null,
             bool disposeFrameProvider = true,
             IAudioSampleProvider audioSampleProvider = null,
-            bool disposeAudioSampleProvider = true)
+            bool disposeAudioSampleProvider = true,
+            Action<Exception> onException = null)
         {
             if (frameProvider == null)
             {
@@ -83,12 +84,10 @@ namespace InstantReplay
                     ILogger.LogExceptionCore(ex);
                 }
             };
-            
-            
 
             if (!options.ForceReadback && encodingSystem.IsBlitSupported())
             {
-                _videoPipeline = new FrameProviderSubscription(frameProvider, disposeFrameProvider,
+                _videoPipeline = new FrameProviderSubscription(frameProvider, disposeFrameProvider, onException,
                     new VideoTemporalAdjuster<IFrameProvider.Frame>(
                         _temporalController,
                         fixedFrameInterval,
@@ -112,7 +111,7 @@ namespace InstantReplay
                         new Vector4(0, 0, 0, 1)
                     ));
 
-                _videoPipeline = new FrameProviderSubscription(frameProvider, disposeFrameProvider,
+                _videoPipeline = new FrameProviderSubscription(frameProvider, disposeFrameProvider, onException,
                     new VideoTemporalAdjuster<IFrameProvider.Frame>(
                         _temporalController,
                         fixedFrameInterval,
@@ -131,6 +130,7 @@ namespace InstantReplay
                                                    audioInputQueueSizeSeconds);
 
             _audioPipeline = new AudioSampleProviderSubscription(audioSampleProvider, disposeAudioSampleProvider,
+                onException,
                 new AudioTemporalAdjuster(
                     _temporalController,
                     options.AudioOptions.SampleRate,
@@ -173,28 +173,7 @@ namespace InstantReplay
         /// </summary>
         public static RealtimeInstantReplaySession CreateDefault()
         {
-            var options = new RealtimeEncodingOptions
-            {
-                VideoOptions = new VideoEncoderOptions
-                {
-                    Width = 1280,
-                    Height = 720,
-                    FpsHint = 30,
-                    Bitrate = 2500000 // 2.5 Mbps
-                },
-                AudioOptions = new AudioEncoderOptions
-                {
-                    SampleRate = 44100,
-                    Channels = 2,
-                    Bitrate = 128000 // 128 kbps
-                },
-                MaxMemoryUsageBytesForCompressedFrames = 20 * 1024 * 1024, // 20 MiB
-                FixedFrameRate = 30.0,
-                VideoInputQueueSize = 5,
-                AudioInputQueueSizeSeconds = 1.0
-            };
-
-            return new RealtimeInstantReplaySession(options);
+            return new RealtimeInstantReplaySession(RealtimeEncodingOptions.Default);
         }
 
         /// <summary>
