@@ -5,6 +5,10 @@
 - Added readback-free encoding pipeline for Android (Vulkan).
 - Added `UnboundedRecordingSession` to record without duration limit.
 
+### Fixed
+
+- Fixed `libunienc.dylib` is not imported for Apple Silicon macOS Player builds.
+
 ### Breaking Changes
 
 - Minimum Android API level is raised to 26 (8.0).
