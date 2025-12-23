@@ -1,3 +1,33 @@
+## [1.4.0] - 2025/12/23
+
+### Added
+
+- Added readback-free encoding pipeline for Android (Vulkan).
+- Added `UnboundedRecordingSession` to record without duration limit.
+
+### Breaking Changes
+
+- Minimum Android API level is raised to 26 (8.0).
+- Added an assembly `UniEnc.Unity` containing Unity-specific extensions for `UniEnc`.
+
+#### `UniEnc.SharedBuffer`
+
+- Type parameter is added: `SharedBuffer<T> where T : unmanaged, IDisposable`
+- Removed: `public NativeArray<byte> NativeArray { get; }`
+- Removed: `public Span<byte> Span { get; }`
+- Added: `public T Value { get; }`
+
+#### `UniEnc.SharedBufferPool`
+
+- Moved to `UniEnc.Unity.SharedBufferPoolExtensions`:
+  - Old: `public unsafe bool TryAlloc(nuint size, out SharedBuffer buffer);`
+  - New: `public static bool TryAllocAsNativeArray(this SharedBufferPool self, nuint size, out SharedBuffer<NativeArrayWrapper> buffer);`
+
+### `UniEnc.EncodingSystem`
+
+- Removed: `public unsafe ValueTask<BlitTargetHandle> BlitAsync(CommandBuffer cmd, Texture source, uint destWidth, uint destHeight, bool flipVertically)`
+  - Use `UniEnc.Unity.VideoEncoderExtensions` instead: `public static ValueTask PushFrameAsync(this VideoEncoder encoder, Texture source, double timestamp);`
+
 ## [1.3.1] - 2025/12/02
 
 ### Fixed
