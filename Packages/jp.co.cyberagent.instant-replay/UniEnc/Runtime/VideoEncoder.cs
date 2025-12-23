@@ -1,12 +1,6 @@
 using System;
-using System.Collections.Concurrent;
-using System.Runtime.InteropServices;
 using System.Threading.Tasks;
-using AOT;
 using UniEnc.Native;
-using UnityEngine;
-using UnityEngine.Experimental.Rendering;
-using UnityEngine.Rendering;
 
 namespace UniEnc
 {
@@ -41,7 +35,8 @@ namespace UniEnc
         /// <param name="width">Frame width in pixels</param>
         /// <param name="height">Frame height in pixels</param>
         /// <param name="timestamp">Frame timestamp in seconds</param>
-        public ValueTask PushFrameAsync(in SharedBuffer frameData, uint width, uint height, double timestamp)
+        public ValueTask PushFrameAsync<T>(in SharedBuffer<T> frameData, uint width, uint height, double timestamp)
+            where T : struct, IDisposable
         {
             lock (_lock)
             {
@@ -78,14 +73,9 @@ namespace UniEnc
             }
         }
 
-        public ValueTask PushFrameAsync(Texture source, bool isGammaWorkflow, double timestamp)
-        {
-            return PushFrameAsync(source.GetNativeTexturePtr(), (uint)source.width, (uint)source.height,
-                source.graphicsFormat, isGammaWorkflow, timestamp);
-        }
-
-        public ValueTask PushFrameAsync(nint sourceTexturePtr, uint width, uint height, GraphicsFormat format,
-            bool isGammaWorkflow, double timestamp)
+        public ValueTask UnsafePushUnityFrameAsync(nint sourceTexturePtr, uint width, uint height,
+            uint unityGraphicsFormat,
+            bool isGammaWorkflow, double timestamp, nuint onIssueGraphicsEventPtr)
         {
             lock (_lock)
             {
@@ -107,11 +97,11 @@ namespace UniEnc
                             (void*)sourceTexturePtr,
                             width,
                             height,
-                            (uint)format,
+                            unityGraphicsFormat,
                             false,
                             isGammaWorkflow,
                             timestamp,
-                            (nuint)OnIssueGraphicsEventPtr,
+                            onIssueGraphicsEventPtr,
                             CallbackHelper.GetSimpleCallbackPtr(),
                             contextHandle);
                     }
@@ -124,6 +114,11 @@ namespace UniEnc
                     throw;
                 }
             }
+        }
+
+        public static unsafe void UnsafeReleaseGraphicsEventContext(nint context)
+        {
+            NativeMethods.unienc_free_graphics_event_context((void*)context);
         }
 
         /// <summary>
@@ -213,68 +208,5 @@ namespace UniEnc
                 return true;
             }
         }
-
-        #region Graphics Event
-
-        private static Action<nint, int, nint> _onIssueGraphicsEvent;
-        private static nint? _onIssueGraphicsEventPtr;
-
-        private static nint OnIssueGraphicsEventPtr =>
-            _onIssueGraphicsEventPtr ??=
-                Marshal.GetFunctionPointerForDelegate(_onIssueGraphicsEvent ??= OnIssueGraphicsEvent);
-
-        private static CommandBuffer _sharedCommandBuffer;
-
-        [MonoPInvokeCallback(typeof(Action<nint, int, nint>))]
-        private static void OnIssueGraphicsEvent(nint eventFuncPtr, int eventId, nint context)
-        {
-            try
-            {
-                if (!PlayerLoopEntryPoint.IsMainThread)
-                {
-                    // not on main thread
-                    if (!GraphicsEventArguments.Pool.TryDequeue(out var dequeued))
-                        dequeued = new GraphicsEventArguments();
-
-                    dequeued.EventFuncPtr = eventFuncPtr;
-                    dequeued.EventId = eventId;
-                    dequeued.Context = context;
-
-                    PlayerLoopEntryPoint.MainThreadContext.Post(static ctx =>
-                    {
-                        if (ctx is not GraphicsEventArguments args) return;
-                        OnIssueGraphicsEvent(args.EventFuncPtr, args.EventId, args.Context);
-                        GraphicsEventArguments.Pool.Enqueue(args);
-                    }, dequeued);
-                }
-                else
-                {
-                    _sharedCommandBuffer ??= new CommandBuffer();
-                    _sharedCommandBuffer.Clear();
-                    _sharedCommandBuffer.IssuePluginEventAndData(eventFuncPtr, eventId, context);
-                    Graphics.ExecuteCommandBuffer(_sharedCommandBuffer);
-                }
-            }
-            catch (Exception ex)
-            {
-                Debug.LogException(ex);
-
-                // free
-                unsafe
-                {
-                    NativeMethods.unienc_free_graphics_event_context((void*)context);
-                }
-            }
-        }
-
-        private class GraphicsEventArguments
-        {
-            public static readonly ConcurrentQueue<GraphicsEventArguments> Pool = new();
-            public nint Context;
-            public nint EventFuncPtr;
-            public int EventId;
-        }
-
-        #endregion
     }
 }

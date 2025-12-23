@@ -4,6 +4,7 @@
 
 using System.Threading.Tasks;
 using UniEnc;
+using UniEnc.Unity;
 using UnityEngine;
 using UnityEngine.Experimental.Rendering;
 
@@ -19,13 +20,14 @@ namespace InstantReplay
         public readonly int Width;
         public readonly int Height;
 
-        public readonly ValueTask<SharedBuffer> ReadbackTask;
+        public readonly ValueTask<SharedBuffer<NativeArrayWrapper>> ReadbackTask;
         public readonly Texture BlitSource;
         public readonly GraphicsFormat BlitSourceFormat;
         public readonly nint NativeBlitSourceHandle;
         public readonly bool IsGammaWorkflow;
 
-        public LazyVideoFrameData(ValueTask<SharedBuffer> readbackTask, int width, int height, double timestamp)
+        public LazyVideoFrameData(ValueTask<SharedBuffer<NativeArrayWrapper>> readbackTask, int width, int height,
+            double timestamp)
         {
             Kind = DataKind.SharedBuffer;
             ReadbackTask = readbackTask;

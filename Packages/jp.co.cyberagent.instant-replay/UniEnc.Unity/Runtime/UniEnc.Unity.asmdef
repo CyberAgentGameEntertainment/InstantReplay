@@ -1,0 +1,16 @@
+{
+    "name": "UniEnc.Unity",
+    "rootNamespace": "",
+    "references": [
+        "GUID:cbc5f87df9298458d9b3f2ed13ca9ba4"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": true,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

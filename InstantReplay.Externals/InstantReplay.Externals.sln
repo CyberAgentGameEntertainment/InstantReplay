@@ -1,0 +1,22 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "UniEnc", "src\UniEnc\UniEnc.csproj", "{9F67D025-1748-4233-809B-83AB120ABF06}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "UniEnc.Example", "src\UniEnc.Example\UniEnc.Example.csproj", "{97A9B4B1-08CA-495B-A259-0BC9D030E85D}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{9F67D025-1748-4233-809B-83AB120ABF06}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{9F67D025-1748-4233-809B-83AB120ABF06}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{9F67D025-1748-4233-809B-83AB120ABF06}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{9F67D025-1748-4233-809B-83AB120ABF06}.Release|Any CPU.Build.0 = Release|Any CPU
+		{97A9B4B1-08CA-495B-A259-0BC9D030E85D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{97A9B4B1-08CA-495B-A259-0BC9D030E85D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{97A9B4B1-08CA-495B-A259-0BC9D030E85D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{97A9B4B1-08CA-495B-A259-0BC9D030E85D}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+EndGlobal

@@ -7,8 +7,6 @@ using System.Collections.Concurrent;
 using System.Runtime.InteropServices;
 using AOT;
 using UniEnc.Native;
-using Unity.Collections;
-using Unity.Collections.LowLevel.Unsafe;
 using Mutex = UniEnc.Native.Mutex;
 
 namespace UniEnc
@@ -54,10 +52,16 @@ namespace UniEnc
             _handle = new Handle((nint)poolPtr);
         }
 
-        public unsafe bool TryAlloc(nuint size, out SharedBuffer buffer)
+        public unsafe bool TryAlloc(nuint size, out SharedBuffer<SpanWrapper> buffer)
+        {
+            return TryAlloc(size, out buffer, static (ptr, size) => new SpanWrapper((byte*)ptr, size));
+        }
+
+        public unsafe bool TryAlloc<T>(nuint size, out SharedBuffer<T> buffer, Func<nint, nint, T> createValue)
+            where T : struct, IDisposable
         {
             using var scope = _handle.GetScope();
-            Native.SharedBuffer* bufPtr = null;
+            SharedBuffer* bufPtr = null;
             byte* ptr = null;
 
             _lastException = SentinelException; // ignore exception
@@ -70,7 +74,7 @@ namespace UniEnc
                 return false;
             }
 
-            buffer = new SharedBuffer((nint)bufPtr, ptr, (nint)size);
+            buffer = new SharedBuffer<T>((nint)bufPtr, createValue((nint)ptr, (nint)size));
             return true;
         }
 
@@ -110,20 +114,25 @@ namespace UniEnc
         }
     }
 
-    public readonly struct SharedBuffer : IDisposable
+    public readonly struct SharedBuffer<T> : IDisposable where T : struct, IDisposable
     {
         private readonly Handle _handle;
         private readonly ushort _token;
 
         public bool IsValid => _handle.IsAlive && _handle.Token == _token;
 
-        public NativeArray<byte> NativeArray => _handle.GetNativeArray(_token);
-
-        public Span<byte> Span => _handle.GetSpan(_token);
-
-        internal unsafe SharedBuffer(IntPtr handle, byte* ptr, nint length)
+        public T Value
         {
-            _handle = Handle.GetHandle(handle, ptr, length);
+            get
+            {
+                if (!IsValid) throw new InvalidOperationException();
+                return _handle.GetValue(_token);
+            }
+        }
+
+        internal SharedBuffer(nint handle, T value)
+        {
+            _handle = Handle.GetHandle(handle, value);
             _token = _handle.Token;
         }
 
@@ -141,44 +150,27 @@ namespace UniEnc
         {
             private static readonly ConcurrentBag<Handle> Pool = new();
 
-#if ENABLE_UNITY_COLLECTIONS_CHECKS
-            private AtomicSafetyHandle? _ash;
-#endif
-            private nint _length;
-            private byte* _ptr;
+            private T _value;
 
             private Handle(IntPtr handle) : base(handle)
             {
             }
 
-            public NativeArray<byte> GetNativeArray(ushort token)
-            {
-                if (token != Token || !IsAlive) throw new InvalidOperationException();
-                var array = NativeArrayUnsafeUtility.ConvertExistingDataToNativeArray<byte>(_ptr, (int)_length,
-                    Allocator.None);
-
-#if ENABLE_UNITY_COLLECTIONS_CHECKS
-                NativeArrayUnsafeUtility.SetAtomicSafetyHandle(ref array, _ash ??= AtomicSafetyHandle.Create());
-#endif
-                return array;
-            }
-
-            public Span<byte> GetSpan(ushort token)
+            public T GetValue(ushort token)
             {
                 if (token != Token || !IsAlive) throw new InvalidOperationException();
                 if (!IsAlive) throw new InvalidOperationException();
-                return new Span<byte>(_ptr, (int)_length);
+                return _value;
             }
 
-            public static Handle GetHandle(IntPtr handle, byte* ptr, nint length)
+            public static Handle GetHandle(IntPtr handle, T value)
             {
                 if (Pool.TryTake(out var bufferHandle))
                     bufferHandle.SetHandleForPooledHandle(handle);
                 else
                     bufferHandle = new Handle(handle);
 
-                bufferHandle._ptr = ptr;
-                bufferHandle._length = length;
+                bufferHandle._value = value;
 
                 return bufferHandle;
             }
@@ -190,21 +182,13 @@ namespace UniEnc
 
             protected override void ReleaseHandle(nint handle)
             {
-                NativeMethods.unienc_free_shared_buffer((Native.SharedBuffer*)handle);
+                NativeMethods.unienc_free_shared_buffer((SharedBuffer*)handle);
             }
 
             protected override void Reset()
             {
-                _ptr = null;
-                _length = 0;
-
-#if ENABLE_UNITY_COLLECTIONS_CHECKS
-                if (_ash is { } ash)
-                {
-                    _ash = null;
-                    AtomicSafetyHandle.Release(ash);
-                }
-#endif
+                _value.Dispose();
+                _value = default;
             }
         }
     }

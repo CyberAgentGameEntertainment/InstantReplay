@@ -1,0 +1,47 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net5.0</TargetFramework>
+        <Nullable>disable</Nullable>
+        <LangVersion>9</LangVersion>
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+        <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+
+        <PackageId>UniEnc</PackageId>
+        <Company>CyberAgent</Company>
+        <Authors>CyberAgent</Authors>
+        <Copyright>Copyright $([System.DateTime]::UtcNow.ToString(yyyy)) CyberAgent, Inc.</Copyright>
+        <Description>Platform abstraction layer for video and audio encoding and muxing for Unity and .NET. It is part of Instant Replay for Unity.</Description>
+        <PackageLicenseExpression>MIT</PackageLicenseExpression>
+        <PackageReadmeFile>README.md</PackageReadmeFile>
+        <PackageProjectUrl>https://github.com/CyberAgentGameEntertainment/InstantReplay/tree/main/InstantReplay.Externals/src/UniEnc</PackageProjectUrl>
+        <RepositoryUrl>$(PackageProjectUrl)</RepositoryUrl>
+        <RepositoryType>git</RepositoryType>
+    </PropertyGroup>
+
+    <ItemDefinitionGroup>
+        <UniEncNativeArtifactTarget Visible="false" />
+    </ItemDefinitionGroup>
+
+    <ItemGroup>
+        <None Include="$(MSBuildThisFileDirectory)\README.md" Pack="true" PackagePath="\"/>
+        <None Include="$(MSBuildThisFileDirectory)\..\..\..\THIRD-PARTY-NOTICES.md" Pack="true" PackagePath="\"/>
+        <Compile Include="..\..\..\Packages\jp.co.cyberagent.instant-replay\UniEnc\**\*.cs" LinkBase="." />
+        <UniEncNativeArtifactTarget Include="aarch64-apple-darwin" Rid="osx-arm64" Ext=".dylib"/>
+        <UniEncNativeArtifactTarget Include="aarch64-apple-ios" Rid="ios-arm64" Ext=".a"/>
+        <UniEncNativeArtifactTarget Include="aarch64-linux-android" Rid="android-arm64" Ext=".so"/>
+        <UniEncNativeArtifactTarget Include="x86_64-apple-darwin" Rid="osx-x64" Ext=".dylib"/>
+        <UniEncNativeArtifactTarget Include="x86_64-linux-android" Rid="android-x64" Ext=".so"/>
+        <UniEncNativeArtifactTarget Include="x86_64-pc-windows" Rid="win-x64" Ext=".dll"/>
+        <UniEncNativeArtifactTarget Include="x86_64-unknown-linux" Rid="linux-x64" Ext=".so"/>
+
+        <Content Include="@(UniEncNativeArtifactTarget-&gt;'..\..\..\Packages\jp.co.cyberagent.instant-replay\UniEnc\Plugins\%(Identity)\libunienc%(Ext)')">
+            <Visible>true</Visible>
+            <Pack>true</Pack>
+            <PackagePath>runtimes/%(Rid)/native/</PackagePath>
+            <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+            <Link>runtimes/%(Rid)/native/%(Filename)%(Extension)</Link>
+        </Content>
+    </ItemGroup>
+
+</Project>

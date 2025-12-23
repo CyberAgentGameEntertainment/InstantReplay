@@ -7,6 +7,7 @@ using System.Threading;
 using System.Threading.Channels;
 using System.Threading.Tasks;
 using UniEnc;
+using UniEnc.Unity;
 using UnityEngine;
 using Object = UnityEngine.Object;
 
@@ -121,7 +122,7 @@ namespace InstantReplay
             _jpegReaderWriter = jpegReaderChannel.Writer;
 
             var encoderQueueChannel =
-                Channel.CreateBounded<(SharedBuffer buffer, nint width, nint height, double timestamp)>(
+                Channel.CreateBounded<(SharedBuffer<NativeArrayWrapper> buffer, nint width, nint height, double timestamp)>(
                     new BoundedChannelOptions(32)
                     {
                         FullMode = BoundedChannelFullMode.Wait,
@@ -167,11 +168,11 @@ namespace InstantReplay
                         // convert from RGB24 to BGRA32
                         var outputLength = tex.width * tex.height * 4;
 
-                        if (!_sharedBufferPool.TryAlloc((nuint)outputLength, out var buffer))
+                        if (!_sharedBufferPool.TryAllocAsNativeArray((nuint)outputLength, out var buffer))
                             throw new InvalidOperationException("Shared buffer pool exhausted.");
 
                         var data = tex.GetRawTextureData<byte>();
-                        var output = buffer.Span;
+                        var output = buffer.Value.Array.AsSpan();
 
                         for (var y = 0; y < tex.height; y++)
                         for (var x = 0; x < tex.width; x++)

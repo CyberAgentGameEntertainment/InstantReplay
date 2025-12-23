@@ -5,6 +5,7 @@
 using System;
 using System.Threading.Tasks;
 using UniEnc;
+using UniEnc.Unity;
 
 namespace InstantReplay
 {
@@ -75,7 +76,7 @@ namespace InstantReplay
 
                     try
                     {
-                        await _videoEncoder.PushFrameAsync(value.NativeBlitSourceHandle, (uint)value.Width,
+                        await _videoEncoder.UnsafePushUnityFrameAsync(value.NativeBlitSourceHandle, (uint)value.Width,
                             (uint)value.Height, value.BlitSourceFormat, value.IsGammaWorkflow, value.Timestamp);
                     }
                     catch (ObjectDisposedException)

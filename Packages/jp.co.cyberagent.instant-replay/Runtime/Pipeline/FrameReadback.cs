@@ -7,6 +7,7 @@ using System.Collections.Concurrent;
 using System.Threading.Tasks;
 using System.Threading.Tasks.Sources;
 using UniEnc;
+using UniEnc.Unity;
 using UnityEngine;
 using UnityEngine.Experimental.Rendering;
 using UnityEngine.Rendering;
@@ -25,7 +26,7 @@ namespace InstantReplay
         ///     Reads back frame data from a RenderTexture asynchronously.
         /// </summary>
         public static bool TryReadbackFrameAsync(Texture texture, ref SharedBufferPool bufferPool,
-            out ValueTask<SharedBuffer> task)
+            out ValueTask<SharedBuffer<NativeArrayWrapper>> task)
         {
             if (texture == null)
                 throw new ArgumentNullException(nameof(texture));
@@ -44,13 +45,13 @@ namespace InstantReplay
                 var size = GraphicsFormatUtility.ComputeMipmapSize(texture.width, texture.height,
                     texture.graphicsFormat);
 
-                if (!bufferPool.TryAlloc(size, out var buffer))
+                if (!bufferPool.TryAllocAsNativeArray(size, out var buffer))
                 {
                     task = default;
                     return false;
                 }
 
-                var nativeArray = buffer.NativeArray;
+                var nativeArray = buffer.Value.Array;
 
                 // Store buffer in context for cleanup
                 context.Buffer = buffer;
@@ -99,17 +100,17 @@ namespace InstantReplay
         /// <summary>
         ///     Reusable context for GPU readback that implements IValueTaskSource.
         /// </summary>
-        private sealed class ReadbackContext : IValueTaskSource<SharedBuffer>
+        private sealed class ReadbackContext : IValueTaskSource<SharedBuffer<NativeArrayWrapper>>
         {
             private static readonly ConcurrentQueue<ReadbackContext> Pool = new();
-            private SharedBuffer _buffer;
+            private SharedBuffer<NativeArrayWrapper> _buffer;
 
-            private ManualResetValueTaskSourceCore<SharedBuffer> _core;
+            private ManualResetValueTaskSourceCore<SharedBuffer<NativeArrayWrapper>> _core;
             private bool _ownsBuffer;
 
-            public ValueTask<SharedBuffer> Task => new(this, _core.Version);
+            public ValueTask<SharedBuffer<NativeArrayWrapper>> Task => new(this, _core.Version);
 
-            public SharedBuffer Buffer
+            public SharedBuffer<NativeArrayWrapper> Buffer
             {
                 get => _buffer;
                 set
@@ -119,7 +120,7 @@ namespace InstantReplay
                 }
             }
 
-            public SharedBuffer GetResult(short token)
+            public SharedBuffer<NativeArrayWrapper> GetResult(short token)
             {
                 try
                 {
@@ -154,7 +155,7 @@ namespace InstantReplay
                 return context;
             }
 
-            public void SetResult(SharedBuffer result)
+            public void SetResult(SharedBuffer<NativeArrayWrapper> result)
             {
                 _core.SetResult(result);
             }

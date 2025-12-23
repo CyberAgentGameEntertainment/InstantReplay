@@ -1,11 +1,5 @@
 using System;
-using System.Runtime.InteropServices;
-using System.Threading;
-using AOT;
 using UniEnc.Native;
-using UnityEngine;
-using UnityEngine.Rendering;
-using Object = UnityEngine.Object;
 
 namespace UniEnc
 {
@@ -19,7 +13,8 @@ namespace UniEnc
 
                 unsafe
                 {
-                    return NativeMethods.unienc_is_blit_supported((PlatformEncodingSystem*)_handle.DangerousGetHandle());
+                    return NativeMethods.unienc_is_blit_supported(
+                        (PlatformEncodingSystem*)_handle.DangerousGetHandle());
                 }
             }
         }

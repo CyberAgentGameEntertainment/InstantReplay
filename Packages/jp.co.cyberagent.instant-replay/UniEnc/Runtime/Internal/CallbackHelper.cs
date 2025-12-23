@@ -6,6 +6,10 @@ using System.Threading.Tasks.Sources;
 using AOT;
 using UniEnc.Native;
 
+#if NET5_0
+using System.Runtime.CompilerServices;
+#endif
+
 namespace UniEnc
 {
     /// <summary>
@@ -15,21 +19,39 @@ namespace UniEnc
     {
         public unsafe delegate void SimpleCallbackDelegate(void* userData, UniencErrorNative errorKind);
 
+        private unsafe delegate void DataCallbackDelegate<in T>(T data, void* userData, UniencErrorNative error)
+            where T : unmanaged;
+        
+#if !NET5_0
         private static readonly unsafe SimpleCallbackDelegate SSimpleCallbackDelegate = SimpleCallback;
-
         private static readonly unsafe DataCallbackDelegate<UniencSampleData> SSampleDataCallbackDelegate =
             SampleDataCallback;
+#endif
 
-        private static readonly IntPtr SimpleCallbackPtr =
+        // ReSharper disable once RedundantUnsafeContext
+        private static readonly unsafe IntPtr SimpleCallbackPtr =
+#if NET5_0
+            (IntPtr)(delegate* unmanaged[Cdecl]<void*, UniencErrorNative, void>)(&SimpleCallback);
+#else
             Marshal.GetFunctionPointerForDelegate(SSimpleCallbackDelegate);
+#endif
 
-        private static readonly IntPtr DataCallbackPtr =
+
+        // ReSharper disable once RedundantUnsafeContext
+        private static readonly unsafe IntPtr DataCallbackPtr =
+#if NET5_0
+            (IntPtr)(delegate* unmanaged[Cdecl]<UniencSampleData, void*, UniencErrorNative, void>)(&SampleDataCallback);
+#else
             Marshal.GetFunctionPointerForDelegate(SSampleDataCallbackDelegate);
+#endif
 
         /// <summary>
         ///     Native callback for simple operations.
         /// </summary>
         [MonoPInvokeCallback(typeof(SimpleCallbackDelegate))]
+#if NET5_0
+        [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
+#endif
         private static unsafe void SimpleCallback(void* userData, UniencErrorNative error)
         {
             var handle = GCHandle.FromIntPtr((IntPtr)userData);
@@ -54,6 +76,9 @@ namespace UniEnc
         ///     Native callback for data operations.
         /// </summary>
         [MonoPInvokeCallback(typeof(DataCallbackDelegate<UniencSampleData>))]
+#if NET5_0
+        [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
+#endif
         private static unsafe void SampleDataCallback(UniencSampleData sampleData, void* userData,
             UniencErrorNative error)
         {
@@ -242,8 +267,5 @@ namespace UniEnc
                 _core.SetException(exception);
             }
         }
-
-        private unsafe delegate void DataCallbackDelegate<in T>(T data, void* userData, UniencErrorNative error)
-            where T : unmanaged;
     }
 }
