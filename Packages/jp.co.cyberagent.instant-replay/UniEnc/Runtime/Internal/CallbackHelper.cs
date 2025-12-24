@@ -6,7 +6,7 @@ using System.Threading.Tasks.Sources;
 using AOT;
 using UniEnc.Native;
 
-#if NET5_0
+#if NET5_0_OR_GREATER
 using System.Runtime.CompilerServices;
 #endif
 
@@ -22,7 +22,7 @@ namespace UniEnc
         private unsafe delegate void DataCallbackDelegate(UniencSampleData data, void* userData,
             UniencErrorNative error);
         
-#if !NET5_0
+#if !NET5_0_OR_GREATER
         private static readonly unsafe SimpleCallbackDelegate SSimpleCallbackDelegate = SimpleCallback;
         private static readonly unsafe DataCallbackDelegate SSampleDataCallbackDelegate =
             SampleDataCallback;
@@ -30,7 +30,7 @@ namespace UniEnc
 
         // ReSharper disable once RedundantUnsafeContext
         private static readonly unsafe IntPtr SimpleCallbackPtr =
-#if NET5_0
+#if NET5_0_OR_GREATER
             (IntPtr)(delegate* unmanaged[Cdecl]<void*, UniencErrorNative, void>)(&SimpleCallback);
 #else
             Marshal.GetFunctionPointerForDelegate(SSimpleCallbackDelegate);
@@ -39,7 +39,7 @@ namespace UniEnc
 
         // ReSharper disable once RedundantUnsafeContext
         private static readonly unsafe IntPtr DataCallbackPtr =
-#if NET5_0
+#if NET5_0_OR_GREATER
             (IntPtr)(delegate* unmanaged[Cdecl]<UniencSampleData, void*, UniencErrorNative, void>)(&SampleDataCallback);
 #else
             Marshal.GetFunctionPointerForDelegate(SSampleDataCallbackDelegate);
@@ -49,7 +49,7 @@ namespace UniEnc
         ///     Native callback for simple operations.
         /// </summary>
         [MonoPInvokeCallback(typeof(SimpleCallbackDelegate))]
-#if NET5_0
+#if NET5_0_OR_GREATER
         [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
 #endif
         private static unsafe void SimpleCallback(void* userData, UniencErrorNative error)
@@ -76,7 +76,7 @@ namespace UniEnc
         ///     Native callback for data operations.
         /// </summary>
         [MonoPInvokeCallback(typeof(DataCallbackDelegate))]
-#if NET5_0
+#if NET5_0_OR_GREATER
         [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
 #endif
         private static unsafe void SampleDataCallback(UniencSampleData sampleData, void* userData,
