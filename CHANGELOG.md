@@ -1,3 +1,11 @@
+## [1.4.1] - 2025/12/24
+
+### Added
+
+- UniEnc (NuGet)
+  - Updated UniEnc to contain debug symbols
+  - Added support for .NET Standard 2.0 / 2.1
+
 ## [1.4.0] - 2025/12/23
 
 ### Added
