@@ -18,7 +18,7 @@ fn main() {
 
 fn common_builder() -> Builder {
     Builder::default()
-        .csharp_dll_name("libunienc")
+        .csharp_dll_name("libunienc_c")
         .csharp_dll_name_if("UNITY_IOS && !UNITY_EDITOR", "__Internal")
         .csharp_namespace("UniEnc.Native")
         .csharp_use_nint_types(true)

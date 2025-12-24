@@ -15,7 +15,7 @@ namespace UniEnc.Native
 #if UNITY_IOS && !UNITY_EDITOR
         const string __DllName = "__Internal";
 #else
-        const string __DllName = "libunienc";
+        const string __DllName = "libunienc_c";
 #endif
         
 
