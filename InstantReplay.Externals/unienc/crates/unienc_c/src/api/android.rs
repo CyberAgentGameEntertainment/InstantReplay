@@ -15,7 +15,7 @@ pub enum AndroidApiError {
     PipeCreationFailed,
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn JNI_OnLoad(vm: *mut c_void, reserved: *mut c_void) -> c_int {
     set_stdout_redirect("unienc").unwrap_or_else(|e| {
         log_to_logcat("unienc", &format!("Failed to redirect stdout: {}", e));

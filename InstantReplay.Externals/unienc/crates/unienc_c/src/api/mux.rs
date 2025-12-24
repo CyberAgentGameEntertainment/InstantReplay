@@ -5,7 +5,7 @@ use unienc::{CompletionHandle, EncodedData, MuxerInput, ResultExt};
 use crate::*;
 
 // Muxer input functions
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn unienc_muxer_push_video(
     runtime: *mut Runtime,
     video_input: SendPtr<Mutex<Option<VideoMuxerInput>>>,
@@ -15,8 +15,8 @@ pub unsafe extern "C" fn unienc_muxer_push_video(
     callback: usize, /*UniencCallback*/
     user_data: SendPtr<c_void>,
 ) {
-    let _guard = (*runtime).enter();
-    let callback: UniencCallback = std::mem::transmute(callback);
+    let _guard = unsafe { &*runtime }.enter();
+    let callback: UniencCallback = unsafe { std::mem::transmute(callback) };
     if video_input.is_null() || data.is_null() {
         UniencError::invalid_input_error("Invalid input parameters")
             .apply_callback(callback, user_data);
@@ -59,7 +59,7 @@ pub unsafe extern "C" fn unienc_muxer_push_video(
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn unienc_muxer_push_audio(
     runtime: *mut Runtime,
     audio_input: SendPtr<Mutex<Option<AudioMuxerInput>>>,
@@ -69,8 +69,8 @@ pub unsafe extern "C" fn unienc_muxer_push_audio(
     callback: usize, /*UniencCallback*/
     user_data: SendPtr<c_void>,
 ) {
-    let _guard = (*runtime).enter();
-    let callback: UniencCallback = std::mem::transmute(callback);
+    let _guard = unsafe { &*runtime }.enter();
+    let callback: UniencCallback = unsafe { std::mem::transmute(callback) };
     if audio_input.is_null() || data.is_null() {
         UniencError::invalid_input_error("Invalid input parameters")
             .apply_callback(callback, user_data);
@@ -113,15 +113,15 @@ pub unsafe extern "C" fn unienc_muxer_push_audio(
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn unienc_muxer_finish_video(
     runtime: *mut Runtime,
     video_input: SendPtr<Mutex<Option<VideoMuxerInput>>>,
     callback: usize, /*UniencCallback*/
     user_data: SendPtr<c_void>,
 ) {
-    let _guard = (*runtime).enter();
-    let callback: UniencCallback = std::mem::transmute(callback);
+    let _guard = unsafe { &*runtime }.enter();
+    let callback: UniencCallback = unsafe { std::mem::transmute(callback) };
     if video_input.is_null() {
         UniencError::invalid_input_error("Invalid input parameters")
             .apply_callback(callback, user_data);
@@ -147,15 +147,15 @@ pub unsafe extern "C" fn unienc_muxer_finish_video(
     });
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn unienc_muxer_finish_audio(
     runtime: *mut Runtime,
     audio_input: SendPtr<Mutex<Option<AudioMuxerInput>>>,
     callback: usize, /*UniencCallback*/
     user_data: SendPtr<c_void>,
 ) {
-    let _guard = (*runtime).enter();
-    let callback: UniencCallback = std::mem::transmute(callback);
+    let _guard = unsafe { &*runtime }.enter();
+    let callback: UniencCallback = unsafe { std::mem::transmute(callback) };
     if audio_input.is_null() {
         UniencError::invalid_input_error("Invalid input parameters")
             .apply_callback(callback, user_data);
@@ -177,15 +177,15 @@ pub unsafe extern "C" fn unienc_muxer_finish_audio(
     });
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn unienc_muxer_complete(
     runtime: *mut Runtime,
     completion_handle: SendPtr<Mutex<Option<MuxerCompletionHandle>>>,
     callback: usize, /*UniencCallback*/
     user_data: SendPtr<c_void>,
 ) {
-    let _guard = (*runtime).enter();
-    let callback: UniencCallback = std::mem::transmute(callback);
+    let _guard = unsafe { &*runtime }.enter();
+    let callback: UniencCallback = unsafe { std::mem::transmute(callback) };
     if completion_handle.is_null() {
         UniencError::invalid_input_error("Invalid input parameters")
             .apply_callback(callback, user_data);
@@ -209,7 +209,7 @@ pub unsafe extern "C" fn unienc_muxer_complete(
 }
 
 // Free functions for muxer components
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn unienc_free_muxer_video_input(
     video_input: SendPtr<Mutex<Option<VideoMuxerInput>>>,
 ) {
@@ -218,7 +218,7 @@ pub unsafe extern "C" fn unienc_free_muxer_video_input(
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn unienc_free_muxer_audio_input(
     audio_input: SendPtr<Mutex<Option<AudioMuxerInput>>>,
 ) {
@@ -227,7 +227,7 @@ pub unsafe extern "C" fn unienc_free_muxer_audio_input(
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn unienc_free_muxer_completion_handle(
     completion_handle: SendPtr<Mutex<Option<MuxerCompletionHandle>>>,
 ) {

@@ -220,7 +220,7 @@ pub fn blit_to_hardware_buffer(
     flip_vertically: bool,
     is_gamma_workflow: bool,
     frame: &hardware_buffer_surface::HardwareBufferFrame,
-) -> Result<impl Future<Output = Result<()>>> {
+) -> Result<impl Future<Output = Result<()>> + use<>> {
     let cx = crate::vulkan::CONTEXT
         .get()
         .ok_or(AndroidError::ContextNotInitialized)?

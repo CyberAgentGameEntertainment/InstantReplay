@@ -36,7 +36,7 @@ unsafe extern "system" fn graphics_event_callback_trampoline(
     _event_id: c_int,
     user_data: *mut c_void,
 ) {
-    let context = Box::<GraphicsEventContext>::from_raw(user_data as *mut _);
+    let context = unsafe { Box::<GraphicsEventContext>::from_raw(user_data as *mut _) };
     let Some(runtime) = context.weak_runtime.upgrade() else {
         println!("Failed to upgrade runtime in graphics event callback");
         return;
@@ -46,12 +46,12 @@ unsafe extern "system" fn graphics_event_callback_trampoline(
     callback();
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn unienc_is_blit_supported(system: *const PlatformEncodingSystem) -> bool {
-    (&*system).is_blit_supported()
+    unsafe {&*system}.is_blit_supported()
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn unienc_free_graphics_event_context(
     context: *mut c_void,
 ) {

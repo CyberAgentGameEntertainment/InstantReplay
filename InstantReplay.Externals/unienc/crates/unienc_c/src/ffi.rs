@@ -100,6 +100,7 @@ impl UniencErrorNative {
 }
 
 impl UniencError {
+    #[allow(dead_code)]
     pub const SUCCESS: Self = Self {
         kind: UniencErrorKind::Success,
         message: None,
@@ -279,7 +280,7 @@ for Result<Option<T>, UniencError>
 }
 
 // These are unused but required to let csbindgen generate the binding for specific types.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn unienc_dummy(_error_kind: UniencErrorKind, _error_native: UniencErrorNative, _sample: UniencSampleData) {
 
 }

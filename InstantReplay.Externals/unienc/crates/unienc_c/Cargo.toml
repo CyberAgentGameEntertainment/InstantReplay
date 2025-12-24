@@ -17,4 +17,4 @@ unity-native-plugin = "0.8.0"
 thiserror = { workspace = true }
 
 [build-dependencies]
-csbindgen = "1.9.3"
+csbindgen = "1.9.7"

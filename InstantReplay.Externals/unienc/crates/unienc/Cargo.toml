@@ -7,7 +7,6 @@ authors.workspace = true
 
 [dependencies]
 bincode = { version = "2.0.1", features = ["serde"] }
-rand = "0.9.1"
 unienc_common = { workspace = true }
 
 [target.'cfg(all(target_family = "unix", not(target_vendor = "apple"), not(target_os = "android")))'.dependencies]
@@ -26,3 +25,4 @@ unienc_apple_vt = { workspace = true }
 
 [dev-dependencies]
 tokio = "1.48.0"
+rand = "0.9.1"

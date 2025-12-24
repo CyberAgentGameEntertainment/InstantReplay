@@ -6,20 +6,20 @@ use tokio::sync::Mutex;
 use unienc::{Encoder, EncodingSystem, Muxer, ResultExt};
 use crate::*;
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn unienc_new_encoding_system(
     runtime: *mut Runtime,
     video_options: *const VideoEncoderOptionsNative,
     audio_options: *const AudioEncoderOptionsNative,
 ) -> *mut PlatformEncodingSystem {
-    let _guard = (*runtime).enter();
+    let _guard = unsafe { &*runtime }.enter();
     unsafe {
         let system = PlatformEncodingSystem::new(&*video_options, &*audio_options);
         Box::into_raw(Box::new(system))
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn unienc_free_encoding_system(system: *mut PlatformEncodingSystem) {
     if !system.is_null() {
         unsafe {
@@ -28,7 +28,7 @@ pub unsafe extern "C" fn unienc_free_encoding_system(system: *mut PlatformEncodi
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn unienc_new_video_encoder(
     runtime: *mut Runtime,
     system: *const PlatformEncodingSystem,
@@ -37,8 +37,8 @@ pub unsafe extern "C" fn unienc_new_video_encoder(
     on_error: usize, /*UniencCallback*/
     user_data: SendPtr<c_void>,
 ) -> bool {
-    let _guard = (*runtime).enter();
-    let on_error: UniencCallback = std::mem::transmute(on_error);
+    let _guard = unsafe { &*runtime }.enter();
+    let on_error: UniencCallback = unsafe { std::mem::transmute(on_error) };
 
     if system.is_null() {
         UniencError::invalid_input_error("Invalid input parameters")
@@ -67,7 +67,7 @@ pub unsafe extern "C" fn unienc_new_video_encoder(
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn unienc_new_audio_encoder(
     runtime: *mut Runtime,
     system: *const PlatformEncodingSystem,
@@ -76,8 +76,8 @@ pub unsafe extern "C" fn unienc_new_audio_encoder(
     on_error: usize, /*UniencCallback*/
     user_data: SendPtr<c_void>,
 ) -> bool {
-    let _guard = (*runtime).enter();
-    let on_error: UniencCallback = std::mem::transmute(on_error);
+    let _guard = unsafe { &*runtime }.enter();
+    let on_error: UniencCallback = unsafe { std::mem::transmute(on_error) };
 
     if system.is_null() {
         UniencError::invalid_input_error("Invalid input parameters")
@@ -106,7 +106,7 @@ pub unsafe extern "C" fn unienc_new_audio_encoder(
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn unienc_new_muxer(
     runtime: *mut Runtime,
     system: *const PlatformEncodingSystem,
@@ -117,8 +117,8 @@ pub unsafe extern "C" fn unienc_new_muxer(
     on_error: usize, /*UniencCallback*/
     user_data: SendPtr<c_void>,
 ) -> bool {
-    let _guard = (*runtime).enter();
-    let on_error: UniencCallback = std::mem::transmute(on_error);
+    let _guard = unsafe { &*runtime }.enter();
+    let on_error: UniencCallback = unsafe { std::mem::transmute(on_error) };
 
     if system.is_null() || output_path.is_null() {
         UniencError::invalid_input_error("Invalid input parameters")

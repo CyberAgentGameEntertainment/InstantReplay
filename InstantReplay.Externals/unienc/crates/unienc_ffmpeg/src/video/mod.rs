@@ -241,16 +241,16 @@ impl EncoderInput for FFmpegVideoEncoderInput {
 
         // raw H.264 frames cannot have timestamps, so we need to assume CFR
         // we need to repeat or discard frames to match frame rate specified as fps_hint
-        let Some((frame, count)) = self.cfr.push(frame, timestamp).map_err(|e| FFmpegError::from(e))? else {
+        let Some((frame, count)) = self.cfr.push(frame, timestamp)? else {
             return Ok(());
         };
 
         for _i in 0..count {
-            self.input.write_all(frame.buffer.data()).await.map_err(|e| FFmpegError::from(e))?;
+            self.input.write_all(frame.buffer.data()).await.map_err(FFmpegError::from)?;
         }
         drop(frame);
 
-        self.input.flush().await.map_err(|e| FFmpegError::from(e))?;
+        self.input.flush().await.map_err(FFmpegError::from)?;
 
         Ok(())
     }
@@ -277,7 +277,7 @@ impl EncoderOutput for FFmpegVideoEncoderOutput {
             // H.264 byte stream is sequence of NAL units and each frame is a NAL unit
             let mut buf = vec![0; 65536];
 
-            let read = self.output.read(&mut buf).await.map_err(|e| FFmpegError::from(e))?;
+            let read = self.output.read(&mut buf).await.map_err(FFmpegError::from)?;
 
             fn create_emit<'a>(state: &'a mut ReaderState, cfr: u32) -> impl FnMut(&NalUnit) + 'a {
                 move |nalu: &NalUnit| {

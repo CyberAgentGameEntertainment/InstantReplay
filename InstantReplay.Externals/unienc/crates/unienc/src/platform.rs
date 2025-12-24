@@ -1,6 +1,4 @@
 
-use crate::*;
-
 #[cfg(target_vendor = "apple")]
 pub type PlatformEncodingSystem<V, A> = unienc_apple_vt::VideoToolboxEncodingSystem<V, A>;
 

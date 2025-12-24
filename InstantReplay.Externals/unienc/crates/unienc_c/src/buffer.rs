@@ -6,7 +6,7 @@ use std::{
 use unienc::buffer::{SharedBuffer, SharedBufferPool};
 use crate::*;
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn unienc_new_shared_buffer_pool(
     limit: usize,
     pool_out: *mut *const Mutex<SharedBufferPool>,
@@ -21,7 +21,7 @@ pub extern "C" fn unienc_new_shared_buffer_pool(
     true
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn unienc_shared_buffer_pool_alloc(
     pool: *mut Mutex<SharedBufferPool>,
     size: usize,
@@ -49,7 +49,7 @@ pub extern "C" fn unienc_shared_buffer_pool_alloc(
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn unienc_free_shared_buffer_pool(pool: *const Mutex<SharedBufferPool>) {
     if !pool.is_null() {
         unsafe {
@@ -58,7 +58,7 @@ pub extern "C" fn unienc_free_shared_buffer_pool(pool: *const Mutex<SharedBuffer
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn unienc_free_shared_buffer(buffer: *mut SharedBuffer) {
     if !buffer.is_null() {
         unsafe {

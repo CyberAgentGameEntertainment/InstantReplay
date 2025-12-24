@@ -8,7 +8,7 @@ use unienc::{
 };
 
 // Video encoder input/output functions
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn unienc_video_encoder_push_shared_buffer(
     runtime: *mut Runtime,
     input: SendPtr<Mutex<Option<VideoEncoderInput>>>,
@@ -19,13 +19,13 @@ pub unsafe extern "C" fn unienc_video_encoder_push_shared_buffer(
     callback: usize, /*UniencCallback*/
     user_data: SendPtr<c_void>,
 ) {
-    let callback: UniencCallback = std::mem::transmute(callback);
+    let callback: UniencCallback = unsafe { std::mem::transmute(callback) };
     if input.is_null() || buffer.is_null() {
         UniencError::invalid_input_error("Invalid input parameters")
             .apply_callback(callback, user_data);
         return;
     }
-    let buffer = Box::from_raw(*buffer);
+    let buffer = unsafe { Box::from_raw(*buffer) };
     let sample = VideoSample {
         frame: VideoFrame::Bgra32(VideoFrameBgra32 {
             buffer: *buffer,
@@ -35,10 +35,10 @@ pub unsafe extern "C" fn unienc_video_encoder_push_shared_buffer(
         timestamp,
     };
 
-    video_encoder_push_video_sample(runtime, input, sample, callback, user_data);
+    unsafe { video_encoder_push_video_sample(runtime, input, sample, callback, user_data) };
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn unienc_video_encoder_push_blit_source(
     runtime: *mut Runtime,
     input: SendPtr<Mutex<Option<VideoEncoderInput>>>,
@@ -53,17 +53,17 @@ pub unsafe extern "C" fn unienc_video_encoder_push_blit_source(
     callback: usize,                      /*UniencCallback*/
     user_data: SendPtr<c_void>,
 ) {
-    let callback: UniencCallback = std::mem::transmute(callback);
+    let callback: UniencCallback = unsafe { std::mem::transmute(callback) };
     if input.is_null() || source_native_texture_ptr.is_null() {
         UniencError::invalid_input_error("Invalid input parameters")
             .apply_callback(callback, user_data);
         return;
     }
     let unienc_issue_graphics_event_callback: UniencIssueGraphicsEventCallback =
-        std::mem::transmute(issue_graphics_event_callback);
+        unsafe { std::mem::transmute(issue_graphics_event_callback) };
 
     // weak runtime for graphics event
-    let Some(weak) = runtime.as_ref().map(|r| r.weak()) else {
+    let Some(weak) = unsafe { runtime.as_ref() }.map(|r| r.weak()) else {
         UniencError::invalid_input_error("Invalid runtime pointer")
             .apply_callback(callback, user_data);
         return;
@@ -86,7 +86,7 @@ pub unsafe extern "C" fn unienc_video_encoder_push_blit_source(
                 },
                 timestamp,
             };
-            video_encoder_push_video_sample(runtime, input, sample, callback, user_data);
+            unsafe { video_encoder_push_video_sample(runtime, input, sample, callback, user_data) };
         }
         Err(err) => {
             UniencError::from_common(err).apply_callback(callback, user_data);
@@ -101,7 +101,7 @@ unsafe fn video_encoder_push_video_sample(
     callback: UniencCallback,
     user_data: SendPtr<c_void>,
 ) {
-    let _guard = (*runtime).enter();
+    let _guard = unsafe { &*runtime }.enter();
 
     let input = arc_from_raw_retained(*input);
 
@@ -124,15 +124,15 @@ unsafe fn video_encoder_push_video_sample(
     });
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn unienc_video_encoder_pull(
     runtime: *mut Runtime,
     output: SendPtr<Mutex<Option<VideoEncoderOutput>>>,
     callback: usize, /*UniencDataCallback<UniencSampleData>*/
     user_data: SendPtr<c_void>,
 ) {
-    let _guard = (*runtime).enter();
-    let callback: UniencDataCallback<UniencSampleData> = std::mem::transmute(callback);
+    let _guard = unsafe { &*runtime }.enter();
+    let callback: UniencDataCallback<UniencSampleData> = unsafe { std::mem::transmute(callback) };
     if output.is_null() {
         UniencError::invalid_input_error("Invalid input parameters")
             .apply_callback(callback, user_data);
@@ -148,12 +148,12 @@ pub unsafe extern "C" fn unienc_video_encoder_pull(
             .ok_or(UniencError::resource_allocation_error("Resource is None"))
         {
             Ok(output) => {
-                let result = output
+                
+                output
                     .pull()
                     .await
                     .context("Failed to pull video sample")
-                    .map_err(UniencError::from_common);
-                result
+                    .map_err(UniencError::from_common)
             }
             Err(err) => Err(err),
         };
@@ -161,7 +161,7 @@ pub unsafe extern "C" fn unienc_video_encoder_pull(
     });
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn unienc_free_video_encoder_input(
     video_input: SendPtr<Mutex<Option<VideoEncoderInput>>>,
 ) {
@@ -170,7 +170,7 @@ pub unsafe extern "C" fn unienc_free_video_encoder_input(
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn unienc_free_video_encoder_output(
     video_output: SendPtr<Mutex<Option<VideoEncoderOutput>>>,
 ) {

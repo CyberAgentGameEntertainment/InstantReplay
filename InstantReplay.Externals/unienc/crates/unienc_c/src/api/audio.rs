@@ -5,7 +5,7 @@ use unienc::{AudioSample, EncoderInput, EncoderOutput, ResultExt};
 use crate::*;
 
 // Audio encoder input/output functions
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn unienc_audio_encoder_push(
     runtime: *mut Runtime,
     input: SendPtr<Mutex<Option<AudioEncoderInput>>>,
@@ -15,8 +15,8 @@ pub unsafe extern "C" fn unienc_audio_encoder_push(
     callback: usize, /*UniencCallback*/
     user_data: SendPtr<c_void>,
 ) {
-    let _guard = (*runtime).enter();
-    let callback: UniencCallback = std::mem::transmute(callback);
+    let _guard = unsafe {&*runtime}.enter();
+    let callback: UniencCallback = unsafe { std::mem::transmute(callback) };
     if input.is_null() || data.is_null() {
         UniencError::invalid_input_error("Invalid input parameters")
             .apply_callback(callback, user_data);
@@ -48,15 +48,15 @@ pub unsafe extern "C" fn unienc_audio_encoder_push(
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn unienc_audio_encoder_pull(
     runtime: *mut Runtime,
     output: SendPtr<Mutex<Option<AudioEncoderOutput>>>,
     callback: usize, /*UniencDataCallback<UniencSampleData>*/
     user_data: SendPtr<c_void>,
 ) {
-    let _guard = (*runtime).enter();
-    let callback: UniencDataCallback<UniencSampleData> = std::mem::transmute(callback);
+    let _guard = unsafe { &*runtime }.enter();
+    let callback: UniencDataCallback<UniencSampleData> = unsafe { std::mem::transmute(callback) };
     if output.is_null() {
         UniencError::invalid_input_error("Invalid input parameters")
             .apply_callback(callback, user_data);
@@ -81,7 +81,7 @@ pub unsafe extern "C" fn unienc_audio_encoder_pull(
     });
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn unienc_free_audio_encoder_input(
     audio_input: SendPtr<Mutex<Option<AudioEncoderInput>>>,
 ) {
@@ -90,7 +90,7 @@ pub unsafe extern "C" fn unienc_free_audio_encoder_input(
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn unienc_free_audio_encoder_output(
     audio_output: SendPtr<Mutex<Option<AudioEncoderOutput>>>,
 ) {
