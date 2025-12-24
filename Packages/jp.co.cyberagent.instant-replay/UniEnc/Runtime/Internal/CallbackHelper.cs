@@ -6,7 +6,7 @@ using System.Threading.Tasks.Sources;
 using AOT;
 using UniEnc.Native;
 
-#if NET5_0
+#if NET5_0_OR_GREATER
 using System.Runtime.CompilerServices;
 #endif
 
@@ -19,18 +19,18 @@ namespace UniEnc
     {
         public unsafe delegate void SimpleCallbackDelegate(void* userData, UniencErrorNative errorKind);
 
-        private unsafe delegate void DataCallbackDelegate<in T>(T data, void* userData, UniencErrorNative error)
-            where T : unmanaged;
+        private unsafe delegate void DataCallbackDelegate(UniencSampleData data, void* userData,
+            UniencErrorNative error);
         
-#if !NET5_0
+#if !NET5_0_OR_GREATER
         private static readonly unsafe SimpleCallbackDelegate SSimpleCallbackDelegate = SimpleCallback;
-        private static readonly unsafe DataCallbackDelegate<UniencSampleData> SSampleDataCallbackDelegate =
+        private static readonly unsafe DataCallbackDelegate SSampleDataCallbackDelegate =
             SampleDataCallback;
 #endif
 
         // ReSharper disable once RedundantUnsafeContext
         private static readonly unsafe IntPtr SimpleCallbackPtr =
-#if NET5_0
+#if NET5_0_OR_GREATER
             (IntPtr)(delegate* unmanaged[Cdecl]<void*, UniencErrorNative, void>)(&SimpleCallback);
 #else
             Marshal.GetFunctionPointerForDelegate(SSimpleCallbackDelegate);
@@ -39,7 +39,7 @@ namespace UniEnc
 
         // ReSharper disable once RedundantUnsafeContext
         private static readonly unsafe IntPtr DataCallbackPtr =
-#if NET5_0
+#if NET5_0_OR_GREATER
             (IntPtr)(delegate* unmanaged[Cdecl]<UniencSampleData, void*, UniencErrorNative, void>)(&SampleDataCallback);
 #else
             Marshal.GetFunctionPointerForDelegate(SSampleDataCallbackDelegate);
@@ -49,7 +49,7 @@ namespace UniEnc
         ///     Native callback for simple operations.
         /// </summary>
         [MonoPInvokeCallback(typeof(SimpleCallbackDelegate))]
-#if NET5_0
+#if NET5_0_OR_GREATER
         [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
 #endif
         private static unsafe void SimpleCallback(void* userData, UniencErrorNative error)
@@ -66,7 +66,7 @@ namespace UniEnc
             {
                 string errorMessage = null;
                 if (error.message != null)
-                    errorMessage = Marshal.PtrToStringUTF8((IntPtr)error.message);
+                    errorMessage = MarshalEx.PtrToStringUTF8((IntPtr)error.message);
 
                 context.SetException(new UniEncException(error.kind, errorMessage ?? "Operation failed"));
             }
@@ -75,8 +75,8 @@ namespace UniEnc
         /// <summary>
         ///     Native callback for data operations.
         /// </summary>
-        [MonoPInvokeCallback(typeof(DataCallbackDelegate<UniencSampleData>))]
-#if NET5_0
+        [MonoPInvokeCallback(typeof(DataCallbackDelegate))]
+#if NET5_0_OR_GREATER
         [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
 #endif
         private static unsafe void SampleDataCallback(UniencSampleData sampleData, void* userData,
@@ -105,7 +105,7 @@ namespace UniEnc
             {
                 string errorMessage = null;
                 if (error.message != null)
-                    errorMessage = Marshal.PtrToStringUTF8((IntPtr)error.message);
+                    errorMessage = MarshalEx.PtrToStringUTF8((IntPtr)error.message);
 
                 context.SetException(new UniEncException(error.kind, errorMessage ?? "Operation failed"));
             }

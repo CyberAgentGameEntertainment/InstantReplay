@@ -21,7 +21,7 @@ Provided as a part of [Instant Replay for Unity](https://github.com/CyberAgentGa
 
 ## Usage
 
-See [Examples](https://github.com/CyberAgentGameEntertainment/InstantReplay/tree/main/InstantReplay.Externals/src/UniEnc.Examples) for more complete examples.
+See [Example](https://github.com/CyberAgentGameEntertainment/InstantReplay/blob/main/InstantReplay.Externals/src/UniEnc.Example/Program.cs) for more complete example.
 
 ### Initialization
 
@@ -44,11 +44,13 @@ using var encodingSystem = new EncodingSystem(new VideoEncoderOptions
 ### Video Encoding
 
 ```csharp
+const int frameBufferSize = width * height * 4; // input is BGRA32
+
 using var videoEncoder = encodingSystem.CreateVideoEncoder();
 
 async ValueTask ProduceVideoAsync()
 {
-    using var pool = new SharedBufferPool(frameBufferSize * 4);
+    using var pool = new SharedBufferPool(frameBufferSize * 4); // rotating 4 buffers
 
     for (var i = 0; i < framerate * seconds; i++)
     {
