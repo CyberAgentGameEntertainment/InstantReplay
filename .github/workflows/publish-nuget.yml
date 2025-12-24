@@ -21,13 +21,13 @@ jobs:
           user: ${{ secrets.CT_NUGET_USER }} # https://learn.microsoft.com/en-us/nuget/nuget-org/trusted-publishing
       - uses: actions/checkout@v4
       - name: get tag name
-        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_ENV # v0.0.0 -> 0.0.0
+        run: echo "VERSION=${GITHUB_REF_NAME##*v}" >> $GITHUB_ENV # v0.0.0 -> 0.0.0
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 8.0.x
       - name: Install dependencies
         run: dotnet restore
       - name: Build
-        run: dotnet build -c Release -p:Version=${{ env.VERSION }} --no-restore -o ./publish
+        run: dotnet build ./src/UniEnc/UniEnc.csproj -c Release -p:Version=${{ env.VERSION }} --no-restore -o ./publish
       - name: Publish
         run: dotnet nuget push ./publish/UniEnc*.${{ env.VERSION }}.nupkg --api-key ${{steps.login.outputs.NUGET_API_KEY}} -s https://api.nuget.org/v3/index.json
