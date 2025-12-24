@@ -17,6 +17,7 @@
         <PackageProjectUrl>https://github.com/CyberAgentGameEntertainment/InstantReplay/tree/main/InstantReplay.Externals/src/UniEnc</PackageProjectUrl>
         <RepositoryUrl>$(PackageProjectUrl)</RepositoryUrl>
         <RepositoryType>git</RepositoryType>
+        <AllowedOutputExtensionsInPackageBuildOutputFolder>$(AllowedOutputExtensionsInPackageBuildOutputFolder);.pdb</AllowedOutputExtensionsInPackageBuildOutputFolder>
     </PropertyGroup>
 
     <ItemDefinitionGroup>
