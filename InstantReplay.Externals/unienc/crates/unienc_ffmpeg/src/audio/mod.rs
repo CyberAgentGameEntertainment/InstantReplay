@@ -84,8 +84,8 @@ impl EncoderInput for FFmpegAudioEncoderInput {
             )
         };
 
-        self.input.write_all(data).await.map_err(|e| FFmpegError::from(e))?;
-        self.input.flush().await.map_err(|e| FFmpegError::from(e))?;
+        self.input.write_all(data).await.map_err(FFmpegError::from)?;
+        self.input.flush().await.map_err(FFmpegError::from)?;
 
         Ok(())
     }
@@ -97,11 +97,10 @@ impl EncoderOutput for FFmpegAudioEncoderOutput {
     async fn pull(&mut self) -> unienc_common::Result<Option<Self::Data>> {
         // read ADTS header
         let mut header = vec![0u8; 7];
-        if let Err(err) = self.output.read_exact(&mut header).await {
-            if err.kind() == std::io::ErrorKind::UnexpectedEof {
+        if let Err(err) = self.output.read_exact(&mut header).await
+            && err.kind() == std::io::ErrorKind::UnexpectedEof {
                 return Ok(None);
             }
-        }
 
         // get frame length
         let mut length = ((header[3]& 0b11) as u16) << 11;
@@ -115,7 +114,7 @@ impl EncoderOutput for FFmpegAudioEncoderOutput {
         self.timestamp_in_samples += 1024;
 
         let mut buf = vec![0u8; length as usize];
-        self.output.read_exact(&mut buf).await.map_err(|e| FFmpegError::from(e))?;
+        self.output.read_exact(&mut buf).await.map_err(FFmpegError::from)?;
 
         let data = AudioEncodedData { header, payload: buf, timestamp_in_samples, sample_rate: self.sample_rate };
 

@@ -93,21 +93,21 @@ impl MuxerInput for FFmpegMuxerVideoInput {
         let input = self.input.as_mut().ok_or(FFmpegError::InputNotAvailable)?;
         match data {
             VideoEncodedData::ParameterSet(payload) => {
-                input.write_all(&payload).await.map_err(|e| FFmpegError::from(e))?;
+                input.write_all(&payload).await.map_err(FFmpegError::from)?;
             }
             VideoEncodedData::Slice { payload, .. } => {
-                input.write_all(&payload).await.map_err(|e| FFmpegError::from(e))?;
+                input.write_all(&payload).await.map_err(FFmpegError::from)?;
             }
         }
 
-        input.flush().await.map_err(|e| FFmpegError::from(e))?;
+        input.flush().await.map_err(FFmpegError::from)?;
 
         Ok(())
     }
 
     async fn finish(mut self) -> unienc_common::Result<()> {
         // take input to drop it to ensure stdin / pipe is closed
-        self.input.take().ok_or(FFmpegError::InputNotAvailable)?.shutdown().await.map_err(|e| FFmpegError::from(e))?;
+        self.input.take().ok_or(FFmpegError::InputNotAvailable)?.shutdown().await.map_err(FFmpegError::from)?;
         Ok(())
     }
 }
@@ -117,24 +117,24 @@ impl MuxerInput for FFmpegMuxerAudioInput {
 
     async fn push(&mut self, data: Self::Data) -> unienc_common::Result<()> {
         let input = self.input.as_mut().ok_or(FFmpegError::InputNotAvailable)?;
-        input.write_all(&data.header).await.map_err(|e| FFmpegError::from(e))?;
-        input.write_all(&data.payload).await.map_err(|e| FFmpegError::from(e))?;
+        input.write_all(&data.header).await.map_err(FFmpegError::from)?;
+        input.write_all(&data.payload).await.map_err(FFmpegError::from)?;
 
-        input.flush().await.map_err(|e| FFmpegError::from(e))?;
+        input.flush().await.map_err(FFmpegError::from)?;
 
         Ok(())
     }
 
     async fn finish(mut self) -> unienc_common::Result<()> {
         // take input to drop it to ensure stdin / pipe is closed
-        self.input.take().ok_or(FFmpegError::InputNotAvailable)?.shutdown().await.map_err(|e| FFmpegError::from(e))?;
+        self.input.take().ok_or(FFmpegError::InputNotAvailable)?.shutdown().await.map_err(FFmpegError::from)?;
         Ok(())
     }
 }
 
 impl CompletionHandle for FFmpegCompletionHandle {
     async fn finish(self) -> unienc_common::Result<()> {
-        let result = self.child.wait().await.map_err(|e| FFmpegError::from(e))?;
+        let result = self.child.wait().await?;
         println!("FFmpeg exited: {}", result);
         if result.success() {
             Ok(())

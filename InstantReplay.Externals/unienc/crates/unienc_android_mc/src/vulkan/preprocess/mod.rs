@@ -333,7 +333,7 @@ pub fn blit_to_hardware_buffer(
     flip_vertically: bool,
     is_gamma_workflow: bool,
     frame: &HardwareBufferFrame,
-) -> Result<impl Future<Output = Result<()>>> {
+) -> Result<impl Future<Output = Result<()>> + use<>> {
     let markers = MARKERS.get();
     let _guard = markers.map(|m| m.preprocess_blit.get());
     let vulkan = &cx.vulkan;

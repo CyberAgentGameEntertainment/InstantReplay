@@ -72,7 +72,7 @@ impl NaluReader {
                 emit(&nal_unit);
                 Ok(())
             }
-            Err(err) => Err(FFmpegError::Other(format!("{}", err))),
+            Err(err) => Err(FFmpegError::Other(err.to_string())),
         }
     }
 }

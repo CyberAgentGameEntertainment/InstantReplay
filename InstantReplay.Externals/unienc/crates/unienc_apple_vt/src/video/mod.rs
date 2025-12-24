@@ -118,9 +118,9 @@ unsafe extern "C-unwind" fn handle_video_encode_output(
 unsafe extern "C-unwind" fn release_pixel_buffer(
     release_ref_con: *mut c_void,
     _base_address: *const c_void,
-) {
+) { unsafe {
     drop(Box::<SharedBuffer>::from_raw(release_ref_con as *mut _));
-}
+}}
 
 impl Encoder for VideoToolboxEncoder {
     type InputType = VideoToolboxEncoderInput;
@@ -188,7 +188,7 @@ impl EncoderInput for VideoToolboxEncoderInput {
                         .get()
                         .ok_or(AppleError::EventIdNotReserved)?);
 
-                let texture = rx.await.map_err(|e| AppleError::from(e))? // failed to receive
+                let texture = rx.await.map_err(AppleError::from)? // failed to receive
                     ? // failed to issue blit
                     .await?; // blit failed
                 texture.pixel_buffer()

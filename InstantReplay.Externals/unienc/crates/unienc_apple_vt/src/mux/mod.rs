@@ -50,7 +50,7 @@ impl MuxerInput for AVFMuxerVideoInput {
     type Data = VideoEncodedData;
 
     async fn push(&mut self, data: Self::Data) -> unienc_common::Result<()> {
-        self.tx.send(Mutex::new(data.sample_buffer)).await.map_err(|e| AppleError::from(e))?;
+        self.tx.send(Mutex::new(data.sample_buffer)).await.map_err(AppleError::from)?;
 
         Ok(())
     }
@@ -71,7 +71,7 @@ impl MuxerInput for AVFMuxerAudioInput {
         let sample_buffer =
             create_audio_sample_buffer(&data, &mut self.asbd, !self.magic_cookie_applied)?;
         self.magic_cookie_applied = true;
-        self.tx.send(Mutex::new(sample_buffer.into())).await.map_err(|e| AppleError::from(e))?;
+        self.tx.send(Mutex::new(sample_buffer.into())).await.map_err(AppleError::from)?;
 
         Ok(())
     }
@@ -213,11 +213,10 @@ impl AVFMuxer {
         }
 
         if !unsafe { writer.startWriting() } {
-            if unsafe { writer.status() } == AVAssetWriterStatus::Failed {
-                if let Some(err) = unsafe { writer.error() } {
+            if unsafe { writer.status() } == AVAssetWriterStatus::Failed
+                && let Some(err) = unsafe { writer.error() } {
                     return Err(AppleError::AssetWriterStartFailed(err.to_string()));
                 }
-            }
             return Err(AppleError::AssetWriterStartFailedUnknown);
         }
 

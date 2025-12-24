@@ -91,7 +91,7 @@ impl EncoderInput for AudioToolboxEncoderInput {
                     sample_rate: self.sample_rate,
                     magic_cookie: magic_cookie.clone(),
                 };
-                self.tx.send(packet).await.map_err(|e| AppleError::from(e))?;
+                self.tx.send(packet).await.map_err(AppleError::from)?;
             }
 
             sample.is_some()

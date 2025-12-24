@@ -256,7 +256,7 @@ pub(crate) fn custom_blit(
     dst_height: u32,
     flip_vertically: bool,
     is_gamma_workflow: bool,
-) -> Result<impl Future<Output = Result<SharedTexture>> + Send> {
+) -> Result<impl Future<Output = Result<SharedTexture>> + Send + use<>> {
     let context = CONTEXT
         .get()
         .ok_or(AppleError::MetalNotInitialized)?
