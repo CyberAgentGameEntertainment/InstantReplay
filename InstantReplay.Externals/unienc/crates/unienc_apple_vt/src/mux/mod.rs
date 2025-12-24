@@ -23,7 +23,7 @@ use objc2_core_media::{
 };
 use objc2_foundation::{NSString, NSURL};
 use tokio::sync::{mpsc, oneshot};
-use unienc_common::{CompletionHandle, Muxer, MuxerInput};
+use unienc_common::{CommonError, CompletionHandle, Muxer, MuxerInput, ResultExt};
 
 use crate::common::UnsafeSendRetained;
 use crate::{audio::AudioPacket, video::VideoEncodedData};
@@ -103,7 +103,7 @@ impl CompletionHandle for AVFMuxerCompletionHandle {
                 if let Some(tx) = tx.borrow_mut().take() {
                     if let Some(err) = writer1.error() {
                         println!("Failed to finish writing: {}", err);
-                        tx.send(Err(anyhow!(err.to_string()))).unwrap();
+                        tx.send(Err(CommonError::Other(err.to_string()))).unwrap();
                     } else {
                         tx.send(Ok(())).unwrap();
                     }
@@ -111,7 +111,7 @@ impl CompletionHandle for AVFMuxerCompletionHandle {
             }));
         }
 
-        rx.await?
+        rx.await.context("failed to finish writing")?
     }
 }
 

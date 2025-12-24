@@ -1,7 +1,7 @@
 use std::ffi::c_void;
 
 use tokio::sync::Mutex;
-use unienc_common::{CompletionHandle, EncodedData, MuxerInput, ResultExt};
+use unienc::{CompletionHandle, EncodedData, MuxerInput, ResultExt};
 use crate::*;
 
 // Muxer input functions

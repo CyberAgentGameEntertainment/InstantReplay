@@ -1,4 +1,4 @@
-use unienc_common::{AudioEncoderOptions, UniencSampleKind, VideoEncoderOptions};
+use unienc::{AudioEncoderOptions, UniencSampleKind, VideoEncoderOptions};
 
 #[repr(C)]
 pub struct UniencSampleData {

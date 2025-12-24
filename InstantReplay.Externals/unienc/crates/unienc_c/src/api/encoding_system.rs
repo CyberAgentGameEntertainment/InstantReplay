@@ -3,7 +3,7 @@ use std::os::raw::c_void;
 use std::path::Path;
 use std::sync::Arc;
 use tokio::sync::Mutex;
-use unienc_common::{Encoder, EncodingSystem, Muxer, ResultExt};
+use unienc::{Encoder, EncodingSystem, Muxer, ResultExt};
 use crate::*;
 
 #[no_mangle]

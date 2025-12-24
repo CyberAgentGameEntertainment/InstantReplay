@@ -1,5 +1,5 @@
 use std::os::raw::{c_int, c_void};
-use unienc_common::{EncodingSystem, GraphicsEventIssuer};
+use unienc::{EncodingSystem, GraphicsEventIssuer};
 use crate::*;
 
 pub struct UniencGraphicsEventIssuer {

@@ -3,7 +3,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use unienc_common::buffer::{SharedBuffer, SharedBufferPool};
+use unienc::buffer::{SharedBuffer, SharedBufferPool};
 use crate::*;
 
 #[no_mangle]

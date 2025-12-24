@@ -1,7 +1,7 @@
 
 #[cfg(not(target_os = "ios"))]
 mod entry_points {
-    use unienc_common::EncodingSystem;
+    use unienc::EncodingSystem;
     use crate::platform::PlatformEncodingSystem;
 
     unity_native_plugin::unity_native_plugin_entry_point! {
@@ -18,7 +18,7 @@ mod entry_points {
 // we add `unienc_` prefix to avoid name collision with other plugins
 #[cfg(target_os = "ios")]
 mod entry_points {
-    use unienc_common::EncodingSystem;
+    use unienc::EncodingSystem;
     use crate::platform::PlatformEncodingSystem;
     #[unsafe(no_mangle)]
     #[allow(non_snake_case)]

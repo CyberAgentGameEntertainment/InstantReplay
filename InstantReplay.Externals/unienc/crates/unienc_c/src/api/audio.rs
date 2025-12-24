@@ -1,7 +1,7 @@
 use std::ffi::c_void;
 
 use tokio::sync::Mutex;
-use unienc_common::{AudioSample, EncoderInput, EncoderOutput, ResultExt};
+use unienc::{AudioSample, EncoderInput, EncoderOutput, ResultExt};
 use crate::*;
 
 // Audio encoder input/output functions
