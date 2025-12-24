@@ -3,7 +3,7 @@ use std::ops::Deref;
 use std::os::raw::c_void;
 use std::sync::Arc;
 use unity_native_plugin::graphics::RenderingEventAndData;
-use unienc_common::{CategorizedError, EncodedData, ErrorCategory, UniencSampleKind};
+use unienc::{CategorizedError, EncodedData, ErrorCategory, UniencSampleKind};
 use crate::*;
 
 
@@ -120,7 +120,7 @@ impl UniencError {
     }
 
     /// Convert a CommonError to UniencError using the error's category
-    pub fn from_common(err: unienc_common::CommonError) -> Self {
+    pub fn from_common(err: unienc::CommonError) -> Self {
         let kind = UniencErrorKind::from(err.category());
         let message = err.to_string();
         Self {

@@ -7,6 +7,7 @@ objc2 = { version = "0.6.1", features = ["catch-all"] }
 bincode = { version = "2.0.1", features = ["derive"] }
 thiserror = "2.0"
 unienc_common = { path = "./crates/unienc_common" }
+unienc = { path = "./crates/unienc" }
 unienc_android_mc = { path = "./crates/unienc_android_mc" }
 unienc_windows_mf = { path = "./crates/unienc_windows_mf" }
 unienc_apple_vt = { path = "./crates/unienc_apple_vt" }

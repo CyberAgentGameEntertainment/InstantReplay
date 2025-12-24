@@ -5,17 +5,10 @@ edition.workspace = true
 license.workspace = true
 authors.workspace = true
 
-[lib]
-crate-type = ["cdylib", "staticlib", "rlib"]
-
 [dependencies]
-thiserror = { workspace = true }
 bincode = { version = "2.0.1", features = ["serde"] }
-futures = "0.3.31"
 rand = "0.9.1"
-tokio = { version = "1.45.1", features = ["rt", "macros", "rt-multi-thread"] }
 unienc_common = { workspace = true }
-unity-native-plugin = "0.8.0"
 
 [target.'cfg(all(target_family = "unix", not(target_vendor = "apple"), not(target_os = "android")))'.dependencies]
 unienc_ffmpeg = { workspace = true }
@@ -31,5 +24,5 @@ unienc_windows_mf = { workspace = true }
 [target.'cfg(target_vendor = "apple")'.dependencies]
 unienc_apple_vt = { workspace = true }
 
-[build-dependencies]
-csbindgen = "1.9.3"
+[dev-dependencies]
+tokio = "1.48.0"
