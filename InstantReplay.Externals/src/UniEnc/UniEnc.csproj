@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
-        <TargetFramework>net5.0</TargetFramework>
+        <TargetFrameworks>netstandard2.0;netstandard2.1</TargetFrameworks>
         <Nullable>disable</Nullable>
         <LangVersion>9</LangVersion>
         <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
@@ -43,6 +43,12 @@
             <CopyToOutputDirectory>Always</CopyToOutputDirectory>
             <Link>runtimes/%(Rid)/native/%(Filename)%(Extension)</Link>
         </Content>
+    </ItemGroup>
+
+    <ItemGroup>
+      <PackageReference Include="Microsoft.Bcl.AsyncInterfaces" Version="10.0.1" />
+      <PackageReference Include="System.Memory" Version="4.6.3" />
+      <PackageReference Include="System.Threading.Tasks.Extensions" Version="4.6.3" />
     </ItemGroup>
 
 </Project>

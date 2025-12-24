@@ -19,12 +19,12 @@ namespace UniEnc
     {
         public unsafe delegate void SimpleCallbackDelegate(void* userData, UniencErrorNative errorKind);
 
-        private unsafe delegate void DataCallbackDelegate<in T>(T data, void* userData, UniencErrorNative error)
-            where T : unmanaged;
+        private unsafe delegate void DataCallbackDelegate(UniencSampleData data, void* userData,
+            UniencErrorNative error);
         
 #if !NET5_0
         private static readonly unsafe SimpleCallbackDelegate SSimpleCallbackDelegate = SimpleCallback;
-        private static readonly unsafe DataCallbackDelegate<UniencSampleData> SSampleDataCallbackDelegate =
+        private static readonly unsafe DataCallbackDelegate SSampleDataCallbackDelegate =
             SampleDataCallback;
 #endif
 
@@ -66,7 +66,7 @@ namespace UniEnc
             {
                 string errorMessage = null;
                 if (error.message != null)
-                    errorMessage = Marshal.PtrToStringUTF8((IntPtr)error.message);
+                    errorMessage = MarshalEx.PtrToStringUTF8((IntPtr)error.message);
 
                 context.SetException(new UniEncException(error.kind, errorMessage ?? "Operation failed"));
             }
@@ -75,7 +75,7 @@ namespace UniEnc
         /// <summary>
         ///     Native callback for data operations.
         /// </summary>
-        [MonoPInvokeCallback(typeof(DataCallbackDelegate<UniencSampleData>))]
+        [MonoPInvokeCallback(typeof(DataCallbackDelegate))]
 #if NET5_0
         [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
 #endif
@@ -105,7 +105,7 @@ namespace UniEnc
             {
                 string errorMessage = null;
                 if (error.message != null)
-                    errorMessage = Marshal.PtrToStringUTF8((IntPtr)error.message);
+                    errorMessage = MarshalEx.PtrToStringUTF8((IntPtr)error.message);
 
                 context.SetException(new UniEncException(error.kind, errorMessage ?? "Operation failed"));
             }
