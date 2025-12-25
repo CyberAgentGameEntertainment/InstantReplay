@@ -20,7 +20,7 @@ pub unsafe extern "C" fn JNI_OnLoad(vm: *mut c_void, reserved: *mut c_void) -> c
     set_stdout_redirect("unienc").unwrap_or_else(|e| {
         log_to_logcat("unienc", &format!("Failed to redirect stdout: {}", e));
     });
-    unienc_android_mc::set_java_vm(vm as *mut _, reserved)
+    unienc::android::set_java_vm(vm as *mut _, reserved)
 }
 
 pub fn log_to_logcat(tag: &str, message: &str) {

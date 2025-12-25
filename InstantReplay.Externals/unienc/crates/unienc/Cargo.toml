@@ -1,6 +1,6 @@
 [package]
 name = "unienc"
-version = "0.1.0"
+version.workspace = true
 edition.workspace = true
 license.workspace = true
 authors.workspace = true
@@ -14,8 +14,6 @@ unienc_ffmpeg = { workspace = true }
 
 [target.'cfg(target_os = "android")'.dependencies]
 unienc_android_mc = { workspace = true }
-libc = "0.2.174"
-ndk-sys = "0.6.0"
 
 [target.'cfg(windows)'.dependencies]
 unienc_windows_mf = { workspace = true }
@@ -26,3 +24,7 @@ unienc_apple_vt = { workspace = true }
 [dev-dependencies]
 tokio = "1.48.0"
 rand = "0.9.1"
+
+[features]
+default = []
+unity = ["unienc_common/unity"]

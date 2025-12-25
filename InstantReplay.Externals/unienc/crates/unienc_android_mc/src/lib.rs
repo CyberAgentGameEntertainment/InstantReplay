@@ -18,6 +18,7 @@ pub use error::{AndroidError, Result};
 
 use audio::MediaCodecAudioEncoder;
 use mux::MediaMuxer;
+use unienc_common::unity::UnityPlugin;
 use video::MediaCodecVideoEncoder;
 
 static JAVA_VM: OnceLock<jni::JavaVM> = OnceLock::new();
@@ -72,6 +73,9 @@ impl<V: unienc_common::VideoEncoderOptions, A: unienc_common::AudioEncoderOption
         let api_level = common::get_android_api_level().unwrap_or(0);
         api_level >= 29 && vulkan::is_initialized()
     }
+}
+
+impl<V: unienc_common::VideoEncoderOptions, A: unienc_common::AudioEncoderOptions> UnityPlugin for MediaCodecEncodingSystem<V, A> {
     fn unity_plugin_load(interfaces: &unity_native_plugin::interface::UnityInterfaces) {
         vulkan::unity_plugin_load(interfaces);
     }

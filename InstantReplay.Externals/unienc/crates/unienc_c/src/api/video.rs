@@ -38,6 +38,7 @@ pub unsafe extern "C" fn unienc_video_encoder_push_shared_buffer(
     unsafe { video_encoder_push_video_sample(runtime, input, sample, callback, user_data) };
 }
 
+#[cfg(feature = "unity")]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn unienc_video_encoder_push_blit_source(
     runtime: *mut Runtime,
@@ -59,7 +60,7 @@ pub unsafe extern "C" fn unienc_video_encoder_push_blit_source(
             .apply_callback(callback, user_data);
         return;
     }
-    let unienc_issue_graphics_event_callback: UniencIssueGraphicsEventCallback =
+    let unienc_issue_graphics_event_callback: crate::unity::UniencIssueGraphicsEventCallback =
         unsafe { std::mem::transmute(issue_graphics_event_callback) };
 
     // weak runtime for graphics event
@@ -79,7 +80,7 @@ pub unsafe extern "C" fn unienc_video_encoder_push_blit_source(
                     graphics_format,
                     flip_vertically,
                     is_gamma_workflow,
-                    event_issuer: Box::new(UniencGraphicsEventIssuer::new(
+                    event_issuer: Box::new(crate::unity::UniencGraphicsEventIssuer::new(
                         unienc_issue_graphics_event_callback,
                         weak
                     )),
