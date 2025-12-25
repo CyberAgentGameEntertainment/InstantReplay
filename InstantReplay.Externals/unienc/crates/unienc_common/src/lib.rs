@@ -8,6 +8,8 @@ use bincode::{Decode, Encode};
 
 pub mod buffer;
 pub mod error;
+#[cfg(feature = "unity")]
+pub mod unity;
 
 pub use error::{CategorizedError, CommonError, ErrorCategory, OptionExt, Result, ResultExt};
 
@@ -69,10 +71,6 @@ pub trait EncodingSystem {
     fn is_blit_supported(&self) -> bool {
         false
     }
-
-    #[allow(unused_variables)]
-    fn unity_plugin_load(interfaces: &unity_native_plugin::interface::UnityInterfaces) {}
-    fn unity_plugin_unload() {}
 }
 
 pub trait TryFromUnityNativeTexturePointer: Sized {

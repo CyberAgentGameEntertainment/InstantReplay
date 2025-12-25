@@ -1,6 +1,6 @@
 [package]
 name = "unienc_android_mc"
-version = "0.1.0"
+version.workspace = true
 edition.workspace = true
 license.workspace = true
 authors.workspace = true
@@ -9,11 +9,11 @@ authors.workspace = true
 thiserror = { workspace = true }
 jni = "0.21.1"
 tokio = { version = "1.45.1", features = ["rt", "time", "macros", "sync"] }
-unienc_common = { workspace = true }
+unienc_common = { workspace = true, features = ["unity"] }
 bincode = { workspace = true }
 ndk-sys = { version = "0.6.0", features = ["media"] }
 bitflags = "2.9.1"
 libc = "0.2.174"
 ash = "0.38.0"
-unity-native-plugin = { version = "0.8.0", features = ["profiler"] }
-unity-native-plugin-vulkan = "0.8.0"
+unity-native-plugin = { workspace = true, features = ["profiler"] }
+unity-native-plugin-vulkan.workspace = true

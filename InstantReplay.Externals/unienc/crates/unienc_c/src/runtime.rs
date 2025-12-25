@@ -15,7 +15,7 @@ pub struct Runtime {
 
 impl Runtime {
     pub fn new() -> Result<Runtime, RuntimeError> {
-        let tokio_runtime = Arc::new(tokio::runtime::Runtime::new()?);
+        let tokio_runtime = Arc::new(new_runtime_builder().build()?);
         Ok(Self { tokio_runtime })
     }
 
@@ -36,5 +36,17 @@ impl WeakRuntime {
         self.0
             .upgrade()
             .map(|tokio_runtime| Runtime { tokio_runtime })
+    }
+}
+
+fn new_runtime_builder() -> tokio::runtime::Builder {
+    #[cfg(not(feature = "multi-thread"))]
+    {
+        tokio::runtime::Builder::new_current_thread()
+    }
+
+    #[cfg(feature = "multi-thread")]
+    {
+        tokio::runtime::Builder::new_multi_thread()
     }
 }

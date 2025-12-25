@@ -65,7 +65,9 @@ impl<V: unienc_common::VideoEncoderOptions, A: unienc_common::AudioEncoderOption
     fn is_blit_supported(&self) -> bool {
         metal::is_initialized()
     }
+}
 
+impl<V: unienc_common::VideoEncoderOptions, A: unienc_common::AudioEncoderOptions> unienc_common::unity::UnityPlugin for VideoToolboxEncodingSystem<V, A> {
     fn unity_plugin_load(interfaces: &unity_native_plugin::interface::UnityInterfaces) {
         metal::unity_plugin_load(interfaces);
     }

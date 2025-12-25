@@ -2,7 +2,6 @@ use std::ffi::{c_char, CString};
 use std::ops::Deref;
 use std::os::raw::c_void;
 use std::sync::Arc;
-use unity_native_plugin::graphics::RenderingEventAndData;
 use unienc::{CategorizedError, EncodedData, ErrorCategory, UniencSampleKind};
 use crate::*;
 
@@ -11,8 +10,6 @@ use crate::*;
 pub type UniencCallback = unsafe extern "C" fn(user_data: *mut c_void, error: UniencErrorNative);
 pub type UniencDataCallback<Data> =
 unsafe extern "C" fn(data: Data, user_data: *mut c_void, error: UniencErrorNative);
-pub type UniencIssueGraphicsEventCallback =
-unsafe extern "C" fn(func: RenderingEventAndData, event_id: i32, user_data: *mut c_void);
 
 // Send-safe wrappers for raw pointers
 #[repr(transparent)]
