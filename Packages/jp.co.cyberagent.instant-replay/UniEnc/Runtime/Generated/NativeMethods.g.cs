@@ -98,6 +98,13 @@ namespace UniEnc.Native
         [return: MarshalAs(UnmanagedType.U1)]
         internal static extern bool unienc_new_muxer(Runtime* runtime, PlatformEncodingSystem* system, byte* output_path, Mutex** video_input_out, Mutex** audio_input_out, Mutex** completion_handle_out, nuint on_error, SendPtr user_data);
 
+        [DllImport(__DllName, EntryPoint = "unienc_is_blit_supported", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        [return: MarshalAs(UnmanagedType.U1)]
+        internal static extern bool unienc_is_blit_supported(PlatformEncodingSystem* system);
+
+        [DllImport(__DllName, EntryPoint = "unienc_free_graphics_event_context", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        internal static extern void unienc_free_graphics_event_context(void* context);
+
         [DllImport(__DllName, EntryPoint = "unienc_new_shared_buffer_pool", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
         [return: MarshalAs(UnmanagedType.U1)]
         internal static extern bool unienc_new_shared_buffer_pool(nuint limit, Mutex** pool_out, nuint _on_error, void* _user_data);
@@ -111,13 +118,6 @@ namespace UniEnc.Native
 
         [DllImport(__DllName, EntryPoint = "unienc_free_shared_buffer", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
         internal static extern void unienc_free_shared_buffer(SharedBuffer* buffer);
-
-        [DllImport(__DllName, EntryPoint = "unienc_is_blit_supported", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
-        [return: MarshalAs(UnmanagedType.U1)]
-        internal static extern bool unienc_is_blit_supported(PlatformEncodingSystem* system);
-
-        [DllImport(__DllName, EntryPoint = "unienc_free_graphics_event_context", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
-        internal static extern void unienc_free_graphics_event_context(void* context);
 
         [DllImport(__DllName, EntryPoint = "unienc_dummy", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
         internal static extern void unienc_dummy(UniencErrorKind _error_kind, UniencErrorNative _error_native, UniencSampleData _sample);
