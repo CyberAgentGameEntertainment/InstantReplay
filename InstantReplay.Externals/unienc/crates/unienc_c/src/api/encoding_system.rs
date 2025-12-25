@@ -162,3 +162,8 @@ pub unsafe extern "C" fn unienc_new_muxer(
         }
     }
 }
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn unienc_is_blit_supported(system: *const PlatformEncodingSystem) -> bool {
+    unsafe {&*system}.is_blit_supported()
+}

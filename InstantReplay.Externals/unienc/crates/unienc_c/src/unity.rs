@@ -50,22 +50,6 @@ unsafe extern "system" fn graphics_event_callback_trampoline(
     callback();
 }
 
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn unienc_is_blit_supported(system: *const PlatformEncodingSystem) -> bool {
-    unsafe {&*system}.is_blit_supported()
-}
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn unienc_free_graphics_event_context(
-    context: *mut c_void,
-) {
-    if !context.is_null() {
-        unsafe {
-            let _ = Box::<Box::<dyn FnOnce() + Send>>::from_raw(context as *mut Box<dyn FnOnce() + Send>);
-        }
-    }
-}
-
 #[cfg(not(target_os = "ios"))]
 mod entry_points {
     use unienc::unity::UnityPlugin;

@@ -8,9 +8,9 @@ fn main() {
         .input_extern_file("src/api/video.rs")
         .input_extern_file("src/api/runtime.rs")
         .input_extern_file("src/api/encoding_system.rs")
+        .input_extern_file("src/api/unity.rs")
         .input_extern_file("src/types.rs")
         .input_extern_file("src/buffer.rs")
-        .input_extern_file("src/unity.rs")
         .input_extern_file("src/ffi.rs")
         .generate_csharp_file("../../../../Packages/jp.co.cyberagent.instant-replay/UniEnc/Runtime/Generated/NativeMethods.g.cs")
         .unwrap();
