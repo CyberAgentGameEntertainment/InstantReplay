@@ -1,3 +1,6 @@
 [submodule "InstantReplay.Externals/unienc/external/unity-native-plugin-rs"]
 	path = InstantReplay.Externals/unienc/external/unity-native-plugin-rs
 	url = https://github.com/ruccho/unity-native-plugin-rs.git
+[submodule "InstantReplay.Externals/unienc/external/muxide"]
+	path = InstantReplay.Externals/unienc/external/muxide
+	url = https://github.com/ruccho/muxide

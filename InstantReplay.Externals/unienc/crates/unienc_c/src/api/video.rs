@@ -38,7 +38,6 @@ pub unsafe extern "C" fn unienc_video_encoder_push_shared_buffer(
     unsafe { video_encoder_push_video_sample(runtime, input, sample, callback, user_data) };
 }
 
-#[cfg(feature = "unity")]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn unienc_video_encoder_push_blit_source(
     runtime: *mut Runtime,
@@ -60,37 +59,47 @@ pub unsafe extern "C" fn unienc_video_encoder_push_blit_source(
             .apply_callback(callback, user_data);
         return;
     }
-    let unienc_issue_graphics_event_callback: crate::unity::UniencIssueGraphicsEventCallback =
-        unsafe { std::mem::transmute(issue_graphics_event_callback) };
 
-    // weak runtime for graphics event
-    let Some(weak) = unsafe { runtime.as_ref() }.map(|r| r.weak()) else {
-        UniencError::invalid_input_error("Invalid runtime pointer")
+    #[cfg(not(feature = "unity"))]
+    {
+        UniencError::platform_error("Not supported")
             .apply_callback(callback, user_data);
-        return;
-    };
+    }
 
-    match <BlitSource as unienc::TryFromUnityNativeTexturePointer>::try_from_unity_native_texture_ptr(source_native_texture_ptr) {
-        Ok(blit_source) => {
-            let sample = VideoSample {
-                frame: VideoFrame::BlitSource {
-                    source: blit_source,
-                    width,
-                    height,
-                    graphics_format,
-                    flip_vertically,
-                    is_gamma_workflow,
-                    event_issuer: Box::new(crate::unity::UniencGraphicsEventIssuer::new(
-                        unienc_issue_graphics_event_callback,
-                        weak
-                    )),
-                },
-                timestamp,
-            };
-            unsafe { video_encoder_push_video_sample(runtime, input, sample, callback, user_data) };
-        }
-        Err(err) => {
-            UniencError::from_common(err).apply_callback(callback, user_data);
+    #[cfg(feature = "unity")]
+    {
+        let unienc_issue_graphics_event_callback: crate::unity::UniencIssueGraphicsEventCallback =
+            unsafe { std::mem::transmute(issue_graphics_event_callback) };
+
+        // weak runtime for graphics event
+        let Some(weak) = unsafe { runtime.as_ref() }.map(|r| r.weak()) else {
+            UniencError::invalid_input_error("Invalid runtime pointer")
+                .apply_callback(callback, user_data);
+            return;
+        };
+
+        match <BlitSource as unienc::TryFromUnityNativeTexturePointer>::try_from_unity_native_texture_ptr(source_native_texture_ptr) {
+            Ok(blit_source) => {
+                let sample = VideoSample {
+                    frame: VideoFrame::BlitSource {
+                        source: blit_source,
+                        width,
+                        height,
+                        graphics_format,
+                        flip_vertically,
+                        is_gamma_workflow,
+                        event_issuer: Box::new(crate::unity::UniencGraphicsEventIssuer::new(
+                            unienc_issue_graphics_event_callback,
+                            weak
+                        )),
+                    },
+                    timestamp,
+                };
+                unsafe { video_encoder_push_video_sample(runtime, input, sample, callback, user_data) };
+            }
+            Err(err) => {
+                UniencError::from_common(err).apply_callback(callback, user_data);
+            }
         }
     }
 }
@@ -102,11 +111,15 @@ unsafe fn video_encoder_push_video_sample(
     callback: UniencCallback,
     user_data: SendPtr<c_void>,
 ) {
-    let _guard = unsafe { &*runtime }.enter();
+    let Some(runtime) = (unsafe { runtime.as_ref() }) else  {
+        UniencError::invalid_input_error("Invalid input parameters")
+            .apply_callback(callback, user_data);
+        return;
+    };
 
     let input = arc_from_raw_retained(*input);
 
-    tokio::spawn(async move {
+    runtime.spawn(async move {
         let mut input = input.lock().await;
 
         let result = match input
@@ -132,8 +145,12 @@ pub unsafe extern "C" fn unienc_video_encoder_pull(
     callback: usize, /*UniencDataCallback<UniencSampleData>*/
     user_data: SendPtr<c_void>,
 ) {
-    let _guard = unsafe { &*runtime }.enter();
     let callback: UniencDataCallback<UniencSampleData> = unsafe { std::mem::transmute(callback) };
+    let Some(runtime) = (unsafe { runtime.as_ref() }) else  {
+        UniencError::invalid_input_error("Invalid input parameters")
+            .apply_callback(callback, user_data);
+        return;
+    };
     if output.is_null() {
         UniencError::invalid_input_error("Invalid input parameters")
             .apply_callback(callback, user_data);
@@ -142,7 +159,7 @@ pub unsafe extern "C" fn unienc_video_encoder_pull(
 
     let output = arc_from_raw_retained(*output);
 
-    spawn_optimistically(async move {
+    runtime.spawn_optimistically(async move {
         let mut output = output.lock().await;
         let result = match output
             .as_mut()

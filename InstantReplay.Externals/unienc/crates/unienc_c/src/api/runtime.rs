@@ -8,6 +8,14 @@ pub unsafe extern "C" fn unienc_new_runtime() -> *mut Runtime {
 }
 
 #[unsafe(no_mangle)]
+pub unsafe extern "C" fn unienc_tick_runtime(runtime: *mut Runtime) {
+    let Some(runtime) = (unsafe { runtime.as_ref() }) else  {
+        return;
+    };
+    runtime.tick();
+}
+
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn unienc_drop_runtime(runtime: *mut Runtime) {
     drop(unsafe { Box::from_raw(runtime) });
 }

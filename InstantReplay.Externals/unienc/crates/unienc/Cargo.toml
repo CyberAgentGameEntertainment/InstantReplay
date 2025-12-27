@@ -9,7 +9,7 @@ authors.workspace = true
 bincode = { version = "2.0.1", features = ["serde"] }
 unienc_common = { workspace = true }
 
-[target.'cfg(all(target_family = "unix", not(target_vendor = "apple"), not(target_os = "android")))'.dependencies]
+[target.'cfg(all(target_family = "unix", not(target_vendor = "apple"), not(target_os = "android"), not(target_arch = "wasm32")))'.dependencies]
 unienc_ffmpeg = { workspace = true }
 
 [target.'cfg(target_os = "android")'.dependencies]
@@ -20,6 +20,9 @@ unienc_windows_mf = { workspace = true }
 
 [target.'cfg(target_vendor = "apple")'.dependencies]
 unienc_apple_vt = { workspace = true }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+unienc_webcodecs = { workspace = true }
 
 [dev-dependencies]
 tokio = "1.48.0"

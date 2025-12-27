@@ -1,6 +1,5 @@
 
 mod buffer;
-mod utils;
 mod runtime;
 mod types;
 mod api;
@@ -13,5 +12,3 @@ pub(crate) use crate::ffi::*;
 pub(crate) use crate::platform::*;
 pub(crate) use crate::runtime::*;
 pub(crate) use crate::types::*;
-pub(crate) use crate::utils::*;
-

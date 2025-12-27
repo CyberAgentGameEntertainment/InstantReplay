@@ -8,7 +8,7 @@ fn main() {
         .input_extern_file("src/api/video.rs")
         .input_extern_file("src/api/runtime.rs")
         .input_extern_file("src/api/encoding_system.rs")
-        .input_extern_file("src/api/unity.rs")
+        .input_extern_file("src/api/graphics.rs")
         .input_extern_file("src/types.rs")
         .input_extern_file("src/buffer.rs")
         .input_extern_file("src/ffi.rs")
@@ -19,7 +19,7 @@ fn main() {
 fn common_builder() -> Builder {
     Builder::default()
         .csharp_dll_name("libunienc_c")
-        .csharp_dll_name_if("UNITY_IOS && !UNITY_EDITOR", "__Internal")
+        .csharp_dll_name_if("(UNITY_IOS || UNITY_WEBGL) && !UNITY_EDITOR", "__Internal")
         .csharp_namespace("UniEnc.Native")
         .csharp_use_nint_types(true)
         .csharp_use_function_pointer(false)

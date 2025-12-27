@@ -10,8 +10,10 @@ pub mod buffer;
 pub mod error;
 #[cfg(feature = "unity")]
 pub mod unity;
+mod runtime;
 
 pub use error::{CategorizedError, CommonError, ErrorCategory, OptionExt, Result, ResultExt};
+use crate::runtime::Runtime;
 
 pub trait Encoder {
     type InputType: EncoderInput + 'static;

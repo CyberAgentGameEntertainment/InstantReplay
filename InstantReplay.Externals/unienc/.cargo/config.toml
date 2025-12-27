@@ -1,2 +1,5 @@
 [target.'cfg(windows)']
 rustflags = ["-C", "link-args=/Brepro"]
+
+[target.wasm32-unknown-emscripten]
+rustflags = ["-C", "link-args=--no-entry"]

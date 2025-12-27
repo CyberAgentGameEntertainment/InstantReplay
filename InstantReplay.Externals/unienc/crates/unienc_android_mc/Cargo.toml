@@ -8,7 +8,7 @@ authors.workspace = true
 [dependencies]
 thiserror = { workspace = true }
 jni = "0.21.1"
-tokio = { version = "1.45.1", features = ["rt", "time", "macros", "sync"] }
+tokio = { version = "1.45.1", features = ["time", "sync"] }
 unienc_common = { workspace = true, features = ["unity"] }
 bincode = { workspace = true }
 ndk-sys = { version = "0.6.0", features = ["media"] }

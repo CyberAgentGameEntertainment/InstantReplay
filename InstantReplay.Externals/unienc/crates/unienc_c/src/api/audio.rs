@@ -15,8 +15,12 @@ pub unsafe extern "C" fn unienc_audio_encoder_push(
     callback: usize, /*UniencCallback*/
     user_data: SendPtr<c_void>,
 ) {
-    let _guard = unsafe {&*runtime}.enter();
     let callback: UniencCallback = unsafe { std::mem::transmute(callback) };
+    let Some(runtime) = (unsafe { runtime.as_ref() }) else  {
+        UniencError::invalid_input_error("Invalid input parameters")
+            .apply_callback(callback, user_data);
+        return;
+    };
     if input.is_null() || data.is_null() {
         UniencError::invalid_input_error("Invalid input parameters")
             .apply_callback(callback, user_data);
@@ -25,7 +29,7 @@ pub unsafe extern "C" fn unienc_audio_encoder_push(
     let input = arc_from_raw_retained(*input);
 
     unsafe {
-        tokio::spawn(async move {
+        runtime.spawn(async move {
             let data_slice = std::slice::from_raw_parts(*data, sample_count);
             let sample = AudioSample {
                 data: data_slice.to_vec(),
@@ -55,8 +59,12 @@ pub unsafe extern "C" fn unienc_audio_encoder_pull(
     callback: usize, /*UniencDataCallback<UniencSampleData>*/
     user_data: SendPtr<c_void>,
 ) {
-    let _guard = unsafe { &*runtime }.enter();
     let callback: UniencDataCallback<UniencSampleData> = unsafe { std::mem::transmute(callback) };
+    let Some(runtime) = (unsafe { runtime.as_ref() }) else  {
+        UniencError::invalid_input_error("Invalid input parameters")
+            .apply_callback(callback, user_data);
+        return;
+    };
     if output.is_null() {
         UniencError::invalid_input_error("Invalid input parameters")
             .apply_callback(callback, user_data);
@@ -64,7 +72,7 @@ pub unsafe extern "C" fn unienc_audio_encoder_pull(
     }
     let output = arc_from_raw_retained(*output);
 
-    tokio::spawn(async move {
+    runtime.spawn(async move {
         let mut output = output.lock().await;
         let result = match output
             .as_mut()

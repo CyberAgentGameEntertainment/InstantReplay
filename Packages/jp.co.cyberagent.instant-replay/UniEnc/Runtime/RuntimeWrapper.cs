@@ -9,7 +9,7 @@ using UniEnc.Native;
 
 namespace UniEnc
 {
-    internal unsafe class RuntimeWrapper : SafeHandle
+    public unsafe class RuntimeWrapper : SafeHandle
     {
         // A handle to access UniEnc runtime (mainly for Rust async runtime management).
         // We need to drop the async runtime when domain unloads because Unity will crash if async callbacks are
@@ -19,9 +19,9 @@ namespace UniEnc
         // For example if we keep lifetime of the runtime object by reference counting and release it in Dispose() of other native handles, and it happens to be called from an async callback, it will crash.
         // It means we cannot use the runtime to drop native resources.
 
-        private static readonly RuntimeWrapper _instance = new((nint)NativeMethods.unienc_new_runtime());
+        private static readonly RuntimeWrapper Instance = new((nint)NativeMethods.unienc_new_runtime());
 
-        private readonly ReaderWriterLockSlim _lock = new(LockRecursionPolicy.NoRecursion);
+        private readonly ReaderWriterLockSlim _lock = new(LockRecursionPolicy.SupportsRecursion);
 
         private RuntimeWrapper(IntPtr ptr) : base(IntPtr.Zero, true)
         {
@@ -47,17 +47,23 @@ namespace UniEnc
             }
         }
 
+        public static void Tick()
+        {
+            using var scope = GetScope();
+            NativeMethods.unienc_tick_runtime(scope.Runtime);
+        }
+
         /// <summary>
         ///     A scope to access UniEnc runtime only for on-stack and short duration.
         /// </summary>
         /// <returns></returns>
         /// <exception cref="ObjectDisposedException"></exception>
-        public static Scope GetScope()
+        internal static Scope GetScope()
         {
-            return new Scope(_instance ?? throw new ObjectDisposedException(nameof(_instance)));
+            return new Scope(Instance ?? throw new ObjectDisposedException(nameof(Instance)));
         }
 
-        public readonly ref struct Scope
+        internal readonly ref struct Scope
         {
             private readonly RuntimeWrapper _instance;
             public Runtime* Runtime => (Runtime*)_instance.handle;

@@ -12,7 +12,7 @@ crate-type = ["cdylib", "staticlib", "rlib"]
 unienc = { workspace = true }
 bincode = { workspace = true }
 futures = "0.3.31"
-tokio = { version = "1.45.1", features = ["rt", "macros", "sync"] }
+tokio = { version = "1.45.1", features = ["macros", "sync"] }
 unity-native-plugin = { workspace = true, optional = true }
 thiserror = { workspace = true }
 
@@ -23,7 +23,7 @@ ndk-sys = "0.6.0"
 [features]
 default = ["multi-thread"]
 unity = ["unity-native-plugin"]
-multi-thread = ["tokio/rt-multi-thread"]
+multi-thread = ["futures/thread-pool"]
 
 [build-dependencies]
 csbindgen = "1.9.7"

@@ -12,7 +12,6 @@ pub unsafe extern "C" fn unienc_new_encoding_system(
     video_options: *const VideoEncoderOptionsNative,
     audio_options: *const AudioEncoderOptionsNative,
 ) -> *mut PlatformEncodingSystem {
-    let _guard = unsafe { &*runtime }.enter();
     unsafe {
         let system = PlatformEncodingSystem::new(&*video_options, &*audio_options);
         Box::into_raw(Box::new(system))
@@ -37,7 +36,6 @@ pub unsafe extern "C" fn unienc_new_video_encoder(
     on_error: usize, /*UniencCallback*/
     user_data: SendPtr<c_void>,
 ) -> bool {
-    let _guard = unsafe { &*runtime }.enter();
     let on_error: UniencCallback = unsafe { std::mem::transmute(on_error) };
 
     if system.is_null() {
@@ -76,7 +74,6 @@ pub unsafe extern "C" fn unienc_new_audio_encoder(
     on_error: usize, /*UniencCallback*/
     user_data: SendPtr<c_void>,
 ) -> bool {
-    let _guard = unsafe { &*runtime }.enter();
     let on_error: UniencCallback = unsafe { std::mem::transmute(on_error) };
 
     if system.is_null() {
@@ -117,7 +114,6 @@ pub unsafe extern "C" fn unienc_new_muxer(
     on_error: usize, /*UniencCallback*/
     user_data: SendPtr<c_void>,
 ) -> bool {
-    let _guard = unsafe { &*runtime }.enter();
     let on_error: UniencCallback = unsafe { std::mem::transmute(on_error) };
 
     if system.is_null() || output_path.is_null() {

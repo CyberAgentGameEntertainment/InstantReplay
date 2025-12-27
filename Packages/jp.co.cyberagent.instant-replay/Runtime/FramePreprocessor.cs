@@ -99,6 +99,8 @@ namespace InstantReplay
                 Output.name = "InstantReplay Preprocessing"; // for profiling
                 Output.filterMode = FilterMode.Bilinear;
                 Output.wrapMode = TextureWrapMode.Clamp;
+                Output.Create();
+                
             }
             else if (Output.width != width || Output.height != height)
             {

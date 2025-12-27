@@ -1,5 +1,5 @@
 [workspace]
-members = [ "./crates/*", "./external/unity-native-plugin-rs/Cargo.toml"]
+members = [ "./crates/*", "./external/unity-native-plugin-rs/Cargo.toml", "./external/muxide/Cargo.toml" ]
 default-members = ["./crates/unienc_c"]
 resolver = "2"
 
@@ -13,12 +13,14 @@ unienc_android_mc = { path = "./crates/unienc_android_mc" }
 unienc_windows_mf = { path = "./crates/unienc_windows_mf" }
 unienc_apple_vt = { path = "./crates/unienc_apple_vt" }
 unienc_ffmpeg = {  path = "./crates/unienc_ffmpeg" }
+unienc_webcodecs = {  path = "./crates/unienc_webcodecs" }
 unity-native-plugin = { path = "./external/unity-native-plugin-rs/unity-native-plugin" }
 unity-native-plugin-vulkan = { path = "./external/unity-native-plugin-rs/unity-native-plugin-vulkan" }
 
 [patch.crates-io]
 unity-native-plugin = { path = "./external/unity-native-plugin-rs/unity-native-plugin" }
 unity-native-plugin-vulkan = { path = "./external/unity-native-plugin-rs/unity-native-plugin-vulkan" }
+muxide = { path = "./external/muxide" }
 
 [workspace.package]
 edition = "2024"
@@ -29,6 +31,8 @@ version = "1.4.1"
 [profile.release]
 panic = "abort" # It helps to make crash stacktraces readable
 
-[profile.release-unwind] # for platforms that support unwinding (e.g. wasm)
+[profile.release-wasm] # for platforms that support unwinding (e.g. wasm)
 inherits = "release"
 panic = "unwind"
+lto = true
+opt-level = "z"
