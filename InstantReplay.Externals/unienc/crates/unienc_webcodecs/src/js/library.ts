@@ -4,12 +4,14 @@ declare var Module: {
     asm: { malloc: (size: number) => number, free: (ptr: number) => void } | undefined
     HEAPU8: Uint8Array;
     HEAPU32: Uint32Array;
-    [key: string]: any;
 };
 
 declare var UTF8ToString: (ptr: number) => string;
 
 declare var getWasmTableEntry: any;
+
+declare var lengthBytesUTF8: (str: string) => number;
+declare var stringToUTF8: (str: string, outPtr: number, maxBytesToWrite: number) => void;
 
 type EncoderSlot<Encoder> = {
     encoder: Encoder | null;
@@ -54,52 +56,38 @@ function createEncoderImpl<Encoder extends EncoderGeneral, EncoderOptions, Frame
     return {
         _encoders: [],
         _encoderEmptyRoot: null,
-        new: function (options, onOutput, onOutputCtx, onComplete, onCompleteCtx) {
-            let self = this;
-            (async function () {
-                // as EncoderImpl<Encoder, EncoderOptions, FrameOptions>;
-                const encoder = await handler.createEncoder(options, (chunk) => {
-                    const buf = (Module._malloc || Module.asm.malloc)(chunk.byteLength);
-                    try {
-                        chunk.copyTo(Module.HEAPU8.subarray(buf, buf + chunk.byteLength));
-                        handler.callOutputCallback(chunk, onOutput, buf, chunk.byteLength, onOutputCtx);
-                    } catch (e) {
-                        (Module.free || Module.asm.free)(buf);
-                        throw e;
-                    }
-                    (Module.free || Module.asm.free)(buf);
-
-                });
-
-                if (!self._encoderEmptyRoot) {
-                    const entry = {encoder: encoder, next: null, index: self._encoders.length};
-                    self._encoders.push(entry);
-                    return entry.index;
-                } else {
-                    const entry = self._encoderEmptyRoot;
-                    self._encoderEmptyRoot = self._encoderEmptyRoot.next;
-                    entry.encoder = encoder;
-                    entry.next = null;
-                    return entry.index;
+        new: async function (options, onOutput, onOutputCtx, onComplete, onCompleteCtx) {
+            // as EncoderImpl<Encoder, EncoderOptions, FrameOptions>;
+            const encoder = await handler.createEncoder(options, (chunk) => {
+                const buf = (Module._malloc || Module.asm.malloc)(chunk.byteLength);
+                try {
+                    chunk.copyTo(Module.HEAPU8.subarray(buf, buf + chunk.byteLength));
+                    handler.callOutputCallback(chunk, onOutput, buf, chunk.byteLength, onOutputCtx);
+                } catch (e) {
+                    (Module._free || Module.asm.free)(buf);
+                    throw e;
                 }
-            }).bind(this)().then((index) => {
-                makeDynCall(onComplete, "vii", index, onCompleteCtx);
-            }, (error) => {
-                console.error(error);
-                makeDynCall(onComplete, "vii", -1, onCompleteCtx);
+                (Module._free || Module.asm.free)(buf);
 
             });
+
+            let index;
+            if (!this._encoderEmptyRoot) {
+                const entry = {encoder: encoder, next: null, index: this._encoders.length};
+                this._encoders.push(entry);
+                index = entry.index;
+            } else {
+                const entry = this._encoderEmptyRoot;
+                this._encoderEmptyRoot = this._encoderEmptyRoot.next;
+                entry.encoder = encoder;
+                entry.next = null;
+                index = entry.index;
+            }
+            makeDynCall(onComplete, "vii", index, onCompleteCtx);
         },
-        flush: function (index: number, onComplete, onCompleteCtx) {
+        flush: async function (index: number) {
             const entry = this._encoders[index];
-            (async function () {
-                await entry.encoder?.flush();
-            }).bind(this)().then(() => {
-                makeDynCall(onComplete, "vi", onCompleteCtx);
-            }, (error) => {
-                console.error(error);
-                makeDynCall(onComplete, "vi", onCompleteCtx);
-            });
+            await entry.encoder?.flush();
         },
         free: function (index) {
             const entry = this._encoders[index];
@@ -118,6 +106,38 @@ function createEncoderImpl<Encoder extends EncoderGeneral, EncoderOptions, Frame
 }
 
 window["unienc_webcodecs"] = {
+    call: function (closure: () => void, onError: number, onErrorCtx: number) {
+        try {
+            closure();
+        } catch (e) {
+            const msg = e.toString();
+            const len = lengthBytesUTF8(msg) + 1;
+            const msgPtr = (Module._malloc || Module.asm.malloc)(len);
+            stringToUTF8(msg, msgPtr, len);
+            try {{
+                makeDynCall(onError, 'vii', msgPtr, onErrorCtx);
+            }} finally {{
+                (Module._free || Module.asm.free)(msgPtr);
+            }}
+        }
+    },
+    call_async: async function (closure: () => Promise<void>, onComplete: number, onCompleteCtx: number) {
+        try {
+            await closure();
+        } catch (e) {
+            const msg = e.toString();
+            const len = lengthBytesUTF8(msg) + 1;
+            const msgPtr = (Module._malloc || Module.asm.malloc)(len);
+            stringToUTF8(msg, msgPtr, len);
+            try {{
+                makeDynCall(onComplete, 'vii', msgPtr, onCompleteCtx);
+            }} finally {{
+                (Module._free || Module.asm.free)(msgPtr);
+            }}
+            return;
+        }
+        makeDynCall(onComplete, 'vii', 0, onCompleteCtx);
+    },
     video: createEncoderImpl<
         VideoEncoder,
         { width: number, height: number, bitrate: number, framerate: number },

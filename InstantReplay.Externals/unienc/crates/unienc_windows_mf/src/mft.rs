@@ -11,10 +11,11 @@ use std::ptr;
 use windows::core::*;
 use windows::Win32::Foundation::E_NOTIMPL;
 use windows::Win32::Media::MediaFoundation::*;
+use unienc_common::{Runtime, SpawnExt};
 
 pub trait MediaEventGeneratorCustom {
     fn get_event(&self) -> impl Future<Output = Result<UnsafeSend<IMFMediaEvent>>>;
-    fn get_events(&self) -> mpsc::Receiver<Result<UnsafeSend<IMFMediaEvent>>>;
+    fn get_events(&self, runtime: &impl Runtime) -> mpsc::Receiver<Result<UnsafeSend<IMFMediaEvent>>>;
 }
 
 impl MediaEventGeneratorCustom for IMFMediaEventGenerator {
@@ -46,12 +47,12 @@ impl MediaEventGeneratorCustom for IMFMediaEventGenerator {
         }
     }
 
-    fn get_events(&self) -> mpsc::Receiver<Result<UnsafeSend<IMFMediaEvent>>> {
+    fn get_events(&self, runtime: &impl Runtime) -> mpsc::Receiver<Result<UnsafeSend<IMFMediaEvent>>> {
         let (tx, rx) = mpsc::channel::<Result<UnsafeSend<IMFMediaEvent>>>(32);
 
         let generator: UnsafeSend<IMFMediaEventGenerator> = UnsafeSend((*self).clone());
 
-        tokio::spawn(async move {
+        runtime.spawn(async move {
             loop {
                 match generator.get_event().await {
                     Ok(event) => {
@@ -266,6 +267,7 @@ impl Transform {
         output: MFT_REGISTER_TYPE_INFO,
         input_type: IMFMediaType,
         output_type: IMFMediaType,
+        runtime: &impl Runtime,
     ) -> Result<(Self, mpsc::Receiver<UnsafeSend<IMFSample>>)> {
         let mfts = MftIter::new(category, input, output);
 
@@ -279,7 +281,7 @@ impl Transform {
                 println!("Skipping MFT: {}", Self::get_name(&activate)?);
                 continue;
             }
-            match Self::try_activate(activate, &mut input_type, &mut output_type) {
+            match Self::try_activate(activate, &mut input_type, &mut output_type, runtime) {
                 Ok(r) => {
                     result = Some(r);
                 },
@@ -308,6 +310,7 @@ impl Transform {
         activate: IMFActivate,
         input_type: &mut Option<IMFMediaType>,
         output_type: &mut Option<IMFMediaType>,
+        runtime: &impl Runtime,
     ) -> Result<(Self, mpsc::Receiver<UnsafeSend<IMFSample>>)> {
         println!("Trying MFT: {}", Self::get_name(&activate)?);
 
@@ -364,7 +367,7 @@ impl Transform {
             let generator: UnsafeSend<IMFMediaEventGenerator> =
                 transform.cast::<IMFMediaEventGenerator>()?.into();
 
-            let mut rx = generator.get_events();
+            let mut rx = generator.get_events(runtime);
 
             unsafe { transform.ProcessMessage(MFT_MESSAGE_NOTIFY_START_OF_STREAM, 0)? };
 
@@ -373,7 +376,7 @@ impl Transform {
             let transform = UnsafeSend(transform);
 
             // event loop
-            tokio::spawn(async move {
+            runtime.spawn_ret(async move {
                 let mut sample_rx = sample_rx;
                 while let Some(event) = rx.recv().await {
                     match event {

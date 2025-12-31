@@ -1,7 +1,7 @@
 use crate::error::{WindowsError, Result};
 use bincode::{Decode, Encode};
 use tokio::sync::mpsc;
-use unienc_common::{EncodedData, Encoder, EncoderInput, EncoderOutput, UniencSampleKind, UnsupportedBlitData, VideoEncoderOptions, VideoFrame, VideoSample};
+use unienc_common::{EncodedData, Encoder, EncoderInput, EncoderOutput, Runtime, UniencSampleKind, UnsupportedBlitData, VideoEncoderOptions, VideoFrame, VideoSample};
 use windows::Win32::Media::MediaFoundation::*;
 
 use crate::common::*;
@@ -14,7 +14,7 @@ pub struct MediaFoundationVideoEncoder {
 }
 
 impl MediaFoundationVideoEncoder {
-    pub fn new<V: VideoEncoderOptions>(options: &V) -> Result<Self> {
+    pub fn new<V: VideoEncoderOptions>(options: &V, runtime: &impl Runtime) -> Result<Self> {
         let input_type = unsafe {
             let input_type = MFCreateMediaType()?;
             input_type.SetGUID(&MF_MT_MAJOR_TYPE, &MFMediaType_Video)?;
@@ -57,6 +57,7 @@ impl MediaFoundationVideoEncoder {
             },
             input_type,
             output_type,
+            runtime,
         )?;
 
         Ok(Self {

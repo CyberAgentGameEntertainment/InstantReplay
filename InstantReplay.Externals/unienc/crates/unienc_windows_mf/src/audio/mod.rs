@@ -1,7 +1,7 @@
 use crate::error::Result;
 use bincode::{Decode, Encode};
 use tokio::sync::mpsc;
-use unienc_common::{AudioEncoderOptions, AudioSample, EncodedData, Encoder, EncoderInput, EncoderOutput, UniencSampleKind};
+use unienc_common::{AudioEncoderOptions, AudioSample, EncodedData, Encoder, EncoderInput, EncoderOutput, Runtime, UniencSampleKind};
 use windows::Win32::Media::MediaFoundation::*;
 
 use crate::common::*;
@@ -16,7 +16,7 @@ pub struct MediaFoundationAudioEncoder {
 }
 
 impl MediaFoundationAudioEncoder {
-    pub fn new<V: AudioEncoderOptions>(options: &V) -> Result<Self> {
+    pub fn new<V: AudioEncoderOptions>(options: &V, runtime: &impl Runtime) -> Result<Self> {
         let input_type = unsafe {
             let input_type = MFCreateMediaType()?;
             input_type.SetGUID(&MF_MT_MAJOR_TYPE, &MFMediaType_Audio)?;
@@ -50,6 +50,7 @@ impl MediaFoundationAudioEncoder {
             },
             input_type,
             output_type,
+            runtime,
         )?;
 
         Ok(Self {

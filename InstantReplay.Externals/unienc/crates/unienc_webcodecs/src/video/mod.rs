@@ -4,13 +4,13 @@ use crate::js::VideoEncoderHandle;
 use bincode::{Decode, Encode};
 use futures::channel::mpsc;
 use futures::{SinkExt, StreamExt};
-use unienc_common::{EncodedData, Encoder, EncoderInput, EncoderOutput, OptionExt, UnsupportedBlitData, VideoFrame, VideoSample};
+use unienc_common::{EncodedData, Encoder, EncoderInput, EncoderOutput, OptionExt, ResultExt, Runtime, UnsupportedBlitData, VideoFrame, VideoSample};
 
-pub struct WebCodecsVideoEncoder {
-    input: WebCodecsVideoEncoderInput,
+pub struct WebCodecsVideoEncoder<R: Runtime> {
+    input: WebCodecsVideoEncoderInput<R>,
     output: WebCodecsVideoEncoderOutput,
 }
-pub struct WebCodecsVideoEncoderInput {
+pub struct WebCodecsVideoEncoderInput<R: Runtime> {
     encoder_handle: Option<VideoEncoderHandle>,
     width: u32,
     height: u32,
@@ -18,6 +18,7 @@ pub struct WebCodecsVideoEncoderInput {
     fps_hint: f64,
     tx: mpsc::Sender<VideoEncodedData>,
     prev_key_timestamp: Option<f64>,
+    runtime: R,
 }
 
 pub struct WebCodecsVideoEncoderOutput {
@@ -31,8 +32,8 @@ pub struct VideoEncodedData {
     pub(crate) is_key: bool,
 }
 
-impl WebCodecsVideoEncoder {
-    pub fn new<V: unienc_common::VideoEncoderOptions>(options: &V) -> unienc_common::Result<Self> {
+impl<R: Runtime> WebCodecsVideoEncoder<R> {
+    pub fn new<V: unienc_common::VideoEncoderOptions>(options: &V, runtime: &R) -> unienc_common::Result<Self> {
         let (tx, rx) = mpsc::channel(16);
         Ok(Self {
             input: WebCodecsVideoEncoderInput {
@@ -43,14 +44,15 @@ impl WebCodecsVideoEncoder {
                 encoder_handle: None,
                 tx,
                 prev_key_timestamp: None,
+                runtime: runtime.clone(),
             },
             output: WebCodecsVideoEncoderOutput { rx },
         })
     }
 }
 
-impl Encoder for WebCodecsVideoEncoder {
-    type InputType = WebCodecsVideoEncoderInput;
+impl<R: Runtime + 'static> Encoder for WebCodecsVideoEncoder<R> {
+    type InputType = WebCodecsVideoEncoderInput<R>;
     type OutputType = WebCodecsVideoEncoderOutput;
 
     fn get(self) -> unienc_common::Result<(Self::InputType, Self::OutputType)> {
@@ -58,7 +60,7 @@ impl Encoder for WebCodecsVideoEncoder {
     }
 }
 
-impl EncoderInput for WebCodecsVideoEncoderInput {
+impl<R: Runtime + 'static> EncoderInput for WebCodecsVideoEncoderInput<R> {
     type Data = VideoSample<UnsupportedBlitData>;
 
     async fn push(&mut self, data: Self::Data) -> unienc_common::Result<()> {
@@ -106,21 +108,22 @@ impl EncoderInput for WebCodecsVideoEncoderInput {
             frame.height,
             data.timestamp,
             since_prev_key >= 1.0,
-        );
+        ).context("Failed to push video frame to WebCodecs EncoderHandle")?;
         Ok(())
     }
 }
 
-impl Drop for WebCodecsVideoEncoderInput {
+impl<R: Runtime> Drop for WebCodecsVideoEncoderInput<R> {
     fn drop(&mut self) {
         let Some(encoder) = self.encoder_handle.take() else {
             return;
         };
 
-        let encoder = Rc::new(encoder);
+        let encoder = Arc::new(encoder);
         let encoder_long = encoder.clone();
 
-        encoder.flush(move || {
+        self.runtime.spawn(async move {
+            _ = encoder.flush().await;
             // keep encoder alive until flush is done
             drop(encoder_long);
         })

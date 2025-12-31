@@ -27,6 +27,7 @@ pub unsafe extern "C" fn unienc_muxer_push_video(
         return;
     }
 
+    let _guard = runtime.enter();
     let video_input = arc_from_raw_retained(*video_input);
 
     unsafe {
@@ -45,7 +46,7 @@ pub unsafe extern "C" fn unienc_muxer_push_video(
 
         decoded_data.set_timestamp(timestamp);
 
-        runtime.spawn(async move {
+        Runtime::spawn(async move {
             let mut video_input = video_input.lock().await;
             let result = match video_input
                 .as_mut()
@@ -85,6 +86,7 @@ pub unsafe extern "C" fn unienc_muxer_push_audio(
         return;
     }
 
+    let _guard = runtime.enter();
     let audio_input = arc_from_raw_retained(*audio_input);
 
     unsafe {
@@ -103,7 +105,7 @@ pub unsafe extern "C" fn unienc_muxer_push_audio(
 
         decoded_data.set_timestamp(timestamp);
 
-        runtime.spawn(async move {
+        Runtime::spawn(async move {
             let mut audio_input = audio_input.lock().await;
             let result = match audio_input
                 .as_mut()
@@ -140,9 +142,10 @@ pub unsafe extern "C" fn unienc_muxer_finish_video(
         return;
     }
 
+    let _guard = runtime.enter();
     let video_input = arc_from_raw_retained(*video_input);
 
-    runtime.spawn(async move {
+    Runtime::spawn(async move {
         let mut video_input = video_input.lock().await;
         let result = match video_input
             .take()
@@ -178,9 +181,10 @@ pub unsafe extern "C" fn unienc_muxer_finish_audio(
         return;
     }
 
+    let _guard = runtime.enter();
     let audio_input = arc_from_raw_retained(*audio_input);
 
-    runtime.spawn(async move {
+    Runtime::spawn(async move {
         let mut audio_input = audio_input.lock().await;
         let result = match audio_input
             .take()
@@ -212,9 +216,10 @@ pub unsafe extern "C" fn unienc_muxer_complete(
         return;
     }
 
+    let _guard = runtime.enter();
     let handle = arc_from_raw_retained(*completion_handle);
 
-    runtime.spawn(async move {
+    Runtime::spawn(async move {
         let mut handle = handle.lock().await;
 
         let result = match handle

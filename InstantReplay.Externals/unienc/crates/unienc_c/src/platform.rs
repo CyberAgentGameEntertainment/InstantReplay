@@ -1,8 +1,9 @@
 
 use unienc::EncoderOutput;
+use crate::runtime::{Runtime, RuntimeSpawner};
 use crate::types::{AudioEncoderOptionsNative, VideoEncoderOptionsNative};
 
-pub type PlatformEncodingSystem = unienc::PlatformEncodingSystem<VideoEncoderOptionsNative, AudioEncoderOptionsNative>;
+pub type PlatformEncodingSystem = unienc::PlatformEncodingSystem<VideoEncoderOptionsNative, AudioEncoderOptionsNative, RuntimeSpawner>;
 
 type VideoEncoder =
 <PlatformEncodingSystem as unienc::EncodingSystem>::VideoEncoderType;

@@ -39,6 +39,7 @@ pub unsafe extern "C" fn unienc_video_encoder_push_shared_buffer(
 }
 
 #[unsafe(no_mangle)]
+#[allow(dead_code)]
 pub unsafe extern "C" fn unienc_video_encoder_push_blit_source(
     runtime: *mut Runtime,
     input: SendPtr<Mutex<Option<VideoEncoderInput>>>,
@@ -59,6 +60,14 @@ pub unsafe extern "C" fn unienc_video_encoder_push_blit_source(
             .apply_callback(callback, user_data);
         return;
     }
+
+    let Some(runtime) = (unsafe { runtime.as_ref() }) else {
+        UniencError::invalid_input_error("Invalid input parameters")
+            .apply_callback(callback, user_data);
+        return;
+    };
+
+    let _guard = runtime.enter();
 
     #[cfg(not(feature = "unity"))]
     {
@@ -117,9 +126,10 @@ unsafe fn video_encoder_push_video_sample(
         return;
     };
 
+    let _guard = runtime.enter();
     let input = arc_from_raw_retained(*input);
 
-    runtime.spawn(async move {
+    Runtime::spawn(async move {
         let mut input = input.lock().await;
 
         let result = match input
@@ -157,9 +167,10 @@ pub unsafe extern "C" fn unienc_video_encoder_pull(
         return;
     }
 
+    let _guard = runtime.enter();
     let output = arc_from_raw_retained(*output);
 
-    runtime.spawn_optimistically(async move {
+    Runtime::spawn_optimistically(async move {
         let mut output = output.lock().await;
         let result = match output
             .as_mut()

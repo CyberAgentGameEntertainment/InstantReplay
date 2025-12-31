@@ -74,11 +74,10 @@ namespace UniEnc.Unity.Editor
                 AssetDatabase.StartAssetEditing();
             }
 
-            Debug.Log(compatible);
             var importer = (PluginImporter)AssetImporter.GetAtPath(path);
             importer.SetCompatibleWithAnyPlatform(false);
             var current = importer.GetCompatibleWithPlatform(BuildTarget.WebGL);
-            Debug.Log(current);
+
             if (current == compatible) return;
             importer.SetCompatibleWithPlatform(BuildTarget.WebGL, compatible);
             importer.SaveAndReimport();

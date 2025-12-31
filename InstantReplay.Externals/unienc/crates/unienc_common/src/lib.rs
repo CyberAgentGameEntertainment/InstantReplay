@@ -13,7 +13,7 @@ pub mod unity;
 mod runtime;
 
 pub use error::{CategorizedError, CommonError, ErrorCategory, OptionExt, Result, ResultExt};
-use crate::runtime::Runtime;
+pub use crate::runtime::*;
 
 pub trait Encoder {
     type InputType: EncoderInput + 'static;
@@ -61,10 +61,12 @@ pub trait EncodingSystem {
         >,
     >;
     type BlitSourceType: TryFromUnityNativeTexturePointer + Send;
+    type RuntimeType: Runtime;
 
     fn new(
         video_options: &Self::VideoEncoderOptionsType,
         audio_options: &Self::AudioEncoderOptionsType,
+        runtime: Self::RuntimeType,
     ) -> Self;
     fn new_video_encoder(&self) -> Result<Self::VideoEncoderType>;
     fn new_audio_encoder(&self) -> Result<Self::AudioEncoderType>;

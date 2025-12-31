@@ -13,7 +13,8 @@ pub unsafe extern "C" fn unienc_new_encoding_system(
     audio_options: *const AudioEncoderOptionsNative,
 ) -> *mut PlatformEncodingSystem {
     unsafe {
-        let system = PlatformEncodingSystem::new(&*video_options, &*audio_options);
+        let _guard = unsafe { runtime.as_ref() }.unwrap().enter();
+        let system = PlatformEncodingSystem::new(&*video_options, &*audio_options, RuntimeSpawner);
         Box::into_raw(Box::new(system))
     }
 }
@@ -37,6 +38,7 @@ pub unsafe extern "C" fn unienc_new_video_encoder(
     user_data: SendPtr<c_void>,
 ) -> bool {
     let on_error: UniencCallback = unsafe { std::mem::transmute(on_error) };
+    let _guard = unsafe { runtime.as_ref() }.unwrap().enter();
 
     if system.is_null() {
         UniencError::invalid_input_error("Invalid input parameters")
@@ -75,6 +77,7 @@ pub unsafe extern "C" fn unienc_new_audio_encoder(
     user_data: SendPtr<c_void>,
 ) -> bool {
     let on_error: UniencCallback = unsafe { std::mem::transmute(on_error) };
+    let _guard = unsafe { runtime.as_ref() }.unwrap().enter();
 
     if system.is_null() {
         UniencError::invalid_input_error("Invalid input parameters")
@@ -115,6 +118,7 @@ pub unsafe extern "C" fn unienc_new_muxer(
     user_data: SendPtr<c_void>,
 ) -> bool {
     let on_error: UniencCallback = unsafe { std::mem::transmute(on_error) };
+    let _guard = unsafe { runtime.as_ref() }.unwrap().enter();
 
     if system.is_null() || output_path.is_null() {
         UniencError::invalid_input_error("Invalid input parameters")

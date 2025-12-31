@@ -1,11 +1,13 @@
-use crate::error::{WindowsError, Result};
+use crate::error::{WindowsError, OptionExt, Result};
 use std::path::Path;
+use std::sync::Arc;
 use tokio::sync::mpsc;
 use tokio::sync::oneshot;
-use unienc_common::{AudioEncoderOptions, CompletionHandle, Muxer, MuxerInput, VideoEncoderOptions};
+use unienc_common::{AudioEncoderOptions, CompletionHandle, Muxer, MuxerInput, Runtime, VideoEncoderOptions};
 use windows::Win32::Media::MediaFoundation::*;
 use windows_core::IUnknown;
 use windows_core::HSTRING;
+use unienc_common::SpawnExt;
 
 use crate::audio::AudioEncodedData;
 use crate::common::{Payload, UnsafeSend};
@@ -66,10 +68,11 @@ pub struct MediaFoundationMuxer {
 }
 
 impl MediaFoundationMuxer {
-    pub fn new<V: VideoEncoderOptions, A: AudioEncoderOptions>(
+    pub fn new<V: VideoEncoderOptions, A: AudioEncoderOptions, R: Runtime + 'static>(
         output_path: &Path,
         _video_options: &V,
         _audio_options: &A,
+        runtime: &R,
     ) -> Result<Self> {
         let file = UnsafeSend(unsafe {
             MFCreateFile(
@@ -87,7 +90,9 @@ impl MediaFoundationMuxer {
         let (video_stream_tx, video_stream_rx) = oneshot::channel::<Result<Stream>>();
         let (audio_stream_tx, audio_stream_rx) = oneshot::channel::<Result<Stream>>();
 
-        tokio::spawn(async move {
+        let runtime_clone = runtime.clone();
+
+        runtime.spawn_ret(async move {
             let video_type = video_type_rx.await??;
             let audio_type = audio_type_rx.await??;
 
@@ -100,14 +105,14 @@ impl MediaFoundationMuxer {
             let sink_count = unsafe { sink.GetStreamSinkCount()? };
             assert_eq!(sink_count, 2);
             let (video_stream, video_finish_rx) =
-                Stream::new(unsafe { sink.GetStreamSinkByIndex(0)? })?;
+                Stream::new(unsafe { sink.GetStreamSinkByIndex(0)? }, &runtime_clone)?;
             let (audio_stream, audio_finish_rx) =
-                Stream::new(unsafe { sink.GetStreamSinkByIndex(1)? })?;
+                Stream::new(unsafe { sink.GetStreamSinkByIndex(1)? }, &runtime_clone)?;
 
             if let Some(finalizable) = finalizable {
                 let finalizable = UnsafeSend(finalizable);
                 let sink = UnsafeSend(sink.clone());
-                tokio::spawn(async move {
+                runtime_clone.spawn_ret(async move {
                     video_finish_rx.await.unwrap();
                     audio_finish_rx.await.unwrap();
 
@@ -124,7 +129,7 @@ impl MediaFoundationMuxer {
                     Result::<()>::Ok(())
                 });
             } else {
-                tokio::spawn(async move {
+                runtime_clone.spawn_ret(async move {
                     video_finish_rx.await.unwrap();
                     audio_finish_rx.await.unwrap();
                     finish_tx.send(Ok(()))
@@ -170,15 +175,15 @@ struct Stream {
 }
 
 impl Stream {
-    pub fn new(stream: IMFStreamSink) -> Result<(Self, oneshot::Receiver<()>)> {
-        let mut ev_rx = stream.get_events();
+    pub fn new(stream: IMFStreamSink, runtime: &impl Runtime) -> Result<(Self, oneshot::Receiver<()>)> {
+        let mut ev_rx = stream.get_events(runtime);
         let stream = UnsafeSend(stream);
         let stream_cap = UnsafeSend(stream.clone());
 
         let (sample_tx, sample_rx) = mpsc::channel::<UnsafeSend<IMFSample>>(32);
         let (finish_tx, finish_rx) = oneshot::channel::<()>();
 
-        tokio::spawn(async move {
+        runtime.spawn_ret(async move {
             let mut sample_rx = sample_rx;
             let mut finish_tx = Some(finish_tx);
             while let Some(event) = ev_rx.recv().await {

@@ -26,10 +26,11 @@ pub unsafe extern "C" fn unienc_audio_encoder_push(
             .apply_callback(callback, user_data);
         return;
     }
+    let _guard = runtime.enter();
     let input = arc_from_raw_retained(*input);
 
     unsafe {
-        runtime.spawn(async move {
+        Runtime::spawn(async move {
             let data_slice = std::slice::from_raw_parts(*data, sample_count);
             let sample = AudioSample {
                 data: data_slice.to_vec(),
@@ -70,9 +71,10 @@ pub unsafe extern "C" fn unienc_audio_encoder_pull(
             .apply_callback(callback, user_data);
         return;
     }
+    let _guard = runtime.enter();
     let output = arc_from_raw_retained(*output);
 
-    runtime.spawn(async move {
+    Runtime::spawn(async move {
         let mut output = output.lock().await;
         let result = match output
             .as_mut()
