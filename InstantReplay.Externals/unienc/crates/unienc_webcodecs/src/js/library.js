@@ -17,16 +17,16 @@ function createEncoderImpl(handler) {
             (async function () {
                 // as EncoderImpl<Encoder, EncoderOptions, FrameOptions>;
                 const encoder = await handler.createEncoder(options, (chunk) => {
-                    const buf = Module._malloc(chunk.byteLength);
+                    const buf = (Module._malloc || Module.asm.malloc)(chunk.byteLength);
                     try {
                         chunk.copyTo(Module.HEAPU8.subarray(buf, buf + chunk.byteLength));
                         handler.callOutputCallback(chunk, onOutput, buf, chunk.byteLength, onOutputCtx);
                     }
                     catch (e) {
-                        Module._free(buf);
+                        (Module.free || Module.asm.free)(buf);
                         throw e;
                     }
-                    Module._free(buf);
+                    (Module.free || Module.asm.free)(buf);
                 });
                 if (!self._encoderEmptyRoot) {
                     const entry = { encoder: encoder, next: null, index: self._encoders.length };

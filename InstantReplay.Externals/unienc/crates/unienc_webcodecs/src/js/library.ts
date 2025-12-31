@@ -1,6 +1,7 @@
 declare var Module: {
-    _malloc(size: number): number;
-    _free(ptr: number): void;
+    _malloc: ((size: number) => number) | undefined;
+    _free: ((ptr: number) => void) | undefined;
+    asm: { malloc: (size: number) => number, free: (ptr: number) => void } | undefined
     HEAPU8: Uint8Array;
     HEAPU32: Uint32Array;
     [key: string]: any;
@@ -58,20 +59,20 @@ function createEncoderImpl<Encoder extends EncoderGeneral, EncoderOptions, Frame
             (async function () {
                 // as EncoderImpl<Encoder, EncoderOptions, FrameOptions>;
                 const encoder = await handler.createEncoder(options, (chunk) => {
-                    const buf = Module._malloc(chunk.byteLength);
+                    const buf = (Module._malloc || Module.asm.malloc)(chunk.byteLength);
                     try {
                         chunk.copyTo(Module.HEAPU8.subarray(buf, buf + chunk.byteLength));
                         handler.callOutputCallback(chunk, onOutput, buf, chunk.byteLength, onOutputCtx);
                     } catch (e) {
-                        Module._free(buf);
+                        (Module.free || Module.asm.free)(buf);
                         throw e;
                     }
-                    Module._free(buf);
+                    (Module.free || Module.asm.free)(buf);
 
                 });
 
                 if (!self._encoderEmptyRoot) {
-                    const entry = { encoder: encoder, next: null, index: self._encoders.length };
+                    const entry = {encoder: encoder, next: null, index: self._encoders.length};
                     self._encoders.push(entry);
                     return entry.index;
                 } else {
@@ -250,7 +251,7 @@ window["unienc_webcodecs"] = {
             jsParts.push(segment);
         }
 
-        let blob = new Blob(jsParts, { type: mimeStr });
+        let blob = new Blob(jsParts, {type: mimeStr});
         let url = URL.createObjectURL(blob);
 
         let a = document.createElement('a');

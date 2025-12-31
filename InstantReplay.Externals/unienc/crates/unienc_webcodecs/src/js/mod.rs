@@ -373,8 +373,8 @@ impl Library {
             (function() {{
                 const partsPtr = {parts_ptr};
                 const partsLen = {parts_len};
-                const mimePtr = '{mime_ptr}';
-                const filenamePtr = '{filename_ptr}';
+                const mimePtr = {mime_ptr};
+                const filenamePtr = {filename_ptr};
                 window.unienc_webcodecs.makeDownload(partsPtr, partsLen, mimePtr, filenamePtr);
             }})();
             ",
