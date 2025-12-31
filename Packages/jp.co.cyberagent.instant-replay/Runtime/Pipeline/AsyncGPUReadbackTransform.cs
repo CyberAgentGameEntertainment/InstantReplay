@@ -25,7 +25,7 @@ namespace InstantReplay
                 return false;
             }
 
-            if (!FrameReadback.TryReadbackFrameAsync(input.Texture, ref _bufferPool, out var task))
+            if (!FrameReadback.TryReadbackFrameAsync(input.Texture, ref _bufferPool, out var task, input.CommandBuffer))
             {
                 // buffer pool exhausted
                 ILogger.LogWarningCore("AsyncGPUReadbackTransform: Buffer pool exhausted.");

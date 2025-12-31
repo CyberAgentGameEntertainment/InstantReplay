@@ -25,8 +25,8 @@ namespace InstantReplay
                 return false;
             }
 
-            var outTex = _preprocessor.Process(input.Texture, input.DataStartsAtTop ^ _outputDataStartsAtTop);
-            output = new IFrameProvider.Frame(outTex, input.Timestamp, _outputDataStartsAtTop);
+            var outTex = _preprocessor.Process(input.Texture, input.DataStartsAtTop ^ _outputDataStartsAtTop, input.CommandBuffer);
+            output = new IFrameProvider.Frame(outTex, input.Timestamp, _outputDataStartsAtTop, input.CommandBuffer);
             return true;
         }
 

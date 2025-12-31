@@ -20,6 +20,11 @@ namespace InstantReplay
 
         public ScreenshotFrameProvider()
         {
+#if UNITY_WEBGL
+            Debug.LogWarning(
+                "ScreenshotFrameProvider may not work correctly on WebGL platform. Consider using other IFrameProvider instead (e.g. RendererFeatureFrameProvider).");
+#endif
+            
             _renderTexture = new RenderTexture(Screen.width, Screen.height, 0, RenderTextureFormat.ARGB32);
             _renderTexture.name = "InstantReplay ScreenshotFrameProvider"; // for profiling
 

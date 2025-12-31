@@ -4,6 +4,7 @@
 
 using System;
 using UnityEngine;
+using UnityEngine.Rendering;
 
 namespace InstantReplay
 {
@@ -27,12 +28,15 @@ namespace InstantReplay
             public double Timestamp { get; set; }
             [Obsolete] public bool NeedFlipVertically => DataStartsAtTop;
             public bool DataStartsAtTop { get; }
+            public CommandBuffer CommandBuffer { get; }
 
-            public Frame(Texture texture, double timestamp, bool dataStartsAtTop = false)
+            public Frame(Texture texture, double timestamp, bool dataStartsAtTop = false,
+                CommandBuffer commandBuffer = null)
             {
                 Texture = texture;
                 Timestamp = timestamp;
                 DataStartsAtTop = dataStartsAtTop;
+                CommandBuffer = commandBuffer;
             }
         }
     }

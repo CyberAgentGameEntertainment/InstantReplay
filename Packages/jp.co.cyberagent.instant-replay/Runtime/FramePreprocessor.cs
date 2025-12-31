@@ -5,6 +5,7 @@
 using System;
 using UnityEngine;
 using UnityEngine.Experimental.Rendering;
+using UnityEngine.Rendering;
 using Object = UnityEngine.Object;
 
 namespace InstantReplay
@@ -72,7 +73,7 @@ namespace InstantReplay
             return new FramePreprocessor(null, null, fixedWidth, fixedHeight, rechannelMatrix);
         }
 
-        public RenderTexture Process(Texture source, bool needFlipVertically)
+        public RenderTexture Process(Texture source, bool needFlipVertically, CommandBuffer commandBuffer = null)
         {
             // scaling
 
@@ -121,9 +122,16 @@ namespace InstantReplay
             else
                 _material.SetVector(ScaleAndTiling, new Vector4(1f / renderScale.x, 1f / renderScale.y, 0f, 0f));
 
-            Graphics.Blit(source, Output, _material);
+            if (commandBuffer != null)
+            {
+                commandBuffer.Blit(source, Output, _material);
+            }
+            else
+            {
+                Graphics.Blit(source, Output, _material);
+                RenderTexture.active = active;   
+            }
 
-            RenderTexture.active = active;
             return Output;
         }
     }

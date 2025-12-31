@@ -59,7 +59,6 @@ namespace UniEnc.Unity.Editor
 
         private static void HandleAsset(string path)
         {
-            Debug.Log(path);
             if (!path.EndsWith("libunienc_c.a", StringComparison.OrdinalIgnoreCase)) return;
             var dir = Path.GetFileName(Path.GetDirectoryName(path));
 

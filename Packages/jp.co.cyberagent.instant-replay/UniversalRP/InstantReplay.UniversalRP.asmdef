@@ -1,0 +1,26 @@
+{
+    "name": "InstantReplay.UniversalRP",
+    "rootNamespace": "InstantReplay.UniversalRP",
+    "references": [
+        "GUID:15fc0a57446b3144c949da3e2b9737a9",
+        "GUID:1050604f2d3a84fcabcc4e9b9ff6745b",
+        "GUID:df380645f10b7bc4b97d4f5eb6303d95"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [
+        "INSTANTREPLAY_URP"
+    ],
+    "versionDefines": [
+        {
+            "name": "com.unity.render-pipelines.universal",
+            "expression": "",
+            "define": "INSTANTREPLAY_URP"
+        }
+    ],
+    "noEngineReferences": false
+}
