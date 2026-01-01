@@ -85,7 +85,7 @@ impl AudioEncoderHandle {
     }
 
     pub async fn flush(&self) -> Result<(), JavaScriptError> {
-        LIBRARY.flush_video(self.id).await
+        LIBRARY.flush_audio(self.id).await
     }
 }
 impl Drop for AudioEncoderHandle {
@@ -273,7 +273,7 @@ impl Library {
         let script = format!(
             "
             const index = {id};
-            window.unienc_webcodecs.video.flush(index);
+            await window.unienc_webcodecs.video.flush(index);
             "
         );
         self.run_script_async(&script).await
@@ -370,7 +370,7 @@ impl Library {
         let script = format!(
             "
             const index = {id};
-            window.unienc_webcodecs.audio.flush(index);
+            await window.unienc_webcodecs.audio.flush(index);
             "
         );
         self.run_script_async(&script).await
