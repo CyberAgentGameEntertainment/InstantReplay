@@ -200,13 +200,13 @@ impl Library {
             data_ptr: usize,
             data_length: i32,
             timestamp: f64,
-            is_keyframe: bool,
+            is_keyframe: i32,
             callback_ptr: usize,
         ) {
             let data =
                 unsafe { std::slice::from_raw_parts(data_ptr as *const u8, data_length as usize) };
             let callback = unsafe { &mut *(callback_ptr as *mut Box<dyn Fn(&[u8], f64, bool)>) };
-            callback(data, timestamp, is_keyframe);
+            callback(data, timestamp, is_keyframe != 0);
         }
 
         extern "system" fn on_complete_fn(index: i32, tx: *mut oneshot::Sender<i32>) {

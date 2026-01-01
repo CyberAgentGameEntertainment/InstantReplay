@@ -93,8 +93,10 @@ pub unsafe extern "C" fn unienc_audio_encoder_pull(
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn unienc_free_audio_encoder_input(
+    runtime: *mut Runtime,
     audio_input: SendPtr<Mutex<Option<AudioEncoderInput>>>,
 ) {
+    let _guard = unsafe { runtime.as_ref() }.unwrap().enter();
     if !audio_input.is_null() {
         arc_from_raw(*audio_input);
     }
@@ -102,8 +104,10 @@ pub unsafe extern "C" fn unienc_free_audio_encoder_input(
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn unienc_free_audio_encoder_output(
+    runtime: *mut Runtime,
     audio_output: SendPtr<Mutex<Option<AudioEncoderOutput>>>,
 ) {
+    let _guard = unsafe { runtime.as_ref() }.unwrap().enter();
     if !audio_output.is_null() {
         arc_from_raw(*audio_output);
     }

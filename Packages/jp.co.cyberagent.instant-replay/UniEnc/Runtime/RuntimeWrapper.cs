@@ -63,6 +63,11 @@ namespace UniEnc
             return new Scope(Instance ?? throw new ObjectDisposedException(nameof(Instance)));
         }
 
+        internal static Utils.SafeHandleScope GetReferenceScope()
+        {
+            return Instance?.GetScope() ?? throw new ObjectDisposedException(nameof(Instance));
+        }
+
         internal readonly ref struct Scope
         {
             private readonly RuntimeWrapper _instance;

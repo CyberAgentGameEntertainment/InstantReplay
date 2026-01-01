@@ -159,7 +159,7 @@ window["unienc_webcodecs"] = {
             frame.close();
         },
         callOutputCallback: (chunk, onOutput, ptr, len, ctx) => {
-            makeDynCall(onOutput, 'viidBi', ptr, len, chunk.timestamp / 1000.0 / 1000.0, chunk.type === "key", ctx);
+            makeDynCall(onOutput, 'viidii', ptr, len, chunk.timestamp / 1000.0 / 1000.0, chunk.type === "key" ? 1 : 0, ctx);
         }
     }),
     audio: createEncoderImpl({

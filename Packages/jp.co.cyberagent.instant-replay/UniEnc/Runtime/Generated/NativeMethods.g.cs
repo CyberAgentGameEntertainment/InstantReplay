@@ -30,10 +30,10 @@ namespace UniEnc.Native
         internal static extern void unienc_audio_encoder_pull(Runtime* runtime, SendPtr output, nuint callback, SendPtr user_data);
 
         [DllImport(__DllName, EntryPoint = "unienc_free_audio_encoder_input", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
-        internal static extern void unienc_free_audio_encoder_input(SendPtr audio_input);
+        internal static extern void unienc_free_audio_encoder_input(Runtime* runtime, SendPtr audio_input);
 
         [DllImport(__DllName, EntryPoint = "unienc_free_audio_encoder_output", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
-        internal static extern void unienc_free_audio_encoder_output(SendPtr audio_output);
+        internal static extern void unienc_free_audio_encoder_output(Runtime* runtime, SendPtr audio_output);
 
         [DllImport(__DllName, EntryPoint = "unienc_muxer_push_video", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
         internal static extern void unienc_muxer_push_video(Runtime* runtime, SendPtr video_input, SendPtr data, nuint size, double timestamp, nuint callback, SendPtr user_data);
@@ -69,10 +69,10 @@ namespace UniEnc.Native
         internal static extern void unienc_video_encoder_pull(Runtime* runtime, SendPtr output, nuint callback, SendPtr user_data);
 
         [DllImport(__DllName, EntryPoint = "unienc_free_video_encoder_input", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
-        internal static extern void unienc_free_video_encoder_input(SendPtr video_input);
+        internal static extern void unienc_free_video_encoder_input(Runtime* runtime, SendPtr video_input);
 
         [DllImport(__DllName, EntryPoint = "unienc_free_video_encoder_output", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
-        internal static extern void unienc_free_video_encoder_output(SendPtr video_output);
+        internal static extern void unienc_free_video_encoder_output(Runtime* runtime, SendPtr video_output);
 
         [DllImport(__DllName, EntryPoint = "unienc_new_runtime", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
         internal static extern Runtime* unienc_new_runtime();

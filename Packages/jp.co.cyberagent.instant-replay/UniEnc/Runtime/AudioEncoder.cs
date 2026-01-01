@@ -137,26 +137,32 @@ namespace UniEnc
 
         private class InputHandle : GeneralHandle
         {
+            private readonly Utils.SafeHandleScope _runtimeScope = RuntimeWrapper.GetReferenceScope();
             public InputHandle(IntPtr handle) : base(handle)
             {
             }
 
-            protected override bool ReleaseHandle()
+            protected override unsafe bool ReleaseHandle()
             {
-                NativeMethods.unienc_free_audio_encoder_input((nint)handle);
+                using var _ = _runtimeScope;
+                using var scope = RuntimeWrapper.GetScope();
+                NativeMethods.unienc_free_audio_encoder_input(scope.Runtime, (nint)handle);
                 return true;
             }
         }
 
         private class OutputHandle : GeneralHandle
         {
+            private readonly Utils.SafeHandleScope _runtimeScope = RuntimeWrapper.GetReferenceScope();
             public OutputHandle(IntPtr handle) : base(handle)
             {
             }
 
-            protected override bool ReleaseHandle()
+            protected override unsafe bool ReleaseHandle()
             {
-                NativeMethods.unienc_free_audio_encoder_output((nint)handle);
+                using var _ = _runtimeScope;
+                using var scope = RuntimeWrapper.GetScope();
+                NativeMethods.unienc_free_audio_encoder_output(scope.Runtime, (nint)handle);
                 return true;
             }
         }

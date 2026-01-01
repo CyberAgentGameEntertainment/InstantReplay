@@ -192,8 +192,10 @@ pub unsafe extern "C" fn unienc_video_encoder_pull(
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn unienc_free_video_encoder_input(
+    runtime: *mut Runtime,
     video_input: SendPtr<Mutex<Option<VideoEncoderInput>>>,
 ) {
+    let _guard = unsafe { runtime.as_ref() }.unwrap().enter();
     if !video_input.is_null() {
         arc_from_raw(*video_input);
     }
@@ -201,8 +203,10 @@ pub unsafe extern "C" fn unienc_free_video_encoder_input(
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn unienc_free_video_encoder_output(
+    runtime: *mut Runtime,
     video_output: SendPtr<Mutex<Option<VideoEncoderOutput>>>,
 ) {
+    let _guard = unsafe { runtime.as_ref() }.unwrap().enter();
     if !video_output.is_null() {
         arc_from_raw(*video_output);
     }
