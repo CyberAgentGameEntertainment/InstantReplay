@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 use std::{fmt::Display, ops::Deref};
 
-use crate::error::Result;
 use bincode::{BorrowDecode, Decode, Encode};
 use windows::core::GUID;
 use windows::core::{Interface, BSTR};

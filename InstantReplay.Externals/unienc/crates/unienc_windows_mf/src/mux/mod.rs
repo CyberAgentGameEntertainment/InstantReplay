@@ -1,6 +1,5 @@
-use crate::error::{WindowsError, OptionExt, Result};
+use crate::error::{WindowsError, Result};
 use std::path::Path;
-use std::sync::Arc;
 use tokio::sync::mpsc;
 use tokio::sync::oneshot;
 use unienc_common::{AudioEncoderOptions, CompletionHandle, Muxer, MuxerInput, VideoEncoderOptions};

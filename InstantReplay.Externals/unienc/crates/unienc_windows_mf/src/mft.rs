@@ -3,7 +3,7 @@ use windows::Win32::Media::MediaFoundation::{IMFSample, IMFTransform, MFT_OUTPUT
 use windows::Win32::System::Com::CoTaskMemFree;
 
 use crate::common::UnsafeSend;
-use crate::error::{WindowsError, OptionExt, Result};
+use crate::error::{WindowsError, Result};
 use std::cell::Cell;
 use std::future::Future;
 use std::mem::ManuallyDrop;
