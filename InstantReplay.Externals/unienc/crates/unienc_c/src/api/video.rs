@@ -3,7 +3,7 @@ use std::ffi::c_void;
 use crate::*;
 use tokio::sync::Mutex;
 use unienc::{
-    buffer::SharedBuffer, EncoderInput, EncoderOutput, ResultExt, TryFromUnityNativeTexturePointer,
+    buffer::SharedBuffer, EncoderInput, EncoderOutput, ResultExt,
     VideoFrame, VideoFrameBgra32, VideoSample,
 };
 
