@@ -41,18 +41,18 @@ jobs:
           ./emsdk activate emscripten-main-64bit
           ./emsdk activate binaryen-main-64bit
         working-directory: InstantReplay.Externals/unienc/emsdk
-      - name: Cache LLVM
-        id: cache-llvm
-        uses: actions/cache@v4
-        with:
-          path: InstantReplay.Externals/unienc/emsdk/llvm/git/build_main_64/bin
-          key: ${{ runner.os }}-llvm-${{ matrix.emscripten }}
+      # - name: Cache LLVM
+      #   id: cache-llvm
+      #   uses: actions/cache@v4
+      #   with:
+      #     path: InstantReplay.Externals/unienc/emsdk/llvm/git/build_main_64/bin
+      #     key: ${{ runner.os }}-llvm-${{ matrix.emscripten }}
       - run: | # Build & Install LLVM
           ./emsdk install \
           --override-repository llvm-git-main-64bit@https://github.com/Unity-Technologies/llvm-project/tree/${{ matrix.emscripten }} \
           llvm-git-main-64bit
           mv ./llvm/git/build_${{ matrix.emscripten }}_64 ./llvm/git/build_main_64
-        if: steps.cache-llvm.outputs.cache-hit != 'true'
+        # if: steps.cache-llvm.outputs.cache-hit != 'true'
         working-directory: InstantReplay.Externals/unienc/emsdk
       - run: |
           ./emsdk activate llvm-git-main-64bit
