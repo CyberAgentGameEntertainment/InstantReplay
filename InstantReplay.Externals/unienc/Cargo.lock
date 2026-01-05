@@ -807,11 +807,9 @@ checksum = "5a5f39404a5da50712a4c1eecf25e90dd62b613502b7e925fd4e4d19b5c96512"
 
 [[package]]
 name = "unienc"
-version = "0.1.0"
+version = "1.4.1"
 dependencies = [
  "bincode",
- "libc",
- "ndk-sys",
  "rand",
  "tokio",
  "unienc_android_mc",
@@ -823,7 +821,7 @@ dependencies = [
 
 [[package]]
 name = "unienc_android_mc"
-version = "0.1.0"
+version = "1.4.1"
 dependencies = [
  "ash",
  "bincode",
@@ -840,7 +838,7 @@ dependencies = [
 
 [[package]]
 name = "unienc_apple_vt"
-version = "0.1.0"
+version = "1.4.1"
 dependencies = [
  "bincode",
  "bitflags",
@@ -865,11 +863,13 @@ dependencies = [
 
 [[package]]
 name = "unienc_c"
-version = "0.1.0"
+version = "1.4.1"
 dependencies = [
  "bincode",
  "csbindgen",
  "futures",
+ "libc",
+ "ndk-sys",
  "thiserror 2.0.17",
  "tokio",
  "unienc",
@@ -878,17 +878,16 @@ dependencies = [
 
 [[package]]
 name = "unienc_common"
-version = "0.1.0"
+version = "1.4.1"
 dependencies = [
  "bincode",
  "thiserror 2.0.17",
- "tokio",
  "unity-native-plugin",
 ]
 
 [[package]]
 name = "unienc_ffmpeg"
-version = "0.1.0"
+version = "1.4.1"
 dependencies = [
  "bincode",
  "cros-codecs",
@@ -900,7 +899,7 @@ dependencies = [
 
 [[package]]
 name = "unienc_windows_mf"
-version = "0.1.0"
+version = "1.4.1"
 dependencies = [
  "bincode",
  "thiserror 2.0.17",
