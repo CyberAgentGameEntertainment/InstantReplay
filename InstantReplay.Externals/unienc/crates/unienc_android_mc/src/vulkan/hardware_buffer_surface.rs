@@ -1,9 +1,9 @@
 use crate::common::{ImageWriter, ImageWriterImage};
+use crate::error::{AndroidError, Result};
 use crate::java::SafeGlobalRef;
 use crate::vulkan::hardware_buffer::HardwareBufferImage;
 use crate::vulkan::types::VulkanFramebufferHandle;
 use crate::vulkan::CONTEXT;
-use anyhow::{anyhow, Result};
 use ash::vk;
 
 /// A surface backed by ImageWriter and HardwareBuffer
@@ -43,9 +43,9 @@ impl HardwareBufferSurface {
         // Get the Vulkan context
         let cx = CONTEXT
             .get()
-            .ok_or_else(|| anyhow!("Vulkan context not initialized"))?
+            .ok_or(AndroidError::ContextNotInitialized)?
             .lock()
-            .map_err(|_| anyhow!("Failed to lock Vulkan context"))?;
+            .map_err(|_| AndroidError::MutexPoisoned)?;
 
         // Import the hardware buffer as a Vulkan image
         let vk_image = HardwareBufferImage::from_hardware_buffer(
@@ -67,7 +67,7 @@ impl HardwareBufferSurface {
                     None,
                 )
             }
-            .map_err(|e| anyhow!("Failed to create framebuffer: {:?}", e))?,
+            .map_err(AndroidError::FramebufferCreationFailed)?,
             cx.device.clone(),
         );
 

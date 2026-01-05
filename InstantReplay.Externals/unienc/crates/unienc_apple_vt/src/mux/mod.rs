@@ -4,7 +4,7 @@ use std::fs;
 use std::sync::Mutex;
 use std::{path::Path, ptr::NonNull};
 
-use anyhow::{anyhow, Result};
+use crate::error::{AppleError, Result, OsStatusExt};
 use block2::RcBlock;
 use dispatch2::DispatchQueue;
 use objc2::rc::Retained;
@@ -23,10 +23,9 @@ use objc2_core_media::{
 };
 use objc2_foundation::{NSString, NSURL};
 use tokio::sync::{mpsc, oneshot};
-use unienc_common::{CompletionHandle, Muxer, MuxerInput};
+use unienc_common::{CommonError, CompletionHandle, Muxer, MuxerInput, ResultExt};
 
 use crate::common::UnsafeSendRetained;
-use crate::OsStatus;
 use crate::{audio::AudioPacket, video::VideoEncodedData};
 
 pub struct AVFMuxer {
@@ -50,17 +49,17 @@ pub struct AVFMuxerAudioInput {
 impl MuxerInput for AVFMuxerVideoInput {
     type Data = VideoEncodedData;
 
-    async fn push(&mut self, data: Self::Data) -> Result<()> {
-        self.tx.send(Mutex::new(data.sample_buffer)).await?;
+    async fn push(&mut self, data: Self::Data) -> unienc_common::Result<()> {
+        self.tx.send(Mutex::new(data.sample_buffer)).await.map_err(AppleError::from)?;
 
         Ok(())
     }
 
-    async fn finish(self) -> Result<()> {
+    async fn finish(self) -> unienc_common::Result<()> {
         drop(self.tx);
         match self.finish_rx.await {
-            Ok(inner) => inner,
-            Err(inner) => Err(inner.into()),
+            Ok(inner) => inner.map_err(|e| e.into()),
+            Err(inner) => Err(AppleError::from(inner).into()),
         }
     }
 }
@@ -68,20 +67,20 @@ impl MuxerInput for AVFMuxerVideoInput {
 impl MuxerInput for AVFMuxerAudioInput {
     type Data = AudioPacket;
 
-    async fn push(&mut self, data: Self::Data) -> Result<()> {
+    async fn push(&mut self, data: Self::Data) -> unienc_common::Result<()> {
         let sample_buffer =
             create_audio_sample_buffer(&data, &mut self.asbd, !self.magic_cookie_applied)?;
         self.magic_cookie_applied = true;
-        self.tx.send(Mutex::new(sample_buffer.into())).await?;
+        self.tx.send(Mutex::new(sample_buffer.into())).await.map_err(AppleError::from)?;
 
         Ok(())
     }
 
-    async fn finish(self) -> Result<()> {
+    async fn finish(self) -> unienc_common::Result<()> {
         drop(self.tx);
         match self.finish_rx.await {
-            Ok(inner) => inner,
-            Err(inner) => Err(inner.into()),
+            Ok(inner) => inner.map_err(|e| e.into()),
+            Err(inner) => Err(AppleError::from(inner).into()),
         }
     }
 }
@@ -93,7 +92,7 @@ pub struct AVFMuxerCompletionHandle {
 }
 
 impl CompletionHandle for AVFMuxerCompletionHandle {
-    async fn finish(self) -> Result<()> {
+    async fn finish(self) -> unienc_common::Result<()> {
         let writer = self.writer;
 
         let writer1 = writer.clone();
@@ -104,7 +103,7 @@ impl CompletionHandle for AVFMuxerCompletionHandle {
                 if let Some(tx) = tx.borrow_mut().take() {
                     if let Some(err) = writer1.error() {
                         println!("Failed to finish writing: {}", err);
-                        tx.send(Err(anyhow!(err.to_string()))).unwrap();
+                        tx.send(Err(CommonError::Other(err.to_string()))).unwrap();
                     } else {
                         tx.send(Ok(())).unwrap();
                     }
@@ -112,7 +111,7 @@ impl CompletionHandle for AVFMuxerCompletionHandle {
             }));
         }
 
-        rx.await?
+        rx.await.context("failed to finish writing")?
     }
 }
 
@@ -123,7 +122,7 @@ impl Muxer for AVFMuxer {
 
     fn get_inputs(
         self,
-    ) -> Result<(
+    ) -> unienc_common::Result<(
         Self::VideoInputType,
         Self::AudioInputType,
         Self::CompletionHandleType,
@@ -214,12 +213,11 @@ impl AVFMuxer {
         }
 
         if !unsafe { writer.startWriting() } {
-            if unsafe { writer.status() } == AVAssetWriterStatus::Failed {
-                if let Some(err) = unsafe { writer.error() } {
-                    return Err(anyhow::anyhow!("Failed to start writing: {}", err));
+            if unsafe { writer.status() } == AVAssetWriterStatus::Failed
+                && let Some(err) = unsafe { writer.error() } {
+                    return Err(AppleError::AssetWriterStartFailed(err.to_string()));
                 }
-            }
-            return Err(anyhow::anyhow!("Failed to start writing"));
+            return Err(AppleError::AssetWriterStartFailedUnknown);
         }
 
         unsafe { writer.startSessionAtSourceTime(kCMTimeZero) };

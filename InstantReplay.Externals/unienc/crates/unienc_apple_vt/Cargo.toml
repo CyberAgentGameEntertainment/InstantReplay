@@ -1,12 +1,12 @@
 [package]
 name = "unienc_apple_vt"
-version = "0.1.0"
+version.workspace = true
 edition.workspace = true
 license.workspace = true
 authors.workspace = true
 
 [dependencies]
-anyhow = "1.0.98"
+thiserror = { workspace = true }
 bincode = { workspace = true }
 bitflags = "2.9.1"
 block2 = "0.6.1"
@@ -23,5 +23,5 @@ objc2-foundation = "0.3.1"
 objc2-metal = "0.3.2"
 objc2-video-toolbox = "0.3.1"
 tokio = { version = "1.45.1", features = ["sync"] }
-unienc_common = { workspace = true }
-unity-native-plugin = { version = "0.8.0", features = ["metal_objc2"] }
+unienc_common = { workspace = true, features = ["unity"] }
+unity-native-plugin = { workspace = true, features = ["metal_objc2"] }

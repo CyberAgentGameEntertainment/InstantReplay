@@ -12,13 +12,14 @@ use crate::{
     audio::AudioToolboxEncoder, common::UnsafeSendRetained, mux::AVFMuxer,
     video::VideoToolboxEncoder,
 };
-use anyhow::Result;
-
 pub mod audio;
 mod common;
+pub mod error;
 mod metal;
 pub mod mux;
 pub mod video;
+
+pub use error::{AppleError, OsStatusExt, Result};
 
 pub struct VideoToolboxEncodingSystem<
     V: unienc_common::VideoEncoderOptions,
@@ -49,22 +50,24 @@ impl<V: unienc_common::VideoEncoderOptions, A: unienc_common::AudioEncoderOption
         }
     }
 
-    fn new_video_encoder(&self) -> Result<Self::VideoEncoderType> {
-        VideoToolboxEncoder::new(&self.video_options)
+    fn new_video_encoder(&self) -> unienc_common::Result<Self::VideoEncoderType> {
+        VideoToolboxEncoder::new(&self.video_options).map_err(|e| e.into())
     }
 
-    fn new_audio_encoder(&self) -> Result<Self::AudioEncoderType> {
-        AudioToolboxEncoder::new(&self.audio_options)
+    fn new_audio_encoder(&self) -> unienc_common::Result<Self::AudioEncoderType> {
+        AudioToolboxEncoder::new(&self.audio_options).map_err(|e| e.into())
     }
 
-    fn new_muxer(&self, output_path: &Path) -> Result<Self::MuxerType> {
-        AVFMuxer::new(output_path, &self.video_options, &self.audio_options)
+    fn new_muxer(&self, output_path: &Path) -> unienc_common::Result<Self::MuxerType> {
+        AVFMuxer::new(output_path, &self.video_options, &self.audio_options).map_err(|e| e.into())
     }
 
     fn is_blit_supported(&self) -> bool {
         metal::is_initialized()
     }
+}
 
+impl<V: unienc_common::VideoEncoderOptions, A: unienc_common::AudioEncoderOptions> unienc_common::unity::UnityPlugin for VideoToolboxEncodingSystem<V, A> {
     fn unity_plugin_load(interfaces: &unity_native_plugin::interface::UnityInterfaces) {
         metal::unity_plugin_load(interfaces);
     }
@@ -76,28 +79,14 @@ pub struct MetalTexture {
 }
 
 impl TryFromUnityNativeTexturePointer for MetalTexture {
-    fn try_from_unity_native_texture_ptr(ptr: *mut c_void) -> Result<Self> {
+    fn try_from_unity_native_texture_ptr(ptr: *mut c_void) -> unienc_common::Result<Self> {
         metal::is_initialized()
             .then_some(())
-            .ok_or_else(|| anyhow::anyhow!("Metal context is not initialized"))?;
+            .ok_or(AppleError::MetalNotInitialized)?;
         let retained = unsafe { Retained::<ProtocolObject<dyn MTLTexture>>::retain(ptr as *mut _) }
-            .ok_or_else(|| anyhow::anyhow!("Failed to retain MTLTexture from raw pointer"))?;
+            .ok_or(AppleError::MetalTextureRetainFailed)?;
         Ok(MetalTexture {
             texture: UnsafeSendRetained { inner: retained },
         })
-    }
-}
-
-pub(crate) trait OsStatus {
-    fn to_result(&self) -> Result<()>;
-}
-
-impl OsStatus for i32 {
-    fn to_result(&self) -> Result<()> {
-        if *self == 0 {
-            Ok(())
-        } else {
-            Err(anyhow::anyhow!("OSStatus: {}", *self))
-        }
     }
 }

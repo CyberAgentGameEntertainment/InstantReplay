@@ -1,4 +1,3 @@
-use anyhow::Result;
 use jni::sys::JNI_VERSION_1_6;
 use jni::JavaVM;
 use std::ffi::{c_int, c_void};
@@ -9,22 +8,26 @@ use unienc_common::{EncodingSystem, TryFromUnityNativeTexturePointer};
 pub mod audio;
 pub mod common;
 pub mod config;
+pub mod error;
 mod java;
 pub mod mux;
 pub mod video;
 mod vulkan;
 
+pub use error::{AndroidError, Result};
+
 use audio::MediaCodecAudioEncoder;
 use mux::MediaMuxer;
+use unienc_common::unity::UnityPlugin;
 use video::MediaCodecVideoEncoder;
 
 static JAVA_VM: OnceLock<jni::JavaVM> = OnceLock::new();
 
-pub unsafe fn set_java_vm(vm: *mut jni::sys::JavaVM, _reserved: *mut c_void) -> c_int {
+pub unsafe fn set_java_vm(vm: *mut jni::sys::JavaVM, _reserved: *mut c_void) -> c_int { unsafe {
     JAVA_VM.set(JavaVM::from_raw(vm).unwrap()).unwrap();
     println!("JNI_OnLoad: {:?}", vm);
     JNI_VERSION_1_6
-}
+}}
 
 pub struct MediaCodecEncodingSystem<
     V: unienc_common::VideoEncoderOptions,
@@ -51,16 +54,16 @@ impl<V: unienc_common::VideoEncoderOptions, A: unienc_common::AudioEncoderOption
         }
     }
 
-    fn new_video_encoder(&self) -> Result<Self::VideoEncoderType> {
-        MediaCodecVideoEncoder::new(&self.video_options)
+    fn new_video_encoder(&self) -> unienc_common::Result<Self::VideoEncoderType> {
+        MediaCodecVideoEncoder::new(&self.video_options).map_err(Into::into)
     }
 
-    fn new_audio_encoder(&self) -> Result<Self::AudioEncoderType> {
-        MediaCodecAudioEncoder::new(&self.audio_options)
+    fn new_audio_encoder(&self) -> unienc_common::Result<Self::AudioEncoderType> {
+        MediaCodecAudioEncoder::new(&self.audio_options).map_err(Into::into)
     }
 
-    fn new_muxer(&self, output_path: &Path) -> Result<Self::MuxerType> {
-        MediaMuxer::new(output_path, &self.video_options, &self.audio_options)
+    fn new_muxer(&self, output_path: &Path) -> unienc_common::Result<Self::MuxerType> {
+        MediaMuxer::new(output_path, &self.video_options, &self.audio_options).map_err(Into::into)
     }
 
     fn is_blit_supported(&self) -> bool {
@@ -70,6 +73,9 @@ impl<V: unienc_common::VideoEncoderOptions, A: unienc_common::AudioEncoderOption
         let api_level = common::get_android_api_level().unwrap_or(0);
         api_level >= 29 && vulkan::is_initialized()
     }
+}
+
+impl<V: unienc_common::VideoEncoderOptions, A: unienc_common::AudioEncoderOptions> UnityPlugin for MediaCodecEncodingSystem<V, A> {
     fn unity_plugin_load(interfaces: &unity_native_plugin::interface::UnityInterfaces) {
         vulkan::unity_plugin_load(interfaces);
     }
@@ -81,11 +87,13 @@ pub struct VulkanTexture {
 }
 
 impl TryFromUnityNativeTexturePointer for VulkanTexture {
-    fn try_from_unity_native_texture_ptr(ptr: *mut c_void) -> Result<Self> {
+    fn try_from_unity_native_texture_ptr(
+        ptr: *mut c_void,
+    ) -> unienc_common::Result<Self> {
         // ptr is VkImage*
         let ptr = ptr as *mut ash::vk::Image;
         if ptr.is_null() {
-            return Err(anyhow::anyhow!("Null Vulkan texture pointer"));
+            return Err(AndroidError::NullVulkanTexture.into());
         }
         Ok(VulkanTexture {
             tex: unsafe { *ptr },

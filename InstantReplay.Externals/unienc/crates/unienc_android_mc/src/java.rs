@@ -1,21 +1,20 @@
 use std::sync::Arc;
 
 use jni::{objects::{GlobalRef, JObject, JString}, AttachGuard, JNIEnv, JavaVM};
-use anyhow::{Context, Result};
-
+use crate::error::{AndroidError, Result};
 
 /// Get the global JavaVM instance
 pub fn get_java_vm() -> Result<&'static JavaVM> {
     crate::JAVA_VM
         .get()
-        .ok_or_else(|| anyhow::anyhow!("JavaVM not initialized"))
+        .ok_or(AndroidError::JavaVmNotInitialized)
 }
 
 /// Attach current thread to JVM and get JNIEnv
 pub fn attach_current_thread() -> Result<AttachGuard<'static>> {
     let vm = get_java_vm()?;
     vm.attach_current_thread()
-        .map_err(|e| anyhow::anyhow!("Failed to attach current thread to JVM: {:?}", e))
+        .map_err(|e| AndroidError::JvmAttachFailed(format!("{:?}", e)))
 }
 
 /// Thread-safe wrapper for Java GlobalRef
@@ -27,7 +26,7 @@ impl SafeGlobalRef {
     pub fn new(env: &JNIEnv, obj: JObject) -> Result<Self> {
         let global_ref = env
             .new_global_ref(obj)
-            .context("Failed to create global reference")?;
+            .map_err(|_| AndroidError::JniGlobalRefFailed)?;
         Ok(Self {
             inner: Arc::new(global_ref),
         })
@@ -54,7 +53,7 @@ pub fn check_jni_exception(env: &JNIEnv) -> Result<()> {
     if env.exception_check()? {
         env.exception_describe()?;
         env.exception_clear()?;
-        return Err(anyhow::anyhow!("JNI exception occurred"));
+        return Err(AndroidError::JniException);
     }
     Ok(())
 }
@@ -69,7 +68,7 @@ pub fn call_void_method(
 ) -> Result<()> {
     let env = unsafe { &mut env.unsafe_clone() };
     env.call_method(obj, name, sig, args)
-        .context(format!("Failed to call method: {}", name))?;
+        .map_err(|_| AndroidError::JniMethodCallFailed(name.to_string()))?;
     check_jni_exception(env)?;
     Ok(())
 }
@@ -84,9 +83,9 @@ pub fn call_int_method(
 ) -> Result<jni::sys::jint> {
     let result = env
         .call_method(obj, name, sig, args)
-        .context(format!("Failed to call method: {}", name))?;
+        .map_err(|_| AndroidError::JniMethodCallFailed(name.to_string()))?;
     check_jni_exception(env)?;
-    result.i().context("Expected int return value")
+    result.i().map_err(|_| AndroidError::JniUnexpectedReturnValue { expected: "int" })
 }
 
 /// Helper to call Java methods returning object
@@ -99,32 +98,32 @@ pub fn call_object_method<'a>(
 ) -> Result<JObject<'a>> {
     let result = env
         .call_method(obj, name, sig, args)
-        .context(format!("Failed to call method: {}", name))?;
+        .map_err(|_| AndroidError::JniMethodCallFailed(name.to_string()))?;
     check_jni_exception(env)?;
-    result.l().context("Expected object return value")
+    result.l().map_err(|_| AndroidError::JniUnexpectedReturnValue { expected: "object" })
 }
 
 /// Helper to get int field
 pub fn get_int_field(env: &mut JNIEnv, obj: &JObject, name: &str) -> Result<jni::sys::jint> {
     let result = env
         .get_field(obj, name, "I")
-        .context(format!("Failed to get field: {}", name))?;
+        .map_err(|_| AndroidError::JniFieldGetFailed(name.to_string()))?;
     check_jni_exception(env)?;
-    result.i().context("Expected int field")
+    result.i().map_err(|_| AndroidError::JniUnexpectedReturnValue { expected: "int" })
 }
 
 /// Helper to get long field
 pub fn get_long_field(env: &mut JNIEnv, obj: &JObject, name: &str) -> Result<jni::sys::jlong> {
     let result = env
         .get_field(obj, name, "J")
-        .context(format!("Failed to get field: {}", name))?;
+        .map_err(|_| AndroidError::JniFieldGetFailed(name.to_string()))?;
     check_jni_exception(env)?;
-    result.j().context("Expected long field")
+    result.j().map_err(|_| AndroidError::JniUnexpectedReturnValue { expected: "long" })
 }
 
 /// Convert Rust string to Java string
 pub fn to_java_string<'a>(env: &JNIEnv<'a>, s: &str) -> Result<JString<'a>> {
-    env.new_string(s).context("Failed to create Java string")
+    env.new_string(s).map_err(|_| AndroidError::JniStringCreationFailed)
 }
 
 /// Get direct buffer address, capacity and position from DirectByteBuffer
@@ -138,7 +137,7 @@ pub fn get_direct_buffer_info(
     // Get direct buffer address (always points to the beginning of the buffer)
     let base_address = env.get_direct_buffer_address(byte_buffer)?;
     if base_address.is_null() {
-        return Err(anyhow::anyhow!("Buffer is not a direct buffer"));
+        return Err(AndroidError::NotDirectBuffer);
     }
 
     // Get buffer capacity

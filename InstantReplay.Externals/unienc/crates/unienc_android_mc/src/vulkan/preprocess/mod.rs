@@ -1,3 +1,4 @@
+use crate::error::{AndroidError, Result, ResultExt};
 use crate::vulkan::format::GRAPHICS_FORMAT_TO_VULKAN;
 use crate::vulkan::hardware_buffer_surface::HardwareBufferFrame;
 use crate::vulkan::types::{
@@ -8,7 +9,6 @@ use crate::vulkan::types::{
 };
 use crate::vulkan::utils::{create_shader_module, FenceGuard};
 use crate::vulkan::{GlobalContext, ProfilerMarkerDescExt, MARKERS};
-use anyhow::{anyhow, Context, Result};
 use ash::vk;
 use std::future::Future;
 use std::sync::{Arc, Mutex};
@@ -80,7 +80,7 @@ struct VertPushConstants {
 pub fn create_pass(
     device: Arc<ash::Device>,
     queue_family_index: u32,
-) -> anyhow::Result<PreprocessRenderPass> {
+) -> Result<PreprocessRenderPass> {
     // create render pass
     let render_pass = unsafe {
         device.create_render_pass(
@@ -228,7 +228,7 @@ pub fn create_pass(
             for pipeline in pipelines {
                 unsafe { device.destroy_pipeline(pipeline, None) };
             }
-            return Err(anyhow!("Failed to create graphics pipeline: {:?}", result));
+            return Err(AndroidError::GraphicsPipelineCreationFailed(result));
         }
     };
 
@@ -333,7 +333,7 @@ pub fn blit_to_hardware_buffer(
     flip_vertically: bool,
     is_gamma_workflow: bool,
     frame: &HardwareBufferFrame,
-) -> Result<impl Future<Output = Result<()>>> {
+) -> Result<impl Future<Output = Result<()>> + use<>> {
     let markers = MARKERS.get();
     let _guard = markers.map(|m| m.preprocess_blit.get());
     let vulkan = &cx.vulkan;
@@ -341,7 +341,7 @@ pub fn blit_to_hardware_buffer(
     let pass = &cx.render_pass;
 
     let Some(desc_set) = pass.desc_sets.pop() else {
-        return Err(anyhow!("No available descriptor sets in preprocess blit"));
+        return Err(AndroidError::NoAvailableDescriptorSets);
     };
 
     let (src_view, queue, mut command_buffers, fence) = {
@@ -353,7 +353,7 @@ pub fn blit_to_hardware_buffer(
             .copied()
             .flatten()
             .next()
-            .context(format!("Unsupported graphics format: {}", src_graphics_format))?;
+            .ok_or(AndroidError::UnsupportedGraphicsFormat(src_graphics_format))?;
 
         // A format of AHardwareBuffer doesn't seem to be mapped to SRGB formats directly while MediaCodec accepts sRGB pixels.
         // (mapping table: https://docs.vulkan.org/spec/latest/chapters/memory.html#memory-external-android-hardware-buffer-formats)
@@ -620,7 +620,7 @@ pub fn blit_to_hardware_buffer(
     Ok(async move {
         join_handle
             .await
-            .map_err(|e| anyhow!("Failed to wait for fence: {:?}", e))?;
+            .context("Failed to wait for fence")?;
         Ok(())
     })
 }

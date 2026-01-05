@@ -1,6 +1,5 @@
 use std::{sync::Arc, vec};
 
-use anyhow::{Context, Result};
 use bincode::{Decode, Encode};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
@@ -11,6 +10,7 @@ use unienc_common::{
     UniencSampleKind,
 };
 
+use crate::error::{FFmpegError, Result};
 use crate::ffmpeg;
 
 pub struct FFmpegAudioEncoder {
@@ -51,9 +51,9 @@ impl FFmpegAudioEncoder {
         let input = ffmpeg
             .inputs
             .take()
-            .context("failed to get input")?
+            .ok_or(FFmpegError::InputNotAvailable)?
             .remove(0);
-        let output = ffmpeg.stdout.take().context("failed to get output")?;
+        let output = ffmpeg.stdout.take().ok_or(FFmpegError::OutputNotAvailable)?;
 
         let ffmpeg = Arc::new(ffmpeg);
 
@@ -68,7 +68,7 @@ impl Encoder for FFmpegAudioEncoder {
     type InputType = FFmpegAudioEncoderInput;
     type OutputType = FFmpegAudioEncoderOutput;
 
-    fn get(self) -> Result<(Self::InputType, Self::OutputType)> {
+    fn get(self) -> unienc_common::Result<(Self::InputType, Self::OutputType)> {
         Ok((self.input, self.output))
     }
 }
@@ -76,7 +76,7 @@ impl Encoder for FFmpegAudioEncoder {
 impl EncoderInput for FFmpegAudioEncoderInput {
     type Data = AudioSample;
 
-    async fn push(&mut self, data: Self::Data) -> Result<()> {
+    async fn push(&mut self, data: Self::Data) -> unienc_common::Result<()> {
         let data = unsafe {
             std::slice::from_raw_parts::<u8>(
                 data.data.as_ptr() as *const u8,
@@ -84,8 +84,8 @@ impl EncoderInput for FFmpegAudioEncoderInput {
             )
         };
 
-        self.input.write_all(data).await?;
-        self.input.flush().await?;
+        self.input.write_all(data).await.map_err(FFmpegError::from)?;
+        self.input.flush().await.map_err(FFmpegError::from)?;
 
         Ok(())
     }
@@ -94,14 +94,13 @@ impl EncoderInput for FFmpegAudioEncoderInput {
 impl EncoderOutput for FFmpegAudioEncoderOutput {
     type Data = AudioEncodedData;
 
-    async fn pull(&mut self) -> Result<Option<Self::Data>> {
+    async fn pull(&mut self) -> unienc_common::Result<Option<Self::Data>> {
         // read ADTS header
         let mut header = vec![0u8; 7];
-        if let Err(err) = self.output.read_exact(&mut header).await {
-            if err.kind() == std::io::ErrorKind::UnexpectedEof {
+        if let Err(err) = self.output.read_exact(&mut header).await
+            && err.kind() == std::io::ErrorKind::UnexpectedEof {
                 return Ok(None);
             }
-        }
 
         // get frame length
         let mut length = ((header[3]& 0b11) as u16) << 11;
@@ -115,7 +114,7 @@ impl EncoderOutput for FFmpegAudioEncoderOutput {
         self.timestamp_in_samples += 1024;
 
         let mut buf = vec![0u8; length as usize];
-        self.output.read_exact(&mut buf).await?;
+        self.output.read_exact(&mut buf).await.map_err(FFmpegError::from)?;
 
         let data = AudioEncodedData { header, payload: buf, timestamp_in_samples, sample_rate: self.sample_rate };
 
