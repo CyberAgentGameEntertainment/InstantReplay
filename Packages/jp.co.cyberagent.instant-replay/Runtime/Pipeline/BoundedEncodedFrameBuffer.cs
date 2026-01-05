@@ -23,6 +23,7 @@ namespace InstantReplay
         private readonly Queue<EncodedFrame> _videoQueue;
         private long _currentMemoryUsage;
         private bool _disposed;
+        private double? _videoQueueLatestTimestamp;
 
         public BoundedEncodedFrameBuffer(long maxMemoryBytes)
         {
@@ -64,9 +65,18 @@ namespace InstantReplay
             lock (_videoQueue)
             {
                 if (frame.Kind == UniencSampleKind.Metadata)
+                {
                     _videoMetadata.Add(frame);
+                }
                 else
+                {
+                    // MediaCodec (Android) may produce out-of-order frame with timestamp=0 at the end of stream.
+                    if (_videoQueueLatestTimestamp is not { } videoQueueLatestTimestamp ||
+                        frame.Timestamp >= videoQueueLatestTimestamp)
+                        // in-order frame
+                        _videoQueueLatestTimestamp = frame.Timestamp;
                     _videoQueue.Enqueue(frame);
+                }
             }
 
             Interlocked.Add(ref _currentMemoryUsage, frameSize);
@@ -132,11 +142,11 @@ namespace InstantReplay
 
                 // find keyframe
                 var argMinTimespan = -1;
-                var latest = unprocessedVideoFrames.Span[^1];
+                var latest = _videoQueueLatestTimestamp ?? 0;
                 if (durationSeconds is { } durationSecondsValue)
                 {
                     // TODO: binary search
-                    var expectedStartTime = latest.Timestamp - durationSecondsValue;
+                    var expectedStartTime = latest - durationSecondsValue;
                     var minTimespan = double.MaxValue;
                     for (var i = 0; i < unprocessedVideoFrames.Length; i++)
                     {
@@ -173,7 +183,7 @@ namespace InstantReplay
                 }
                 else
                 {
-                    var actualDuration = latest.Timestamp - unprocessedVideoFrames.Span[argMinTimespan].Timestamp;
+                    var actualDuration = latest - unprocessedVideoFrames.Span[argMinTimespan].Timestamp;
                     var expectedAudioStartTime = unprocessedAudioFrames.Span[^1].Timestamp - actualDuration;
 
                     var minAudioTimespan = double.MaxValue;
