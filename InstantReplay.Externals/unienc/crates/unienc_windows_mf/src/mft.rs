@@ -300,7 +300,7 @@ impl Transform {
             activate.GetString(&MFT_FRIENDLY_NAME_Attribute, &mut buffer, Some(&mut length))?
         };
 
-        let value: String = BSTR::from_wide(&buffer[..length as usize]).try_into()?;
+        let value: String = BSTR::from_wide(&buffer[..length as usize]).try_into().map_err(|_| WindowsError::Utf16ToStringConversionFailed)?;
         Ok(value)
     }
 
@@ -473,7 +473,7 @@ impl Transform {
                             continue;
                         }
                         Err(err) => {
-                            if let Ok(err) = err.downcast::<windows_core::Error>() {
+                            if let WindowsError::Windows(err) = err {
                                 if err.code() == MF_E_TRANSFORM_NEED_MORE_INPUT {
                                     return Ok(());
                                 } else {
@@ -532,7 +532,7 @@ impl Drop for Transform {
                         continue;
                     }
                     Err(err) => {
-                        if let Ok(err) = err.downcast::<windows_core::Error>() {
+                        if let WindowsError::Windows(err) = err {
                             if err.code() == MF_E_TRANSFORM_NEED_MORE_INPUT {
                                 return;
                             } else {

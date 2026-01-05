@@ -6,6 +6,7 @@ use bincode::{BorrowDecode, Decode, Encode};
 use windows::core::GUID;
 use windows::core::{Interface, BSTR};
 use windows::Win32::Media::MediaFoundation::*;
+use crate::WindowsError;
 
 #[derive(Debug)]
 
@@ -259,7 +260,7 @@ impl TryFrom<&IMFAttributes> for SerializableMFAttributes {
 
                     unsafe { from.GetString(&guid, &mut buffer, Some(&mut length))? };
 
-                    let value: String = BSTR::from_wide(&buffer[..length as usize]).try_into()?;
+                    let value: String = BSTR::from_wide(&buffer[..length as usize]).try_into().map_err(|_| WindowsError::Utf16ToStringConversionFailed)?;
                     AttributeValue::String(value)
                 }
                 MF_ATTRIBUTE_BLOB => {

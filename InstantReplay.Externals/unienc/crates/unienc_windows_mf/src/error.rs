@@ -2,7 +2,7 @@ use thiserror::Error;
 use unienc_common::{CategorizedError, ErrorCategory};
 
 /// Error type for unienc_windows_mf
-#[derive(Error, Debug)]
+#[derive(Error, Debug, Clone)]
 pub enum WindowsError {
     // MFT (Media Foundation Transform) related errors
     #[error("No suitable MFT found")]
@@ -67,6 +67,9 @@ pub enum WindowsError {
 
     #[error(transparent)]
     OneshotRecv(#[from] tokio::sync::oneshot::error::RecvError),
+    
+    #[error("Failed to convert UTF-16 into String")]
+    Utf16ToStringConversionFailed,
 
     // Generic errors
     #[error("{0}")]
@@ -112,6 +115,7 @@ impl CategorizedError for WindowsError {
 
             // Generic fallback
             WindowsError::Other(_) => ErrorCategory::General,
+            WindowsError::Utf16ToStringConversionFailed => ErrorCategory::General,
         }
     }
 }

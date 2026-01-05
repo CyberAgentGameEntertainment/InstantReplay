@@ -3,9 +3,7 @@ use std::path::Path;
 use std::sync::Arc;
 use tokio::sync::mpsc;
 use tokio::sync::oneshot;
-use unienc_common::{
-    AudioEncoderOptions, CompletionHandle, Muxer, MuxerInput, VideoEncoderOptions,
-};
+use unienc_common::{AudioEncoderOptions, CompletionHandle, Muxer, MuxerInput, VideoEncoderOptions};
 use windows::Win32::Media::MediaFoundation::*;
 use windows_core::IUnknown;
 use windows_core::HSTRING;
@@ -22,7 +20,7 @@ enum LazyStream {
         tx: oneshot::Sender<Result<UnsafeSend<IMFMediaType>>>,
         rx: oneshot::Receiver<Result<Stream>>,
     },
-    Some(Result<Stream, Arc<WindowsError>>),
+    Some(Result<Stream>),
 }
 
 impl LazyStream {
@@ -36,11 +34,11 @@ impl LazyStream {
     pub async fn get(
         &mut self,
         media_type: UnsafeSend<IMFMediaType>,
-    ) -> Result<&Stream, Arc<WindowsError>> {
+    ) -> Result<()> {
         let result = async {
             match std::mem::replace(
                 self,
-                LazyStream::Some(Err(Arc::new(WindowsError::StreamGetFailed))),
+                LazyStream::Some(Err(WindowsError::StreamGetFailed)),
             ) {
                 LazyStream::None { tx, rx } => {
                     tx.send(Ok(media_type))
@@ -53,12 +51,12 @@ impl LazyStream {
         }
         .await;
 
-        let result = result.map_err(Arc::new);
         *self = LazyStream::Some(result);
         let LazyStream::Some(result) = self else {
             unreachable!()
         };
-        result.as_ref().map_err(|e| e.clone())
+        result.as_ref().map_err(|e| e.clone())?;
+        Ok(())
     }
 }
 

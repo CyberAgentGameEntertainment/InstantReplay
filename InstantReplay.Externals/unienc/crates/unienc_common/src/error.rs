@@ -34,7 +34,7 @@ pub trait CategorizedError: std::error::Error {
 }
 
 /// Common error type for unienc_common
-#[derive(Error, Debug)]
+#[derive(Error, Debug, Clone)]
 pub enum CommonError {
     #[error("Buffer pool limit exceeded")]
     BufferPoolExceeded,
