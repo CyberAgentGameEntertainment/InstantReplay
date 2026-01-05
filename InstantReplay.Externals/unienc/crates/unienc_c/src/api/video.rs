@@ -70,7 +70,7 @@ pub unsafe extern "C" fn unienc_video_encoder_push_blit_source(
         return;
     };
 
-    match BlitSource::try_from_unity_native_texture_ptr(source_native_texture_ptr) {
+    match <BlitSource as unienc::TryFromUnityNativeTexturePointer>::try_from_unity_native_texture_ptr(source_native_texture_ptr) {
         Ok(blit_source) => {
             let sample = VideoSample {
                 frame: VideoFrame::BlitSource {
