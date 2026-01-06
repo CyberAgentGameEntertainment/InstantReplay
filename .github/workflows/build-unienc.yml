@@ -20,7 +20,7 @@ jobs:
     strategy:
       matrix:
         emscripten: ["3.1.8-unity", "3.1.38-unity"]
-    timeout-minutes: 30
+    timeout-minutes: 120
     defaults:
       run:
         working-directory: InstantReplay.Externals/unienc/crates/unienc_c
@@ -30,7 +30,8 @@ jobs:
           submodules: 'true'
       - run: git clone https://github.com/Unity-Technologies/emsdk.git
         working-directory: InstantReplay.Externals/unienc
-      - run: | # Install Pre-built Emscripten SDK
+      - name: Install Pre-built Emscripten SDK
+        run: |
           ./emsdk install latest
           ./emsdk activate latest
           ./emsdk install \
@@ -44,7 +45,8 @@ jobs:
       #   with:
       #     path: InstantReplay.Externals/unienc/emsdk/llvm/git/build_main_64/bin
       #     key: ${{ runner.os }}-llvm-${{ matrix.emscripten }}
-      - run: | # Build & Install LLVM
+      - name: Build & Install LLVM
+        run: |
           ./emsdk install \
           --override-repository llvm-git-main-64bit@https://github.com/Unity-Technologies/llvm-project/tree/${{ matrix.emscripten }} \
           llvm-git-main-64bit
@@ -57,7 +59,8 @@ jobs:
       #   with:
       #     path: InstantReplay.Externals/unienc/emsdk/binaryen/main_64bit_binaryen
       #     key: ${{ runner.os }}-binaryen-${{ matrix.emscripten }}
-      - run: | # Build & Install Binaryen
+      - name: Build & Install Binaryen
+        run: |
           ./emsdk install \
           --override-repository binaryen-main-64bit@https://github.com/Unity-Technologies/binaryen/tree/${{ matrix.emscripten }} \
           binaryen-main-64bit
@@ -69,7 +72,8 @@ jobs:
         working-directory: InstantReplay.Externals/unienc/emsdk
       - run: rustup default stable
       - run: rustup target add wasm32-unknown-emscripten
-      - run: |
+      - name: Build unienc
+        run: |
           source ./emsdk/emsdk_env.sh
           cargo build --target wasm32-unknown-emscripten --profile ${{ env._RUST_BUILD_CONFIG == 'debug' && 'dev' || env._RUST_BUILD_CONFIG }}-wasm --no-default-features
       - uses: actions/upload-artifact@v4
