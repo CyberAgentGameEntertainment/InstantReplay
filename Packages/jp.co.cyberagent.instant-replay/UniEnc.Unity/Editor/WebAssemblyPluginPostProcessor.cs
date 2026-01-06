@@ -66,7 +66,7 @@ namespace UniEnc.Unity.Editor
             if (EmscriptenVersion == null) Debug.LogError("Instant Replay requires Unity 2022.3.");
 #pragma warning restore CS0162
 
-            var compatible = dir == EmscriptenVersion;
+            var compatible = dir?.EndsWith(EmscriptenVersion) ?? false;
 
             if (!_isEditing)
             {

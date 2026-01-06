@@ -77,7 +77,7 @@ jobs:
           cargo build --target wasm32-unknown-emscripten --profile ${{ env._RUST_BUILD_CONFIG == 'debug' && 'dev' || env._RUST_BUILD_CONFIG }}-wasm --no-default-features
       - uses: actions/upload-artifact@v4
         with:
-          name: wasm32-unknown-emscripten/${{ matrix.emscripten }}
+          name: wasm32-unknown-emscripten_${{ matrix.emscripten }}
           path: InstantReplay.Externals/unienc/target/wasm32-unknown-emscripten/${{ env._RUST_BUILD_CONFIG }}-wasm/libunienc_c.a
           retention-days: 1
   update-unity-native:
