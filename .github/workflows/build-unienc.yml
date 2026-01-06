@@ -23,13 +23,12 @@ jobs:
     timeout-minutes: 120
     defaults:
       run:
-        working-directory: InstantReplay.Externals/unienc/crates/unienc_c
+        working-directory: InstantReplay.Externals/unienc
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: 'true'
       - run: git clone https://github.com/Unity-Technologies/emsdk.git
-        working-directory: InstantReplay.Externals/unienc
       - name: Install Pre-built Emscripten SDK
         run: |
           ./emsdk install latest
