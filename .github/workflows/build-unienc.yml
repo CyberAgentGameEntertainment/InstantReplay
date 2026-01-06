@@ -93,7 +93,7 @@ jobs:
         with:
           path: ./Packages/jp.co.cyberagent.instant-replay/UniEnc/Plugins/
       - run: |
-          cargo install cargo-about
+          cargo install cargo-about --locked
           cargo about generate about.hbs > ../../THIRD-PARTY-NOTICES.md
         working-directory: InstantReplay.Externals/unienc
       - run: |
