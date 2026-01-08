@@ -28,6 +28,6 @@ jobs:
       - name: Install dependencies
         run: dotnet restore
       - name: Build
-        run: dotnet build ./src/UniEnc/UniEnc.csproj -c Release -p:Version=${{ env.VERSION }} --no-restore -o ./publish
+        run: dotnet build ./src/UniEnc/UniEnc.csproj -c Release -p:Version=${{ env.VERSION }} --no-restore
       - name: Publish
-        run: dotnet nuget push ./publish/UniEnc*.${{ env.VERSION }}.nupkg --api-key ${{steps.login.outputs.NUGET_API_KEY}} -s https://api.nuget.org/v3/index.json
+        run: dotnet nuget push ./src/UniEnc/bin/Release/UniEnc*.${{ env.VERSION }}.nupkg --api-key ${{steps.login.outputs.NUGET_API_KEY}} -s https://api.nuget.org/v3/index.json
