@@ -1,3 +1,9 @@
+## [1.4.2] - 2026/01/08
+
+### Fixed
+
+- Fixed duration of the produced video may be wrong on Android
+
 ## [1.4.1] - 2025/12/24
 
 ### Added
