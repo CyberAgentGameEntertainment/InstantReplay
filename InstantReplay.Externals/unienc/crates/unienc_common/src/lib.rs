@@ -133,8 +133,10 @@ impl VideoFrameBgra32 {
         let data = self.buffer.data();
         let w = padded_size.map_or(self.width, |(w, _)| w);
         let h = padded_size.map_or(self.height, |(_, h)| h);
+        let w_half = (w + 1) >> 1;
+        let h_half = (h + 1) >> 1;
         let padded_y_size = (w * h) as usize;
-        let padded_uv_size = (w * h / 4) as usize;
+        let padded_uv_size = (w_half * h_half) as usize;
 
         // Create padded YUV data arrays
         let mut y_data = vec![16u8; padded_y_size]; // Black level for Y
