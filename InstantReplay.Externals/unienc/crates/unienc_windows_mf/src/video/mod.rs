@@ -1,9 +1,7 @@
-use anyhow::Result;
+use crate::error::{WindowsError, Result};
 use bincode::{Decode, Encode};
 use tokio::sync::mpsc;
-use unienc_common::{
-    EncodedData, Encoder, EncoderInput, EncoderOutput, UniencSampleKind, UnsupportedBlitData, VideoEncoderOptions, VideoFrame, VideoSample
-};
+use unienc_common::{EncodedData, Encoder, EncoderInput, EncoderOutput, UniencSampleKind, UnsupportedBlitData, VideoEncoderOptions, VideoFrame, VideoSample};
 use windows::Win32::Media::MediaFoundation::*;
 
 use crate::common::*;
@@ -73,7 +71,7 @@ impl Encoder for MediaFoundationVideoEncoder {
     type InputType = VideoEncoderInputImpl;
     type OutputType = VideoEncoderOutputImpl;
 
-    fn get(self) -> Result<(Self::InputType, Self::OutputType)> {
+    fn get(self) -> unienc_common::Result<(Self::InputType, Self::OutputType)> {
         let media_type = Some(UnsafeSend(self.transform.output_type()?.clone()));
         Ok((
             VideoEncoderInputImpl {
@@ -101,24 +99,22 @@ pub struct VideoEncoderOutputImpl {
 impl EncoderInput for VideoEncoderInputImpl {
     type Data = VideoSample<UnsupportedBlitData>;
 
-    async fn push(&mut self, data: Self::Data) -> Result<()> {
+    async fn push(&mut self, data: Self::Data) -> unienc_common::Result<()> {
         let VideoFrame::Bgra32(frame) = data.frame else {
-            return Err(anyhow::anyhow!(
-                "MediaFoundationVideoEncoder only supports Bgra32 frames"
-            ));
+            return Err(WindowsError::UnsupportedVideoFrameFormat.into());
         };
-        let sample = UnsafeSend(unsafe { MFCreateSample()? });
+        let sample = UnsafeSend(unsafe { MFCreateSample().map_err(WindowsError::from)? });
 
         // BGRA to NV12
         {
             let (y, u, v) = frame.to_yuv420_planes(None)?;
             let length = (y.len() + u.len() + v.len()) as u32;
-            let buffer = unsafe { MFCreateMemoryBuffer(length)? };
+            let buffer = unsafe { MFCreateMemoryBuffer(length).map_err(WindowsError::from)? };
 
-            unsafe { sample.AddBuffer(&buffer)? };
+            unsafe { sample.AddBuffer(&buffer).map_err(WindowsError::from)? };
 
             let mut buffer_ptr: *mut u8 = std::ptr::null_mut();
-            unsafe { buffer.Lock(&mut buffer_ptr, None, None)? };
+            unsafe { buffer.Lock(&mut buffer_ptr, None, None).map_err(WindowsError::from)? };
 
             unsafe {
                 std::ptr::copy_nonoverlapping(y.as_ptr(), buffer_ptr, y.len());
@@ -131,21 +127,21 @@ impl EncoderInput for VideoEncoderInputImpl {
                 }
             }
 
-            unsafe { buffer.SetCurrentLength(length)? }
+            unsafe { buffer.SetCurrentLength(length).map_err(WindowsError::from)? }
 
-            unsafe { buffer.Unlock()? };
+            unsafe { buffer.Unlock().map_err(WindowsError::from)? };
         }
 
-        unsafe { sample.SetSampleTime((data.timestamp * 10_000_000_f64) as i64)? };
-        unsafe { sample.SetSampleDuration((1.0_f64 / self.fps_hint * 10_000_000_f64) as i64)? };
-        self.transform.push(sample).await
+        unsafe { sample.SetSampleTime((data.timestamp * 10_000_000_f64) as i64).map_err(WindowsError::from)? };
+        unsafe { sample.SetSampleDuration((1.0_f64 / self.fps_hint * 10_000_000_f64) as i64).map_err(WindowsError::from)? };
+        Ok(self.transform.push(sample).await?)
     }
 }
 
 impl EncoderOutput for VideoEncoderOutputImpl {
     type Data = VideoEncodedData;
 
-    async fn pull(&mut self) -> Result<Option<Self::Data>> {
+    async fn pull(&mut self) -> unienc_common::Result<Option<Self::Data>> {
         if let Some(media_type) = self.media_type.take() {
             return Ok(Some(VideoEncodedData {
                 payload: Payload::Format(media_type),

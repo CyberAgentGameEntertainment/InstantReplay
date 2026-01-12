@@ -6,7 +6,6 @@ pub mod types;
 mod utils;
 mod format;
 
-use anyhow::{anyhow, Context, Result};
 use ash::vk;
 use std::fmt::Debug;
 use std::future::Future;
@@ -16,6 +15,7 @@ use std::{
     os::raw::c_void,
     sync::{Mutex, OnceLock},
 };
+use crate::error::{AndroidError, Result, ResultExt};
 use unity_native_plugin::graphics::{GfxDeviceEventType, UnityGraphics};
 use unity_native_plugin::profiler::{
     BuiltinProfilerCategory, ProfilerCategoryId, ProfilerMarkerDesc, ProfilerMarkerEventType,
@@ -128,7 +128,7 @@ pub(crate) fn unity_plugin_load(interfaces: &unity_native_plugin::interface::Uni
 
     GRAPHICS
         .set(Mutex::new(graphics))
-        .map_err(|_e| anyhow!("Failed to set graphics"))
+        .map_err(|_| AndroidError::GlobalStateSetFailed)
         .unwrap();
 
     graphics.register_device_event_callback(Some(on_device_event));
@@ -203,7 +203,7 @@ extern "system" fn on_device_event(ev_type: GfxDeviceEventType) {
                     render_pass: Arc::new(render_pass),
                     fence_pool: Arc::new(FencePool::new(device)),
                 }))
-                .map_err(|_e| anyhow!("Failed to set metal"))
+                .map_err(|_| AndroidError::GlobalStateSetFailed)
                 .unwrap();
         }
         GfxDeviceEventType::Shutdown => {}
@@ -220,12 +220,12 @@ pub fn blit_to_hardware_buffer(
     flip_vertically: bool,
     is_gamma_workflow: bool,
     frame: &hardware_buffer_surface::HardwareBufferFrame,
-) -> Result<impl Future<Output = Result<()>>> {
+) -> Result<impl Future<Output = Result<()>> + use<>> {
     let cx = crate::vulkan::CONTEXT
         .get()
-        .context("Failed to get context")?
+        .ok_or(AndroidError::ContextNotInitialized)?
         .lock()
-        .map_err(|_| anyhow!("Failed to get context"))?;
+        .map_err(|_| AndroidError::MutexPoisoned)?;
 
     preprocess::blit_to_hardware_buffer(&cx, src, src_width, src_height, src_graphics_format, flip_vertically, is_gamma_workflow, frame)
 }

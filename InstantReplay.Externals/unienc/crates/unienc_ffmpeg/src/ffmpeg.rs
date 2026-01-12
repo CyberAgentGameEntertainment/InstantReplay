@@ -5,39 +5,41 @@ use std::{
     sync::LazyLock,
 };
 
-use anyhow::{Context, Result};
 use tokio::{
     io::AsyncWrite,
     process::{Child, ChildStdin, ChildStdout, Command},
 };
 
+use crate::error::{FFmpegError, Result};
+
 pub static FFMPEG_PATH: LazyLock<OsString> = LazyLock::new(|| {
-    let res = std::process::Command::new("which")
+    let res: Result<OsString> = std::process::Command::new("which")
         .arg("ffmpeg")
         .output()
-        .context("Failed to find ffmpeg")
+        .map_err(|_| FFmpegError::FFmpegNotFound)
         .and_then(|o| {
             if o.status.success() {
                 Ok(String::from_utf8_lossy(&o.stdout).trim().into())
             } else {
-                Err(anyhow::anyhow!("Failed to find ffmpeg"))
+                Err(FFmpegError::FFmpegNotFound)
             }
-        })
-        .unwrap_or_else(|_| {
-            std::process::Command::new("/bin/bash")
-                .arg("-cl")
-                .arg("which ffmpeg")
-                .output()
-                .context("Failed to find ffmpeg")
-                .and_then(|o| {
-                    if o.status.success() {
-                        Ok(String::from_utf8_lossy(&o.stdout).trim().into())
-                    } else {
-                        Err(anyhow::anyhow!("Failed to find ffmpeg"))
-                    }
-                })
-                .unwrap_or(OsString::from("ffmpeg"))
         });
+
+    let res = res.unwrap_or_else(|_| {
+        let fallback: Result<OsString> = std::process::Command::new("/bin/bash")
+            .arg("-cl")
+            .arg("which ffmpeg")
+            .output()
+            .map_err(|_| FFmpegError::FFmpegNotFound)
+            .and_then(|o| {
+                if o.status.success() {
+                    Ok(String::from_utf8_lossy(&o.stdout).trim().into())
+                } else {
+                    Err(FFmpegError::FFmpegNotFound)
+                }
+            });
+        fallback.unwrap_or(OsString::from("ffmpeg"))
+    });
 
     println!("using FFmpeg at: {}", res.to_str().unwrap());
 
@@ -142,7 +144,7 @@ impl Builder {
                 // dup will remove O_CLOEXEC
                 let rx_dup = unsafe { libc::dup(rx.as_raw_fd()) };
                 if rx_dup < 0 {
-                    return Err(anyhow::anyhow!("Failed to dup pipe read end"));
+                    return Err(FFmpegError::PipeDupFailed);
                 }
 
                 // keep rx lifetime until fork
@@ -173,7 +175,7 @@ impl Builder {
         for input in inputs {
             inputs_result.push(match input {
                 Some(tx) => Input::Pipe(tx),
-                None => Input::Stdin(child.stdin.take().context("Failed to get stdin")?),
+                None => Input::Stdin(child.stdin.take().ok_or(FFmpegError::StdinNotAvailable)?),
             });
         }
 

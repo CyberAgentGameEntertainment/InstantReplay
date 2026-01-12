@@ -1,11 +1,11 @@
 use std::path::Path;
 
-use anyhow::{Context, Result};
 use tokio::io::AsyncWriteExt;
 use unienc_common::{CompletionHandle, Muxer, MuxerInput};
 
 use crate::{
     audio::AudioEncodedData,
+    error::{FFmpegError, Result},
     ffmpeg::{self, FFmpeg},
     video::VideoEncodedData,
 };
@@ -58,7 +58,7 @@ impl FFmpegMuxer {
                 ffmpeg::Destination::Path(output_path.as_ref().as_os_str().to_owned()),
             )?;
 
-        let mut inputs = ffmpeg.inputs.take().context("failed to get inputs")?;
+        let mut inputs = ffmpeg.inputs.take().ok_or(FFmpegError::InputsNotAvailable)?;
         let audio_input = inputs.remove(1);
         let video_input = inputs.remove(0);
 
@@ -77,7 +77,7 @@ impl Muxer for FFmpegMuxer {
 
     fn get_inputs(
         self,
-    ) -> anyhow::Result<(
+    ) -> unienc_common::Result<(
         Self::VideoInputType,
         Self::AudioInputType,
         Self::CompletionHandleType,
@@ -89,25 +89,25 @@ impl Muxer for FFmpegMuxer {
 impl MuxerInput for FFmpegMuxerVideoInput {
     type Data = VideoEncodedData;
 
-    async fn push(&mut self, data: Self::Data) -> anyhow::Result<()> {
-        let input = self.input.as_mut().context(anyhow::anyhow!("Input is None"))?;
+    async fn push(&mut self, data: Self::Data) -> unienc_common::Result<()> {
+        let input = self.input.as_mut().ok_or(FFmpegError::InputNotAvailable)?;
         match data {
             VideoEncodedData::ParameterSet(payload) => {
-                input.write_all(&payload).await?;
+                input.write_all(&payload).await.map_err(FFmpegError::from)?;
             }
             VideoEncodedData::Slice { payload, .. } => {
-                input.write_all(&payload).await?;
+                input.write_all(&payload).await.map_err(FFmpegError::from)?;
             }
         }
 
-        input.flush().await?;
+        input.flush().await.map_err(FFmpegError::from)?;
 
         Ok(())
     }
 
-    async fn finish(mut self) -> Result<()> {
+    async fn finish(mut self) -> unienc_common::Result<()> {
         // take input to drop it to ensure stdin / pipe is closed
-        self.input.take().context("Failed to take input")?.shutdown().await?;
+        self.input.take().ok_or(FFmpegError::InputNotAvailable)?.shutdown().await.map_err(FFmpegError::from)?;
         Ok(())
     }
 }
@@ -115,31 +115,31 @@ impl MuxerInput for FFmpegMuxerVideoInput {
 impl MuxerInput for FFmpegMuxerAudioInput {
     type Data = AudioEncodedData;
 
-    async fn push(&mut self, data: Self::Data) -> Result<()> {
-        let input = self.input.as_mut().context("Input is None")?;
-        input.write_all(&data.header).await?;
-        input.write_all(&data.payload).await?;
+    async fn push(&mut self, data: Self::Data) -> unienc_common::Result<()> {
+        let input = self.input.as_mut().ok_or(FFmpegError::InputNotAvailable)?;
+        input.write_all(&data.header).await.map_err(FFmpegError::from)?;
+        input.write_all(&data.payload).await.map_err(FFmpegError::from)?;
 
-        input.flush().await?;
+        input.flush().await.map_err(FFmpegError::from)?;
 
         Ok(())
     }
 
-    async fn finish(mut self) -> Result<()> {
+    async fn finish(mut self) -> unienc_common::Result<()> {
         // take input to drop it to ensure stdin / pipe is closed
-        self.input.take().context("Failed to take input")?.shutdown().await?;
+        self.input.take().ok_or(FFmpegError::InputNotAvailable)?.shutdown().await.map_err(FFmpegError::from)?;
         Ok(())
     }
 }
 
 impl CompletionHandle for FFmpegCompletionHandle {
-    async fn finish(self) -> Result<()> {
+    async fn finish(self) -> unienc_common::Result<()> {
         let result = self.child.wait().await?;
         println!("FFmpeg exited: {}", result);
         if result.success() {
             Ok(())
         } else {
-            Err(anyhow::anyhow!("FFmpeg process failed"))
+            Err(FFmpegError::ProcessFailed.into())
         }
     }
 }

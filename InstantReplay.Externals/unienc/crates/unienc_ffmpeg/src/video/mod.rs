@@ -4,7 +4,6 @@ use std::{
     vec,
 };
 
-use anyhow::{Context, Result};
 use bincode::{Decode, Encode};
 use cros_codecs::codec::h264::parser::NaluType;
 use tokio::{
@@ -16,6 +15,7 @@ use unienc_common::{
 };
 
 use crate::{
+    error::{FFmpegError, Result},
     ffmpeg,
     utils::Cfr,
     video::nalu::{NalUnit, NaluReader},
@@ -111,7 +111,7 @@ static FFMPEG_CODEC: LazyLock<String> = LazyLock::new(|| {
             }
         });
 
-        let encoder = encoder.context("No suitable H.264 encoder found")?;
+        let encoder = encoder.ok_or(FFmpegError::NoSuitableEncoder)?;
 
         println!("Using H.264 encoder: {}", encoder);
 
@@ -164,9 +164,9 @@ impl FFmpegVideoEncoder {
         let input = ffmpeg
             .inputs
             .take()
-            .context("failed to get input")?
+            .ok_or(FFmpegError::InputNotAvailable)?
             .remove(0);
-        let output = ffmpeg.stdout.take().context("failed to get output")?;
+        let output = ffmpeg.stdout.take().ok_or(FFmpegError::OutputNotAvailable)?;
 
         let (buffer_tx, buffer_rx) = std::sync::mpsc::channel();
 
@@ -199,7 +199,7 @@ impl Encoder for FFmpegVideoEncoder {
     type InputType = FFmpegVideoEncoderInput;
     type OutputType = FFmpegVideoEncoderOutput;
 
-    fn get(self) -> Result<(Self::InputType, Self::OutputType)> {
+    fn get(self) -> unienc_common::Result<(Self::InputType, Self::OutputType)> {
         Ok((self.input, self.output))
     }
 }
@@ -207,11 +207,9 @@ impl Encoder for FFmpegVideoEncoder {
 impl EncoderInput for FFmpegVideoEncoderInput {
     type Data = VideoSample<UnsupportedBlitData>;
 
-    async fn push(&mut self, data: Self::Data) -> Result<()> {
+    async fn push(&mut self, data: Self::Data) -> unienc_common::Result<()> {
         let VideoFrame::Bgra32(frame) = data.frame else {
-            return Err(anyhow::anyhow!(
-                "FFmpegVideoEncoderInput only supports Bgra32 frames"
-            ));
+            return Err(FFmpegError::UnsupportedFrameFormat.into());
         };
 
         let timestamp = data.timestamp;
@@ -248,11 +246,11 @@ impl EncoderInput for FFmpegVideoEncoderInput {
         };
 
         for _i in 0..count {
-            self.input.write_all(frame.buffer.data()).await?;
+            self.input.write_all(frame.buffer.data()).await.map_err(FFmpegError::from)?;
         }
         drop(frame);
 
-        self.input.flush().await?;
+        self.input.flush().await.map_err(FFmpegError::from)?;
 
         Ok(())
     }
@@ -261,7 +259,7 @@ impl EncoderInput for FFmpegVideoEncoderInput {
 impl EncoderOutput for FFmpegVideoEncoderOutput {
     type Data = VideoEncodedData;
 
-    async fn pull(&mut self) -> Result<Option<Self::Data>> {
+    async fn pull(&mut self) -> unienc_common::Result<Option<Self::Data>> {
         loop {
             match self.buffer_rx.try_recv() {
                 Ok(data) => {
@@ -279,7 +277,7 @@ impl EncoderOutput for FFmpegVideoEncoderOutput {
             // H.264 byte stream is sequence of NAL units and each frame is a NAL unit
             let mut buf = vec![0; 65536];
 
-            let read = self.output.read(&mut buf).await?;
+            let read = self.output.read(&mut buf).await.map_err(FFmpegError::from)?;
 
             fn create_emit<'a>(state: &'a mut ReaderState, cfr: u32) -> impl FnMut(&NalUnit) + 'a {
                 move |nalu: &NalUnit| {

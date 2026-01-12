@@ -1,29 +1,19 @@
 [package]
 name = "unienc"
-version = "0.1.0"
+version.workspace = true
 edition.workspace = true
 license.workspace = true
 authors.workspace = true
 
-[lib]
-crate-type = ["cdylib", "staticlib", "rlib"]
-
 [dependencies]
-anyhow = { workspace = true, features = ["backtrace", "std"] }
 bincode = { version = "2.0.1", features = ["serde"] }
-futures = "0.3.31"
-rand = "0.9.1"
-tokio = { version = "1.45.1", features = ["rt", "macros", "rt-multi-thread"] }
 unienc_common = { workspace = true }
-unity-native-plugin = "0.8.0"
 
 [target.'cfg(all(target_family = "unix", not(target_vendor = "apple"), not(target_os = "android")))'.dependencies]
 unienc_ffmpeg = { workspace = true }
 
 [target.'cfg(target_os = "android")'.dependencies]
 unienc_android_mc = { workspace = true }
-libc = "0.2.174"
-ndk-sys = "0.6.0"
 
 [target.'cfg(windows)'.dependencies]
 unienc_windows_mf = { workspace = true }
@@ -31,5 +21,10 @@ unienc_windows_mf = { workspace = true }
 [target.'cfg(target_vendor = "apple")'.dependencies]
 unienc_apple_vt = { workspace = true }
 
-[build-dependencies]
-csbindgen = "1.9.3"
+[dev-dependencies]
+tokio = "1.48.0"
+rand = "0.9.1"
+
+[features]
+default = []
+unity = ["unienc_common/unity"]

@@ -1,17 +1,18 @@
+use crate::error::{AndroidError, Result};
 use crate::vulkan::types::{VulkanFenceHandle, VulkanShaderModuleHandle};
-use anyhow::anyhow;
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 
 pub fn create_shader_module(
     device: &Arc<ash::Device>,
     code: &'static [u8],
-) -> anyhow::Result<VulkanShaderModuleHandle> {
+) -> Result<VulkanShaderModuleHandle> {
     let mut info = ash::vk::ShaderModuleCreateInfo::default();
     info.code_size = code.len();
     info.p_code = code.as_ptr() as *const u32;
     Ok(VulkanShaderModuleHandle::new(
-        unsafe { device.create_shader_module(&info, None) }?,
+        unsafe { device.create_shader_module(&info, None) }
+            .map_err(AndroidError::Vulkan)?,
         device.clone(),
     ))
 }
@@ -50,8 +51,8 @@ impl FencePool {
 }
 
 impl FencePool {
-    pub fn pop(self: &Arc<Self>) -> anyhow::Result<FenceGuard> {
-        let mut pool = self.pool.lock().map_err(|e| anyhow!(e.to_string()))?;
+    pub fn pop(self: &Arc<Self>) -> Result<FenceGuard> {
+        let mut pool = self.pool.lock().map_err(|_| AndroidError::MutexPoisoned)?;
         if let Some(fence) = pool.pop_front() {
             Ok(FenceGuard {
                 fence: Some(fence),
@@ -62,7 +63,8 @@ impl FencePool {
             let fence_info = ash::vk::FenceCreateInfo::default();
             Ok(FenceGuard {
                 fence: VulkanFenceHandle::new(
-                    unsafe { self.device.create_fence(&fence_info, None) }?,
+                    unsafe { self.device.create_fence(&fence_info, None) }
+                        .map_err(AndroidError::Vulkan)?,
                     self.device.clone(),
                 )
                 .into(),
@@ -71,9 +73,9 @@ impl FencePool {
         }
     }
 
-    pub fn push(&self, fence: VulkanFenceHandle) -> anyhow::Result<()> {
-        let mut pool = self.pool.lock().map_err(|e| anyhow!(e.to_string()))?;
-        unsafe { self.device.reset_fences(&[*fence])? };
+    pub fn push(&self, fence: VulkanFenceHandle) -> Result<()> {
+        let mut pool = self.pool.lock().map_err(|_| AndroidError::MutexPoisoned)?;
+        unsafe { self.device.reset_fences(&[*fence]).map_err(AndroidError::Vulkan)? };
         pool.push_back(fence);
         Ok(())
     }

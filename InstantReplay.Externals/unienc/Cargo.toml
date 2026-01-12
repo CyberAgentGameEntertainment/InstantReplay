@@ -1,25 +1,34 @@
 [workspace]
 members = [ "./crates/*", "./external/unity-native-plugin-rs/Cargo.toml"]
+default-members = ["./crates/unienc_c"]
 resolver = "2"
 
 [workspace.dependencies]
 objc2 = { version = "0.6.1", features = ["catch-all"] }
 bincode = { version = "2.0.1", features = ["derive"] }
-anyhow = { version = "1.0.98", features = ["backtrace", "std"] }
+thiserror = "2.0"
 unienc_common = { path = "./crates/unienc_common" }
+unienc = { path = "./crates/unienc" }
 unienc_android_mc = { path = "./crates/unienc_android_mc" }
 unienc_windows_mf = { path = "./crates/unienc_windows_mf" }
 unienc_apple_vt = { path = "./crates/unienc_apple_vt" }
-unienc_ffmpeg = { path = "./crates/unienc_ffmpeg" }
+unienc_ffmpeg = {  path = "./crates/unienc_ffmpeg" }
+unity-native-plugin = { path = "./external/unity-native-plugin-rs/unity-native-plugin" }
+unity-native-plugin-vulkan = { path = "./external/unity-native-plugin-rs/unity-native-plugin-vulkan" }
 
 [patch.crates-io]
 unity-native-plugin = { path = "./external/unity-native-plugin-rs/unity-native-plugin" }
 unity-native-plugin-vulkan = { path = "./external/unity-native-plugin-rs/unity-native-plugin-vulkan" }
 
 [workspace.package]
-edition = "2021"
+edition = "2024"
 license = "MIT"
 authors = [ "CyberAgent" ]
+version = "1.4.1"
 
 [profile.release]
-panic = "abort" # It helps making crash stacktraces readable
+panic = "abort" # It helps to make crash stacktraces readable
+
+[profile.release-unwind] # for platforms that support unwinding (e.g. wasm)
+inherits = "release"
+panic = "unwind"

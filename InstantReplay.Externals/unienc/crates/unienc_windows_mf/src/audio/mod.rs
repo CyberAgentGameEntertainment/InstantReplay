@@ -1,14 +1,12 @@
-use anyhow::Result;
+use crate::error::Result;
 use bincode::{Decode, Encode};
 use tokio::sync::mpsc;
-use unienc_common::{
-    AudioEncoderOptions, AudioSample, EncodedData, Encoder, EncoderInput, EncoderOutput,
-    UniencSampleKind,
-};
+use unienc_common::{AudioEncoderOptions, AudioSample, EncodedData, Encoder, EncoderInput, EncoderOutput, UniencSampleKind};
 use windows::Win32::Media::MediaFoundation::*;
 
 use crate::common::*;
 use crate::mft::Transform;
+use crate::WindowsError;
 
 pub struct MediaFoundationAudioEncoder {
     transform: Transform,
@@ -67,7 +65,7 @@ impl Encoder for MediaFoundationAudioEncoder {
     type InputType = AudioEncoderInputImpl;
     type OutputType = AudioEncoderOutputImpl;
 
-    fn get(self) -> Result<(Self::InputType, Self::OutputType)> {
+    fn get(self) -> unienc_common::Result<(Self::InputType, Self::OutputType)> {
         let media_type = Some(UnsafeSend(self.transform.output_type()?.clone()));
         Ok((
             AudioEncoderInputImpl {
@@ -97,18 +95,18 @@ pub struct AudioEncoderOutputImpl {
 impl EncoderInput for AudioEncoderInputImpl {
     type Data = AudioSample;
 
-    async fn push(&mut self, data: Self::Data) -> Result<()> {
-        let sample = UnsafeSend(unsafe { MFCreateSample()? });
+    async fn push(&mut self, data: Self::Data) -> unienc_common::Result<()> {
+        let sample = UnsafeSend(unsafe { MFCreateSample().map_err(WindowsError::from)? });
 
         // BGRA to NV12
         {
             let length = (data.data.len() * std::mem::size_of::<i16>()) as u32;
-            let buffer = unsafe { MFCreateMemoryBuffer(length)? };
+            let buffer = unsafe { MFCreateMemoryBuffer(length).map_err(WindowsError::from)? };
 
-            unsafe { sample.AddBuffer(&buffer)? };
+            unsafe { sample.AddBuffer(&buffer).map_err(WindowsError::from)? };
 
             let mut buffer_ptr: *mut u8 = std::ptr::null_mut();
-            unsafe { buffer.Lock(&mut buffer_ptr, None, None)? };
+            unsafe { buffer.Lock(&mut buffer_ptr, None, None).map_err(WindowsError::from)? };
 
             unsafe {
                 std::ptr::copy_nonoverlapping(
@@ -118,31 +116,31 @@ impl EncoderInput for AudioEncoderInputImpl {
                 );
             }
 
-            unsafe { buffer.SetCurrentLength(length)? }
+            unsafe { buffer.SetCurrentLength(length).map_err(WindowsError::from)? }
 
-            unsafe { buffer.Unlock()? };
+            unsafe { buffer.Unlock().map_err(WindowsError::from)? };
         }
 
         unsafe {
             sample.SetSampleTime(
                 (data.timestamp_in_samples as f64 / self.sample_rate as f64 * 10_000_000_f64)
                     as i64,
-            )?
+            ).map_err(WindowsError::from)?
         };
         unsafe {
             sample.SetSampleDuration(
                 ((data.data.len() / self.channels as usize) as f64 / self.sample_rate as f64
                     * 10_000_000_f64) as i64,
-            )?
+            ).map_err(WindowsError::from)?
         };
-        self.transform.push(sample).await
+        Ok(self.transform.push(sample).await?)
     }
 }
 
 impl EncoderOutput for AudioEncoderOutputImpl {
     type Data = AudioEncodedData;
 
-    async fn pull(&mut self) -> Result<Option<Self::Data>> {
+    async fn pull(&mut self) -> unienc_common::Result<Option<Self::Data>> {
         if let Some(media_type) = self.media_type.take() {
             return Ok(Some(AudioEncodedData {
                 payload: Payload::Format(media_type),

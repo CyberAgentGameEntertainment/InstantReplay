@@ -23,7 +23,7 @@ jobs:
     timeout-minutes: 30
     defaults:
       run:
-        working-directory: InstantReplay.Externals/unienc/crates/unienc
+        working-directory: InstantReplay.Externals/unienc/crates/unienc_c
     steps:
       - uses: actions/checkout@v4
         with:
@@ -31,12 +31,12 @@ jobs:
       - run: rustup default stable
       - run: rustup target add ${{ matrix.arch }}-pc-windows-msvc
       - run: cargo build --target ${{ matrix.arch }}-pc-windows-msvc --profile ${{ env._RUST_BUILD_CONFIG == 'debug' && 'dev' || env._RUST_BUILD_CONFIG }}
-      - run: Move-Item -Path unienc.dll -Destination libunienc.dll -Force
+      - run: Move-Item -Path unienc_c.dll -Destination libunienc_c.dll -Force
         working-directory: InstantReplay.Externals/unienc/target/${{ matrix.arch }}-pc-windows-msvc/${{ env._RUST_BUILD_CONFIG }}
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.arch }}-pc-windows
-          path: InstantReplay.Externals/unienc/target/${{ matrix.arch }}-pc-windows-msvc/${{ env._RUST_BUILD_CONFIG }}/libunienc.dll
+          path: InstantReplay.Externals/unienc/target/${{ matrix.arch }}-pc-windows-msvc/${{ env._RUST_BUILD_CONFIG }}/libunienc_c.dll
           retention-days: 1
   build-android:
     name: Build unienc (Android)
@@ -47,7 +47,7 @@ jobs:
     timeout-minutes: 30
     defaults:
       run:
-        working-directory: InstantReplay.Externals/unienc/crates/unienc
+        working-directory: InstantReplay.Externals/unienc/crates/unienc_c
     steps:
       - uses: actions/checkout@v4
         with:
@@ -57,11 +57,11 @@ jobs:
       - run: sudo apt update && sudo apt install gcc-multilib
       - run: echo "ANDROID_NDK_HOME=$(echo $ANDROID_NDK_LATEST_HOME)" >> $GITHUB_ENV
       - run: cargo install cargo-ndk
-      - run: cargo ndk -t ${{ matrix.triple }} --platform 26 build --profile ${{ env._RUST_BUILD_CONFIG == 'debug' && 'dev' || env._RUST_BUILD_CONFIG }}
+      - run: cargo ndk -t ${{ matrix.triple }} --platform 26 build --profile ${{ env._RUST_BUILD_CONFIG == 'debug' && 'dev' || env._RUST_BUILD_CONFIG }} -F unity
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.triple }}
-          path: InstantReplay.Externals/unienc/target/${{ matrix.triple }}/${{ env._RUST_BUILD_CONFIG }}/libunienc.so
+          path: InstantReplay.Externals/unienc/target/${{ matrix.triple }}/${{ env._RUST_BUILD_CONFIG }}/libunienc_c.so
           retention-days: 1
   build-macos:
     name: Build unienc (macOS)
@@ -72,18 +72,18 @@ jobs:
     timeout-minutes: 30
     defaults:
       run:
-        working-directory: InstantReplay.Externals/unienc/crates/unienc
+        working-directory: InstantReplay.Externals/unienc/crates/unienc_c
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: 'true'
       - run: rustup default stable
       - run: rustup target add ${{ matrix.arch }}-apple-darwin
-      - run: cargo build --target ${{ matrix.arch }}-apple-darwin --profile ${{ env._RUST_BUILD_CONFIG == 'debug' && 'dev' || env._RUST_BUILD_CONFIG }}
+      - run: cargo build --target ${{ matrix.arch }}-apple-darwin --profile ${{ env._RUST_BUILD_CONFIG == 'debug' && 'dev' || env._RUST_BUILD_CONFIG }} -F unity
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.arch }}-apple-darwin
-          path: InstantReplay.Externals/unienc/target/${{ matrix.arch }}-apple-darwin/${{ env._RUST_BUILD_CONFIG }}/libunienc.dylib
+          path: InstantReplay.Externals/unienc/target/${{ matrix.arch }}-apple-darwin/${{ env._RUST_BUILD_CONFIG }}/libunienc_c.dylib
           retention-days: 1
   build-ios:
     name: Build unienc (iOS)
@@ -94,18 +94,18 @@ jobs:
     timeout-minutes: 30
     defaults:
       run:
-        working-directory: InstantReplay.Externals/unienc/crates/unienc
+        working-directory: InstantReplay.Externals/unienc/crates/unienc_c
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: 'true'
       - run: rustup default stable
       - run: rustup target add ${{ matrix.arch }}-apple-ios
-      - run: cargo build --target ${{ matrix.arch }}-apple-ios --profile ${{ env._RUST_BUILD_CONFIG == 'debug' && 'dev' || env._RUST_BUILD_CONFIG }}
+      - run: cargo build --target ${{ matrix.arch }}-apple-ios --profile ${{ env._RUST_BUILD_CONFIG == 'debug' && 'dev' || env._RUST_BUILD_CONFIG }} -F unity
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.arch }}-apple-ios
-          path: InstantReplay.Externals/unienc/target/${{ matrix.arch }}-apple-ios/${{ env._RUST_BUILD_CONFIG }}/libunienc.a
+          path: InstantReplay.Externals/unienc/target/${{ matrix.arch }}-apple-ios/${{ env._RUST_BUILD_CONFIG }}/libunienc_c.a
           retention-days: 1
   build-linux:
     name: Build unienc (Linux)
@@ -116,7 +116,7 @@ jobs:
     timeout-minutes: 30
     defaults:
       run:
-        working-directory: InstantReplay.Externals/unienc/crates/unienc
+        working-directory: InstantReplay.Externals/unienc/crates/unienc_c
     steps:
       - uses: actions/checkout@v4
         with:
@@ -128,7 +128,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.arch }}-unknown-linux
-          path: InstantReplay.Externals/unienc/target/${{ matrix.arch }}-unknown-linux-gnu/${{ env._RUST_BUILD_CONFIG }}/libunienc.so
+          path: InstantReplay.Externals/unienc/target/${{ matrix.arch }}-unknown-linux-gnu/${{ env._RUST_BUILD_CONFIG }}/libunienc_c.so
           retention-days: 1
   update-unity-native:
     name: Push unienc native libraries
