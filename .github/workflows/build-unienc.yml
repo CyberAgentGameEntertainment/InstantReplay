@@ -85,6 +85,26 @@ jobs:
           name: ${{ matrix.arch }}-apple-darwin
           path: InstantReplay.Externals/unienc/target/${{ matrix.arch }}-apple-darwin/${{ env._RUST_BUILD_CONFIG }}/libunienc.dylib
           retention-days: 1
+  lipo-macos:
+    name: Create unienc macOS bundle
+    runs-on: macos-15
+    needs: [build-macos]
+    timeout-minutes: 30
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: ./artifacts
+          pattern: '*-apple-darwin'
+      - run: |
+          lipo -create -output unienc.bundle \
+          aarch64-apple-darwin/libunienc.dylib \
+          x86_64-apple-darwin/libunienc.dylib
+        working-directory: artifacts
+      - uses: actions/upload-artifact@v4
+        with:
+          name: apple-darwin
+          path: artifacts/unienc.bundle
+          retention-days: 1
   build-ios:
     name: Build unienc (iOS)
     runs-on: macos-15
@@ -132,7 +152,7 @@ jobs:
           retention-days: 1
   update-unity-native:
     name: Push unienc native libraries
-    needs: [build-windows, build-android, build-ios, build-macos, build-linux]
+    needs: [build-windows, build-android, build-ios, build-macos, build-linux, lipo-macos]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
