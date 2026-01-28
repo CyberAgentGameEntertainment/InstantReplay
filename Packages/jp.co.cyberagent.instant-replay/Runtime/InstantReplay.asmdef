@@ -18,7 +18,7 @@
     ],
     "autoReferenced": true,
     "defineConstraints": [
-        "!DISABLE_INSTANTREPLAY"
+        "!EXCLUDE_INSTANTREPLAY"
     ],
     "versionDefines": [],
     "noEngineReferences": false

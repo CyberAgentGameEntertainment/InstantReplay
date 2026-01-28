@@ -11,7 +11,7 @@
     "precompiledReferences": [],
     "autoReferenced": true,
     "defineConstraints": [
-        "DISABLE_INSTANT_REPLAY"
+        "EXCLUDE_INSTANTREPLAY"
     ],
     "versionDefines": [],
     "noEngineReferences": false
