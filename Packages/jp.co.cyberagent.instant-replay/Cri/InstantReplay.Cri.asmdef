@@ -12,6 +12,7 @@
     "precompiledReferences": [],
     "autoReferenced": true,
     "defineConstraints": [
+        "!DISABLE_INSTANTREPLAY",
         "INSTANTREPLAY_CRI"
     ],
     "versionDefines": [],

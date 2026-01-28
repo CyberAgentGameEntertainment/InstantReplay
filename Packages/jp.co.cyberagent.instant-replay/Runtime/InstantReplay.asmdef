@@ -17,7 +17,9 @@
         "System.Runtime.CompilerServices.Unsafe.dll"
     ],
     "autoReferenced": true,
-    "defineConstraints": [],
+    "defineConstraints": [
+        "!DISABLE_INSTANTREPLAY"
+    ],
     "versionDefines": [],
     "noEngineReferences": false
 }
