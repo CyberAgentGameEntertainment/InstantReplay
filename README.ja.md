@@ -302,7 +302,8 @@ new InstantReplaySession(numFrames: 900, fixedFrameRate: 30);
 `InstantReplaySession` も `RealtimeInstantReplaySession` と同様に、`IFrameProvider` や `IAudioSampleProvider` を使用して映像・音声ソースをカスタマイズできます。
 
 ## リリースビルドから除外する
-リリースビルドでは、スクリプトファイル、プラグインファイルを除外する必要があります。
+
+バグ収集の一部として **InstantReplay** を使用している場合は、リリース ビルドでスクリプト ファイルとプラグイン ファイルを除外する必要があります。
 
 **Scripting Define Symbols** に **EXCLUDE_INSTANTREPLAY** を 加えると **InstantReplay** に関連する全てのコードがコンパイル対象から除外されます。  
 したがって、**InstantReplay** にアクセスするコードをすべて`#if !EXCLUDE_INSTANTREPLAY` と `#endif`で囲っておけば、リリース時に関連するスクリプトを全て除外できます。  
