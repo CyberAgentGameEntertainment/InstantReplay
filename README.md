@@ -302,3 +302,10 @@ By default, it records at the actual screen size, but you can also specify `maxW
 ### Video and Audio Sources
 
 `InstantReplaySession` also supports custom video and audio sources in the same way as `RealtimeInstantReplaySession`.
+
+## Exclude from the release builds
+
+If you are using **InstantReplay** as part of your bug collection, you should exclude script and plugin files in your release builds.
+
+You can exclude all scripts of the **InstantReplay** by adding **EXCLUDE_INSTANTREPLAY** to the **Scripting Define Symbols** in the **Player Settings**.
+Thus, if you enclose all your own code that accesses the **InstantReplay** with `#if !EXCLUDE_INSTANTREPLAY`, you can exclude all the code from the release builds.

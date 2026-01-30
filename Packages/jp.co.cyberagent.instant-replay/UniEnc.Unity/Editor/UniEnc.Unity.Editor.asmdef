@@ -1,17 +1,17 @@
 {
-    "name": "UniEnc.Unity",
+    "name": "UniEnc.Unity.Editor",
     "rootNamespace": "",
-    "references": [
-        "GUID:cbc5f87df9298458d9b3f2ed13ca9ba4"
+    "references": [],
+    "includePlatforms": [
+        "Editor"
     ],
-    "includePlatforms": [],
     "excludePlatforms": [],
-    "allowUnsafeCode": true,
+    "allowUnsafeCode": false,
     "overrideReferences": false,
     "precompiledReferences": [],
     "autoReferenced": true,
     "defineConstraints": [
-        "!EXCLUDE_INSTANTREPLAY"
+        "EXCLUDE_INSTANTREPLAY"
     ],
     "versionDefines": [],
     "noEngineReferences": false
