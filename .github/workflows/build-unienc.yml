@@ -96,14 +96,14 @@ jobs:
           path: ./artifacts
           pattern: '*-apple-darwin'
       - run: |
-          lipo -create -output unienc.bundle \
+          lipo -create -output libunienc.bundle \
           aarch64-apple-darwin/libunienc.dylib \
           x86_64-apple-darwin/libunienc.dylib
         working-directory: artifacts
       - uses: actions/upload-artifact@v4
         with:
           name: apple-darwin
-          path: artifacts/unienc.bundle
+          path: artifacts/libunienc.bundle
           retention-days: 1
   build-ios:
     name: Build unienc (iOS)
