@@ -9,7 +9,7 @@ namespace UniEnc.Unity.Editor
     {
         private const string StripShaderName = "Hidden/InstantReplay/Rechannel";
         
-        public int callbackOrder { get; }
+        public int callbackOrder => 0;
 
         public void OnProcessShader(Shader shader, ShaderSnippetData snippet, IList<ShaderCompilerData> data)
         {
