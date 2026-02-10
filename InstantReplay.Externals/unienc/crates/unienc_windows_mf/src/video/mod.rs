@@ -165,10 +165,13 @@ pub struct VideoEncodedData {
 impl EncodedData for VideoEncodedData {
     fn timestamp(&self) -> f64 {
         match &self.payload {
-            Payload::Sample(sample) => {
-                (unsafe { sample.GetSampleTime().unwrap() } as f64) / 10_000_000_f64
-            }
-            Payload::Format(_media_type) => 0f64,
+            Payload::Sample(sample) => unsafe {
+                sample
+                    .GetSampleTime()
+                    .map(|t| t as f64 / 10_000_000_f64)
+                    .unwrap_or(0.0)
+            },
+            Payload::Format(_) => 0.0,
         }
     }
 
@@ -194,13 +197,20 @@ impl EncodedData for VideoEncodedData {
     fn kind(&self) -> UniencSampleKind {
         match &self.payload {
             Payload::Sample(sample) => {
-                if unsafe { sample.GetUINT32(&MFSampleExtension_CleanPoint).unwrap() } != 0 {
+                let is_key = unsafe {
+                    sample
+                        .GetUINT32(&MFSampleExtension_CleanPoint)
+                        .map(|v| v != 0)
+                        .unwrap_or(false)
+                };
+
+                if is_key {
                     UniencSampleKind::Key
                 } else {
                     UniencSampleKind::Interpolated
                 }
             }
-            Payload::Format(_media_type) => UniencSampleKind::Metadata,
+            Payload::Format(_) => UniencSampleKind::Metadata,
         }
     }
 }
