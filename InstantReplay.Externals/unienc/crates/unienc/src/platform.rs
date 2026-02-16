@@ -1,6 +1,6 @@
 
 #[cfg(target_vendor = "apple")]
-pub type PlatformEncodingSystem<V, A, R> = unienc_apple_vt::VideoToolboxEncodingSystem<V, A>;
+pub type PlatformEncodingSystem<V, A, R> = unienc_apple_vt::VideoToolboxEncodingSystem<V, A, R>;
 
 #[cfg(target_os = "android")]
 pub type PlatformEncodingSystem<V, A, R> = unienc_android_mc::MediaCodecEncodingSystem<V, A>;

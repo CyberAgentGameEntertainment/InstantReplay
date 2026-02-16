@@ -24,13 +24,15 @@ pub use error::{AppleError, OsStatusExt, Result};
 pub struct VideoToolboxEncodingSystem<
     V: unienc_common::VideoEncoderOptions,
     A: unienc_common::AudioEncoderOptions,
+    R: unienc_common::Runtime + 'static,
 > {
     video_options: V,
     audio_options: A,
+    runtime: R,
 }
 
-impl<V: unienc_common::VideoEncoderOptions, A: unienc_common::AudioEncoderOptions> EncodingSystem
-    for VideoToolboxEncodingSystem<V, A>
+impl<V: unienc_common::VideoEncoderOptions, A: unienc_common::AudioEncoderOptions, R: unienc_common::Runtime + 'static> EncodingSystem
+    for VideoToolboxEncodingSystem<V, A, R>
 {
     type VideoEncoderOptionsType = V;
     type AudioEncoderOptionsType = A;
@@ -42,11 +44,13 @@ impl<V: unienc_common::VideoEncoderOptions, A: unienc_common::AudioEncoderOption
     type MuxerType = mux::AVFMuxer;
 
     type BlitSourceType = MetalTexture;
+    type RuntimeType = R;
 
-    fn new(video_options: &V, audio_options: &A) -> Self {
+    fn new(video_options: &V, audio_options: &A, runtime: R) -> Self {
         Self {
             video_options: *video_options,
             audio_options: *audio_options,
+            runtime,
         }
     }
 
@@ -67,7 +71,7 @@ impl<V: unienc_common::VideoEncoderOptions, A: unienc_common::AudioEncoderOption
     }
 }
 
-impl<V: unienc_common::VideoEncoderOptions, A: unienc_common::AudioEncoderOptions> unienc_common::unity::UnityPlugin for VideoToolboxEncodingSystem<V, A> {
+impl<V: unienc_common::VideoEncoderOptions, A: unienc_common::AudioEncoderOptions, R: unienc_common::Runtime + 'static> unienc_common::unity::UnityPlugin for VideoToolboxEncodingSystem<V, A, R> {
     fn unity_plugin_load(interfaces: &unity_native_plugin::interface::UnityInterfaces) {
         metal::unity_plugin_load(interfaces);
     }

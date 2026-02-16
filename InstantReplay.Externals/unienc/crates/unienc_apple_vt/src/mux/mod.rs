@@ -213,10 +213,11 @@ impl AVFMuxer {
         }
 
         if !unsafe { writer.startWriting() } {
-            if unsafe { writer.status() } == AVAssetWriterStatus::Failed
-                && let Some(err) = unsafe { writer.error() } {
+            if unsafe { writer.status() } == AVAssetWriterStatus::Failed {
+                if let Some(err) = unsafe { writer.error() } {
                     return Err(AppleError::AssetWriterStartFailed(err.to_string()));
                 }
+            }
             return Err(AppleError::AssetWriterStartFailedUnknown);
         }
 
