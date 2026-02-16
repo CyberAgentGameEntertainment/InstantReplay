@@ -22,6 +22,17 @@ pub struct Runtime {
     executor: Arc<Executor>,
 }
 
+#[derive(Clone)]
+pub struct WeakRuntime {
+    executor: Weak<Executor>,
+}
+
+impl WeakRuntime {
+    pub fn upgrade(&self) -> Option<Runtime> {
+        self.executor.upgrade().map(|executor| Runtime { executor })
+    }
+}
+
 #[cfg(feature = "multi-thread")]
 type Executor = futures::executor::ThreadPool;
 #[cfg(not(feature = "multi-thread"))]
@@ -119,6 +130,12 @@ impl Runtime {
                     break;
                 }
             }
+        }
+    }
+
+    pub fn weak(&self) -> WeakRuntime {
+        WeakRuntime {
+            executor: Arc::downgrade(&self.executor),
         }
     }
 }
