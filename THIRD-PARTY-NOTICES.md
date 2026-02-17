@@ -2,7 +2,7 @@
 
 ## Overview
 
-- Apache License 2.0 (140)
+- Apache License 2.0 (152)
 - MIT License (36)
 - BSD 3-Clause &quot;New&quot; or &quot;Revised&quot; License (1)
 - ISC License (1)
@@ -1969,11 +1969,21 @@ limitations under the License.
 
 ### Apache License 2.0
 
+- [async-channel 2.5.0](https://github.com/smol-rs/async-channel)
+- [async-task 4.7.1](https://github.com/smol-rs/async-task)
+- [atomic-waker 1.1.2](https://github.com/smol-rs/atomic-waker)
 - [bitflags 2.9.1](https://github.com/bitflags/bitflags)
+- [blocking 1.6.2](https://github.com/smol-rs/blocking)
 - [bumpalo 3.19.1](https://github.com/fitzgen/bumpalo)
 - [cc 1.2.50](https://github.com/rust-lang/cc-rs)
 - [cfg-if 1.0.0](https://github.com/alexcrichton/cfg-if)
+- [concurrent-queue 2.5.0](https://github.com/smol-rs/concurrent-queue)
+- [crossbeam-utils 0.8.21](https://github.com/crossbeam-rs/crossbeam)
+- [event-listener-strategy 0.5.4](https://github.com/smol-rs/event-listener-strategy)
+- [event-listener 5.4.1](https://github.com/smol-rs/event-listener)
+- [fastrand 2.3.0](https://github.com/smol-rs/fastrand)
 - [find-msvc-tools 0.1.5](https://github.com/rust-lang/cc-rs)
+- [futures-lite 2.6.1](https://github.com/smol-rs/futures-lite)
 - [heck 0.5.0](https://github.com/withoutboats/heck)
 - [hermit-abi 0.5.2](https://github.com/hermit-os/hermit-rs)
 - [jni 0.21.1](https://github.com/jni-rs/jni-rs)
@@ -1981,6 +1991,8 @@ limitations under the License.
 - [log 0.4.27](https://github.com/rust-lang/log)
 - [num_cpus 1.17.0](https://github.com/seanmonstar/num_cpus)
 - [once_cell 1.21.3](https://github.com/matklad/once_cell)
+- [parking 2.2.1](https://github.com/smol-rs/parking)
+- [piper 0.2.4](https://github.com/smol-rs/piper)
 - [regex-automata 0.4.9](https://github.com/rust-lang/regex/tree/master/regex-automata)
 - [regex-syntax 0.8.5](https://github.com/rust-lang/regex/tree/master/regex-syntax)
 - [regex 1.11.1](https://github.com/rust-lang/regex)
