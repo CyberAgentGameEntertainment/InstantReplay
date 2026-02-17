@@ -97,10 +97,11 @@ impl EncoderOutput for FFmpegAudioEncoderOutput {
     async fn pull(&mut self) -> unienc_common::Result<Option<Self::Data>> {
         // read ADTS header
         let mut header = vec![0u8; 7];
-        if let Err(err) = self.output.read_exact(&mut header).await
-            && err.kind() == std::io::ErrorKind::UnexpectedEof {
+        if let Err(err) = self.output.read_exact(&mut header).await {
+            if err.kind() == std::io::ErrorKind::UnexpectedEof {
                 return Ok(None);
             }
+        }
 
         // get frame length
         let mut length = ((header[3]& 0b11) as u16) << 11;

@@ -17,13 +17,15 @@ use video::FFmpegVideoEncoder;
 pub struct FFmpegEncodingSystem<
     V: unienc_common::VideoEncoderOptions,
     A: unienc_common::AudioEncoderOptions,
+    R: unienc_common::Runtime,
 > {
     video_options: V,
     audio_options: A,
+    _runtime: std::marker::PhantomData<R>,
 }
 
-impl<V: unienc_common::VideoEncoderOptions, A: unienc_common::AudioEncoderOptions> EncodingSystem
-    for FFmpegEncodingSystem<V, A>
+impl<V: unienc_common::VideoEncoderOptions, A: unienc_common::AudioEncoderOptions, R: unienc_common::Runtime> EncodingSystem
+    for FFmpegEncodingSystem<V, A, R>
 {
     type VideoEncoderOptionsType = V;
     type AudioEncoderOptionsType = A;
@@ -31,11 +33,13 @@ impl<V: unienc_common::VideoEncoderOptions, A: unienc_common::AudioEncoderOption
     type AudioEncoderType = FFmpegAudioEncoder;
     type MuxerType = FFmpegMuxer;
     type BlitSourceType = UnsupportedBlitData;
+    type RuntimeType = R;
 
-    fn new(video_options: &V, audio_options: &A) -> Self {
+    fn new(video_options: &V, audio_options: &A, runtime: R) -> Self {
         Self {
             video_options: *video_options,
             audio_options: *audio_options,
+            _runtime: std::marker::PhantomData,
         }
     }
 
