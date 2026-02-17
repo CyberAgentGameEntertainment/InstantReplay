@@ -174,6 +174,10 @@ jobs:
           mv ./llvm/git/build_${{ matrix.emscripten }}_64 ./llvm/git/build_main_64
         if: steps.cache-llvm.outputs.cache-hit != 'true'
         working-directory: InstantReplay.Externals/unienc/emsdk
+      - name: LLVM versio file
+        run: echo "llvm-git-main-64bit" > llvm/git/.emsdk_version
+        if: steps.cache-llvm.outputs.cache-hit == 'true'
+        working-directory: InstantReplay.Externals/unienc/emsdk
       - name: Binaryen SHA
         id: binaryen-sha
         run: echo "binaryen_sha=$(git ls-remote -h https://github.com/Unity-Technologies/binaryen.git ${{ matrix.emscripten }} | cut -f1)" >> $GITHUB_OUTPUT
