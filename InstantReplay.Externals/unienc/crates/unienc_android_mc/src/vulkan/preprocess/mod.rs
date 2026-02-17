@@ -324,7 +324,7 @@ struct HardwareBufferBlitResources {
 
 /// Blit source image to a HardwareBuffer-backed frame
 /// Returns a Future that completes when GPU work is done
-pub fn blit_to_hardware_buffer(
+pub fn blit_to_hardware_buffer<R: unienc_common::Runtime + 'static>(
     cx: &GlobalContext,
     src: &vk::Image,
     src_width: u32,
@@ -333,7 +333,8 @@ pub fn blit_to_hardware_buffer(
     flip_vertically: bool,
     is_gamma_workflow: bool,
     frame: &HardwareBufferFrame,
-) -> Result<impl Future<Output = Result<()>> + use<>> {
+    runtime: R,
+) -> Result<impl Future<Output = Result<()>> + use<R>> {
     let markers = MARKERS.get();
     let _guard = markers.map(|m| m.preprocess_blit.get());
     let vulkan = &cx.vulkan;
@@ -612,15 +613,14 @@ pub fn blit_to_hardware_buffer(
         desc_set,
     };
 
-    let join_handle = tokio::task::spawn_blocking(move || {
+    let runtime = runtime.clone();
+    let join_handle = runtime.spawn_blocking(move || {
         let _ = unsafe { device.wait_for_fences(&[**resources.fence.get()], true, u64::MAX) };
         drop(resources);
     });
 
     Ok(async move {
-        join_handle
-            .await
-            .context("Failed to wait for fence")?;
+        join_handle.await;
         Ok(())
     })
 }

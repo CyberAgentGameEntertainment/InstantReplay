@@ -47,7 +47,7 @@ pub unsafe extern "C" fn unienc_new_video_encoder(
     }
 
     unsafe {
-        match (&*system).new_video_encoder() {
+        match (*system).new_video_encoder() {
             Ok(encoder) => match encoder.get().context("Failed to get encoded video sample") {
                 Ok((input, output)) => {
                     *input_out = Arc::into_raw(Arc::new(Mutex::new(Some(input))));
@@ -86,7 +86,7 @@ pub unsafe extern "C" fn unienc_new_audio_encoder(
     }
 
     unsafe {
-        match (&*system).new_audio_encoder() {
+        match (*system).new_audio_encoder() {
             Ok(encoder) => match encoder.get().context("Failed to get encoded audio sample") {
                 Ok((input, output)) => {
                     *input_out = Arc::into_raw(Arc::new(Mutex::new(Some(input))));
@@ -137,7 +137,7 @@ pub unsafe extern "C" fn unienc_new_muxer(
         };
         let path = Path::new(path_str);
 
-        match (&*system).new_muxer(path) {
+        match (*system).new_muxer(path) {
             Ok(muxer) => {
                 match muxer.get_inputs().context("Failed to get muxer input") {
                     Ok((video_input, audio_input, completion_handle)) => {

@@ -32,30 +32,34 @@ pub unsafe fn set_java_vm(vm: *mut jni::sys::JavaVM, _reserved: *mut c_void) -> 
 pub struct MediaCodecEncodingSystem<
     V: unienc_common::VideoEncoderOptions,
     A: unienc_common::AudioEncoderOptions,
+    R: unienc_common::Runtime + 'static,
 > {
     video_options: V,
     audio_options: A,
+    runtime: R,
 }
 
-impl<V: unienc_common::VideoEncoderOptions, A: unienc_common::AudioEncoderOptions> EncodingSystem
-    for MediaCodecEncodingSystem<V, A>
+impl<V: unienc_common::VideoEncoderOptions, A: unienc_common::AudioEncoderOptions, R: unienc_common::Runtime + 'static> EncodingSystem
+    for MediaCodecEncodingSystem<V, A, R>
 {
     type VideoEncoderOptionsType = V;
     type AudioEncoderOptionsType = A;
-    type VideoEncoderType = MediaCodecVideoEncoder;
+    type VideoEncoderType = MediaCodecVideoEncoder<R>;
     type AudioEncoderType = MediaCodecAudioEncoder;
     type MuxerType = MediaMuxer;
     type BlitSourceType = VulkanTexture;
+    type RuntimeType = R;
 
-    fn new(video_options: &V, audio_options: &A) -> Self {
+    fn new(video_options: &V, audio_options: &A, runtime: R) -> Self {
         Self {
             video_options: *video_options,
             audio_options: *audio_options,
+            runtime,
         }
     }
 
     fn new_video_encoder(&self) -> unienc_common::Result<Self::VideoEncoderType> {
-        MediaCodecVideoEncoder::new(&self.video_options).map_err(Into::into)
+        MediaCodecVideoEncoder::<R>::new(&self.video_options, self.runtime.clone()).map_err(Into::into)
     }
 
     fn new_audio_encoder(&self) -> unienc_common::Result<Self::AudioEncoderType> {
@@ -75,7 +79,7 @@ impl<V: unienc_common::VideoEncoderOptions, A: unienc_common::AudioEncoderOption
     }
 }
 
-impl<V: unienc_common::VideoEncoderOptions, A: unienc_common::AudioEncoderOptions> UnityPlugin for MediaCodecEncodingSystem<V, A> {
+impl<V: unienc_common::VideoEncoderOptions, A: unienc_common::AudioEncoderOptions, R: unienc_common::Runtime + 'static> UnityPlugin for MediaCodecEncodingSystem<V, A, R> {
     fn unity_plugin_load(interfaces: &unity_native_plugin::interface::UnityInterfaces) {
         vulkan::unity_plugin_load(interfaces);
     }

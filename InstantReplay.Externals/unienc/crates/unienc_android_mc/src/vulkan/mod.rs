@@ -172,7 +172,7 @@ extern "system" fn on_device_event(ev_type: GfxDeviceEventType) {
                         unity_instance
                             .get_instance_proc_addr(name.as_ptr())
                             .map(|p| p as *const c_void)
-                            .unwrap_or_default()
+                            .unwrap_or(std::ptr::null())
                     }),
                     instance,
                 )
@@ -183,7 +183,7 @@ extern "system" fn on_device_event(ev_type: GfxDeviceEventType) {
                         unity_instance
                             .get_instance_proc_addr(name.as_ptr())
                             .map(|p| p as *const c_void)
-                            .unwrap_or_default()
+                            .unwrap_or(std::ptr::null())
                     }),
                     device,
                 )
@@ -212,7 +212,7 @@ extern "system" fn on_device_event(ev_type: GfxDeviceEventType) {
     }
 }
 
-pub fn blit_to_hardware_buffer(
+pub fn blit_to_hardware_buffer<R: unienc_common::Runtime + 'static>(
     src: &vk::Image,
     src_width: u32,
     src_height: u32,
@@ -220,12 +220,13 @@ pub fn blit_to_hardware_buffer(
     flip_vertically: bool,
     is_gamma_workflow: bool,
     frame: &hardware_buffer_surface::HardwareBufferFrame,
-) -> Result<impl Future<Output = Result<()>> + use<>> {
+    runtime: R,
+) -> Result<impl Future<Output = Result<()>> + use<R>> {
     let cx = crate::vulkan::CONTEXT
         .get()
         .ok_or(AndroidError::ContextNotInitialized)?
         .lock()
         .map_err(|_| AndroidError::MutexPoisoned)?;
 
-    preprocess::blit_to_hardware_buffer(&cx, src, src_width, src_height, src_graphics_format, flip_vertically, is_gamma_workflow, frame)
+    preprocess::blit_to_hardware_buffer(&cx, src, src_width, src_height, src_graphics_format, flip_vertically, is_gamma_workflow, frame, runtime)
 }

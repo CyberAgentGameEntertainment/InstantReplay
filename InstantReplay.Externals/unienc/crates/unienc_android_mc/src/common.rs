@@ -5,6 +5,8 @@ use jni::{
     JNIEnv,
 };
 use std::{collections::HashMap, fmt::Display, sync::Arc, time::Duration};
+use std::pin::Pin;
+use std::task::{Context, Poll};
 use unienc_common::{EncodedData, UniencSampleKind, VideoFrameBgra32};
 
 use crate::error::{AndroidError, Result};
@@ -733,9 +735,33 @@ pub(crate) async fn pull_encoded_data_with_codec(
             }
         }
         if sleep {
-            tokio::task::yield_now().await;
+            yield_now().await;
         }
     }
+}
+pub async fn yield_now() {
+    struct YieldNow {
+        yielded: bool,
+    }
+
+    impl Future for YieldNow {
+        type Output = ();
+
+        fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<()> {
+
+            if self.yielded {
+                return Poll::Ready(());
+            }
+
+            self.yielded = true;
+
+            cx.waker().wake_by_ref();
+
+            Poll::Pending
+        }
+    }
+
+    YieldNow { yielded: false }.await;
 }
 
 pub(crate) fn format_to_map(

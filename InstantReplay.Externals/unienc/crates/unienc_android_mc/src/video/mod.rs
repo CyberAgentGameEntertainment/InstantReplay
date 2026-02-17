@@ -12,13 +12,13 @@ use crate::{
     config::{format_keys::*, *},
 };
 
-pub struct MediaCodecVideoEncoder {
-    input: MediaCodecVideoEncoderInput,
+pub struct MediaCodecVideoEncoder<R: unienc_common::Runtime + 'static> {
+    input: MediaCodecVideoEncoderInput<R>,
     output: MediaCodecVideoEncoderOutput,
 }
 
 #[allow(dead_code)]
-pub struct MediaCodecVideoEncoderInput {
+pub struct MediaCodecVideoEncoderInput<R: unienc_common::Runtime + 'static> {
     codec: MediaCodec,
     original_width: u32,
     original_height: u32,
@@ -26,6 +26,7 @@ pub struct MediaCodecVideoEncoderInput {
     padded_height: u32,
     last_timestamp: i64,
     processor: MediaCodecVideoEncoderInputProcessor,
+    runtime: R,
 }
 
 struct UninitializedState {
@@ -40,7 +41,7 @@ enum MediaCodecVideoEncoderInputProcessor {
     HardwareBuffer(Arc<HardwareBufferSurface>),
 }
 
-unsafe impl Send for MediaCodecVideoEncoderInput {}
+unsafe impl<R: unienc_common::Runtime + 'static> Send for MediaCodecVideoEncoderInput<R> {}
 
 pub struct MediaCodecVideoEncoderOutput {
     codec: MediaCodec,
@@ -48,8 +49,8 @@ pub struct MediaCodecVideoEncoderOutput {
     initialization: Option<tokio::sync::oneshot::Receiver<()>>,
 }
 
-impl Encoder for MediaCodecVideoEncoder {
-    type InputType = MediaCodecVideoEncoderInput;
+impl<R: unienc_common::Runtime + 'static> Encoder for MediaCodecVideoEncoder<R> {
+    type InputType = MediaCodecVideoEncoderInput<R>;
     type OutputType = MediaCodecVideoEncoderOutput;
 
     fn get(self) -> unienc_common::Result<(Self::InputType, Self::OutputType)> {
@@ -57,7 +58,7 @@ impl Encoder for MediaCodecVideoEncoder {
     }
 }
 
-impl Drop for MediaCodecVideoEncoderInput {
+impl<R: unienc_common::Runtime + 'static> Drop for MediaCodecVideoEncoderInput<R> {
     fn drop(&mut self) {
         // notify end of stream
         || -> Result<()> {
@@ -94,8 +95,8 @@ impl Drop for MediaCodecVideoEncoderInput {
     }
 }
 
-impl MediaCodecVideoEncoder {
-    pub fn new<V: unienc_common::VideoEncoderOptions>(options: &V) -> Result<Self> {
+impl<R: unienc_common::Runtime + 'static> MediaCodecVideoEncoder<R> {
+    pub fn new<V: unienc_common::VideoEncoderOptions>(options: &V, runtime: R) -> Result<Self> {
         // Calculate original and padded sizes
         let original_width = options.width();
         let original_height = options.height();
@@ -117,7 +118,7 @@ impl MediaCodecVideoEncoder {
         let (tx, rx) = tokio::sync::oneshot::channel();
 
         Ok(Self {
-            input: MediaCodecVideoEncoderInput {
+            input: MediaCodecVideoEncoderInput::<R> {
                 codec: codec_input,
                 original_width,
                 original_height,
@@ -129,6 +130,7 @@ impl MediaCodecVideoEncoder {
                     bitrate: options.bitrate(),
                     fps_hint: options.fps_hint(),
                 }),
+                runtime,
             },
             output: MediaCodecVideoEncoderOutput {
                 codec: codec_output,
@@ -139,7 +141,7 @@ impl MediaCodecVideoEncoder {
     }
 }
 
-impl EncoderInput for MediaCodecVideoEncoderInput {
+impl<R: unienc_common::Runtime + 'static> EncoderInput for MediaCodecVideoEncoderInput<R> {
     type Data = VideoSample<VulkanTexture>;
 
     async fn push(&mut self, data: Self::Data) -> unienc_common::Result<()> {
@@ -147,8 +149,8 @@ impl EncoderInput for MediaCodecVideoEncoderInput {
     }
 }
 
-async fn push_video_impl(
-    this: &mut MediaCodecVideoEncoderInput,
+async fn push_video_impl<R: unienc_common::Runtime + 'static>(
+    this: &mut MediaCodecVideoEncoderInput<R>,
     data: VideoSample<VulkanTexture>,
 ) -> Result<()> {
     match data.frame {
@@ -298,6 +300,7 @@ async fn push_video_impl(
             let frame = hb_surface.dequeue_frame()?;
 
             let (tx, rx) = tokio::sync::oneshot::channel();
+            let runtime = this.runtime.clone();
 
             event_issuer.issue_graphics_event(
                 Box::new(move || {
@@ -311,6 +314,7 @@ async fn push_video_impl(
                         flip_vertically,
                         is_gamma_workflow,
                         &frame,
+                        runtime,
                     );
                     tx.send((result, frame))
                         .map_err(|_| AndroidError::RenderThreadSendFailed)

@@ -1,10 +1,12 @@
-use futures::executor::{LocalPool, LocalSpawner};
+use futures::executor::LocalPool;
 use futures::task::{SpawnExt, noop_waker_ref};
 use std::cell::RefCell;
 use std::io;
 use std::marker::PhantomData;
+use std::pin::Pin;
 use std::sync::{Arc, Mutex, Weak};
 use std::task::{Context, Poll};
+use blocking::unblock;
 use thiserror::Error;
 
 thread_local! {
@@ -82,7 +84,7 @@ impl Runtime {
 
     pub fn spawn(fut: impl Future<Output = ()> + Send + 'static) {
         CURRENT.with_borrow(|local| {
-            if let Some(runtime) = &*local {
+            if let Some(runtime) = local {
                 #[cfg(feature = "multi-thread")]
                 {
                     runtime.executor.spawn(fut)
@@ -193,14 +195,9 @@ impl unienc::Spawn for RuntimeSpawner {
 }
 
 impl unienc::SpawnBlocking for RuntimeSpawner {
-    /*
-    fn spawn_blocking(&self, f: impl FnOnce() + Send + 'static) {
-        let fut = async move {
-            f();
-        };
-        self.spawn(fut)
+    fn spawn_blocking<Result: Send + 'static>(&self, f: impl FnOnce() -> Result + Send + 'static) -> Pin<Box<dyn Future<Output = Result> + Send + 'static>> {
+        Box::pin(unblock(f))
     }
-    */
 }
 
 impl unienc::Runtime for RuntimeSpawner {}

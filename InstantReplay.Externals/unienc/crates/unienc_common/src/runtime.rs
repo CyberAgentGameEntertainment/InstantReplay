@@ -1,9 +1,11 @@
+use std::pin::Pin;
+
 pub trait Spawn {
     fn spawn(&self, future: impl Future<Output = ()> + Send + 'static);
 }
 
 pub trait SpawnBlocking {
-    // fn spawn_blocking(&self, f: impl FnOnce() + Send + 'static);
+    fn spawn_blocking<Result: Send + 'static>(&self, f: impl FnOnce() -> Result + Send + 'static) -> Pin<Box<dyn Future<Output = Result> + Send + 'static>>;
 }
 
 pub trait Runtime: Spawn + SpawnBlocking + Send + Clone {}
