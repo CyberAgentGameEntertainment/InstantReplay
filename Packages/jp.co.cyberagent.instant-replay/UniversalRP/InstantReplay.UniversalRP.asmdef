@@ -12,14 +12,22 @@
     "overrideReferences": false,
     "precompiledReferences": [],
     "autoReferenced": true,
-    "defineConstraints": [
-        "INSTANTREPLAY_URP"
-    ],
+    "defineConstraints": [],
     "versionDefines": [
         {
             "name": "com.unity.render-pipelines.universal",
-            "expression": "17",
-            "define": "INSTANTREPLAY_URP"
+            "expression": "17.0",
+            "define": "INSTANTREPLAY_URP_17_0_OR_NEWER"
+        },
+        {
+            "name": "com.unity.render-pipelines.universal",
+            "expression": "17.3",
+            "define": "INSTANTREPLAY_URP_17_3_OR_NEWER"
+        },
+        {
+            "name": "com.unity.render-pipelines.universal",
+            "expression": "17.4",
+            "define": "INSTANTREPLAY_URP_17_4_OR_NEWER"
         }
     ],
     "noEngineReferences": false

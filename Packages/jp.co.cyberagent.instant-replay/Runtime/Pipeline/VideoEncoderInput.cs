@@ -77,7 +77,8 @@ namespace InstantReplay
                     try
                     {
                         await _videoEncoder.UnsafePushUnityFrameAsync(value.NativeBlitSourceHandle, (uint)value.Width,
-                            (uint)value.Height, value.BlitSourceFormat, value.IsGammaWorkflow, value.Timestamp);
+                            (uint)value.Height, value.BlitSourceFormat, value.IsGammaWorkflow, value.Timestamp,
+                            value.FlipVertically);
                     }
                     catch (ObjectDisposedException)
                     {

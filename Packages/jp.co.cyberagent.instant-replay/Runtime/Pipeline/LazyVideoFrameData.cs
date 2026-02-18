@@ -25,6 +25,7 @@ namespace InstantReplay
         public readonly GraphicsFormat BlitSourceFormat;
         public readonly nint NativeBlitSourceHandle;
         public readonly bool IsGammaWorkflow;
+        public readonly bool FlipVertically;
 
         public LazyVideoFrameData(ValueTask<SharedBuffer<NativeArrayWrapper>> readbackTask, int width, int height,
             double timestamp)
@@ -39,9 +40,10 @@ namespace InstantReplay
             BlitSourceFormat = default;
             NativeBlitSourceHandle = default;
             IsGammaWorkflow = QualitySettings.activeColorSpace == ColorSpace.Gamma;
+            FlipVertically = false;
         }
 
-        public LazyVideoFrameData(Texture texture, double timestamp)
+        public LazyVideoFrameData(Texture texture, double timestamp, bool flipVertically = false)
         {
             Kind = DataKind.BlitSource;
             BlitSource = texture;
@@ -53,6 +55,7 @@ namespace InstantReplay
             Width = texture.width;
             Height = texture.height;
             IsGammaWorkflow = QualitySettings.activeColorSpace == ColorSpace.Gamma;
+            FlipVertically = flipVertically;
         }
 
         public enum DataKind

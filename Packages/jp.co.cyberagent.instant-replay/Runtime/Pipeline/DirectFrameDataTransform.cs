@@ -2,6 +2,8 @@
 // Copyright 2025 CyberAgent, Inc.
 // --------------------------------------------------------------
 
+using UnityEngine;
+
 namespace InstantReplay
 {
     internal class DirectFrameDataTransform : IPipelineTransform<IFrameProvider.Frame, LazyVideoFrameData>
@@ -22,7 +24,8 @@ namespace InstantReplay
                 return false;
             }
 
-            output = new LazyVideoFrameData(input.Texture, input.Timestamp);
+            output = new LazyVideoFrameData(input.Texture, input.Timestamp,
+                input.DataStartsAtTop ^ SystemInfo.graphicsUVStartsAtTop);
             return true;
         }
     }

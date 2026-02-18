@@ -1,9 +1,11 @@
 using System;
-using System.Reflection;
 using UnityEngine;
 using UnityEngine.Rendering;
-using UnityEngine.Rendering.RenderGraphModule;
 using UnityEngine.Rendering.Universal;
+#if INSTANTREPLAY_URP_17_0_OR_NEWER
+using System.Reflection;
+using UnityEngine.Rendering.RenderGraphModule;
+#endif
 
 namespace InstantReplay.UniversalRP
 {
@@ -11,6 +13,7 @@ namespace InstantReplay.UniversalRP
     {
         public static event Action<Camera, IFrameProvider.Frame> OnFrameProvided;
 
+#if INSTANTREPLAY_URP_17_0_OR_NEWER
         private static readonly FieldInfo WrappedCommandBufferField =
             typeof(BaseCommandBuffer).GetField("m_WrappedCommandBuffer",
                 BindingFlags.NonPublic | BindingFlags.Instance);
@@ -41,5 +44,20 @@ namespace InstantReplay.UniversalRP
             public Camera Camera;
             public TextureHandle Source;
         }
+#endif
+
+#if !INSTANTREPLAY_URP_17_3_OR_NEWER || (!INSTANTREPLAY_URP_17_4_OR_NEWER && URP_COMPATIBILITY_MODE)
+
+        public override void Execute(ScriptableRenderContext context, ref RenderingData renderingData)
+        {
+            var commandBuffer = CommandBufferPool.Get();
+            var target = renderingData.cameraData.renderer.cameraColorTargetHandle;
+            var flipped = renderingData.cameraData.IsHandleYFlipped(target);
+            OnFrameProvided?.Invoke(renderingData.cameraData.camera,
+                new IFrameProvider.Frame(target, Time.unscaledTimeAsDouble,
+                    SystemInfo.graphicsUVStartsAtTop ^ flipped, commandBuffer));
+            context.ExecuteCommandBuffer(commandBuffer);
+        }
+#endif
     }
 }

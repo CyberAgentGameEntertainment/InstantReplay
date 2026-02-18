@@ -6,18 +6,20 @@ namespace UniEnc.Unity
 {
     public static class VideoEncoderExtensions
     {
-        public static ValueTask PushFrameAsync(this VideoEncoder encoder, Texture source, double timestamp)
+        public static ValueTask PushFrameAsync(this VideoEncoder encoder, Texture source, double timestamp,
+            bool flipVertically = false)
         {
             return encoder.UnsafePushUnityFrameAsync(source.GetNativeTexturePtr(), (uint)source.width,
-                (uint)source.height,
-                source.graphicsFormat, QualitySettings.activeColorSpace == ColorSpace.Gamma, timestamp);
+                (uint)source.height, source.graphicsFormat, QualitySettings.activeColorSpace == ColorSpace.Gamma,
+                timestamp, flipVertically);
         }
 
         public static ValueTask UnsafePushUnityFrameAsync(this VideoEncoder encoder, nint sourceTexturePtr, uint width,
-            uint height, GraphicsFormat graphicsFormat, bool isGammaWorkflow, double timestamp)
+            uint height, GraphicsFormat graphicsFormat, bool isGammaWorkflow, double timestamp,
+            bool flipVertically = false)
         {
-            return encoder.UnsafePushUnityFrameAsync(sourceTexturePtr, width, height,
-                (uint)graphicsFormat, isGammaWorkflow, timestamp, (nuint)GraphicsEventIssuer.OnIssueGraphicsEventPtr);
+            return encoder.UnsafePushUnityFrameAsync(sourceTexturePtr, width, height, (uint)graphicsFormat,
+                isGammaWorkflow, timestamp, (nuint)GraphicsEventIssuer.OnIssueGraphicsEventPtr, flipVertically);
         }
     }
 }

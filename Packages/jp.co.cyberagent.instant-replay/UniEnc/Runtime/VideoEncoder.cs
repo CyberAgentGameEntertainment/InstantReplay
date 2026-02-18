@@ -74,8 +74,8 @@ namespace UniEnc
         }
 
         public ValueTask UnsafePushUnityFrameAsync(nint sourceTexturePtr, uint width, uint height,
-            uint unityGraphicsFormat,
-            bool isGammaWorkflow, double timestamp, nuint onIssueGraphicsEventPtr)
+            uint unityGraphicsFormat, bool isGammaWorkflow, double timestamp, nuint onIssueGraphicsEventPtr,
+            bool flipVertically = false)
         {
             lock (_lock)
             {
@@ -98,7 +98,7 @@ namespace UniEnc
                             width,
                             height,
                             unityGraphicsFormat,
-                            false,
+                            flipVertically,
                             isGammaWorkflow,
                             timestamp,
                             onIssueGraphicsEventPtr,
@@ -186,6 +186,7 @@ namespace UniEnc
         private class InputHandle : GeneralHandle
         {
             private readonly Utils.SafeHandleScope _runtimeScope = RuntimeWrapper.GetReferenceScope();
+
             public InputHandle(IntPtr handle) : base(handle)
             {
             }
@@ -202,6 +203,7 @@ namespace UniEnc
         private class OutputHandle : GeneralHandle
         {
             private readonly Utils.SafeHandleScope _runtimeScope = RuntimeWrapper.GetReferenceScope();
+
             public OutputHandle(IntPtr handle) : base(handle)
             {
             }
@@ -210,7 +212,7 @@ namespace UniEnc
             {
                 using var _ = _runtimeScope;
                 using var scope = RuntimeWrapper.GetScope();
-                NativeMethods.unienc_free_video_encoder_output(scope.Runtime,(nint)handle);
+                NativeMethods.unienc_free_video_encoder_output(scope.Runtime, (nint)handle);
                 return true;
             }
         }
