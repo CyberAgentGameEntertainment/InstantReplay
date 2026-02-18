@@ -8,7 +8,8 @@ namespace InstantReplay
         public event IFrameProvider.ProvideFrame OnFrameReceived;
         private void OnRenderImage(RenderTexture source, RenderTexture destination)
         {
-            OnFrameReceived?.Invoke(new IFrameProvider.Frame(source, Time.unscaledTimeAsDouble, dataStartsAtTop: true));
+            // If Image Effect is present, the camera always renders into intermediate RenderTexture and its content is vertically flipped only when SystemInfo.graphicsUVStartsAtTop=true.
+            OnFrameReceived?.Invoke(new IFrameProvider.Frame(source, Time.unscaledTimeAsDouble, false));
             Graphics.Blit(source, destination);
         }
     }
