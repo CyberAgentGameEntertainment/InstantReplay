@@ -47,8 +47,9 @@ namespace InstantReplay.UniversalRP
         }
 #endif
 
-#if !INSTANTREPLAY_URP_17_3_OR_NEWER || (!INSTANTREPLAY_URP_17_4_OR_NEWER && URP_COMPATIBILITY_MODE)
-
+#if INSTANTREPLAY_URP_17_0_OR_NEWER
+        [Obsolete]
+#endif
         public override void Execute(ScriptableRenderContext context, ref RenderingData renderingData)
         {
             var commandBuffer = CommandBufferPool.Get();
@@ -59,6 +60,5 @@ namespace InstantReplay.UniversalRP
                     SystemInfo.graphicsUVStartsAtTop ^ flipped, commandBuffer));
             context.ExecuteCommandBuffer(commandBuffer);
         }
-#endif
     }
 }
