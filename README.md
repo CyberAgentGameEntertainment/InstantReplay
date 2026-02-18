@@ -61,12 +61,12 @@ Android|8.0+|✅|✅|
 macOS|11.0+|✅|✅|
 Windows|Windows 10+, Windows Server 2016+|-|✅|
 Linux|kernel 3.2+, glibc 2.17+|-|✅|`ffmpeg` in PATH
-Web|(any)|(any)|(any)|[Browser supports WebCodecs](#encoder-apis-in-use) and [WebAssembly 2023](https://docs.unity3d.com/6000.3/Documentation/Manual/webassembly-2023.html) is disabled
+Web|(any)|(any)|(any)|[Browser supports WebCodecs](#encoder-apis-in-use)
 
 - For legacy mode, other platforms may work if `ffmpeg` is available in PATH.
 
 >[!WARNING]
-> **Known Issue with WebGL**: the result of the rendering may corrupt during recording. This is caused by `ScreenshotFrameProvider`, which is the default `IFrameProvider` implementation. If you encounter this issue, please use [`BuiltinCameraFrameProvider`](#built-in-iframeprovider) (for Built-in RP), [`RendererFeatureFrameProvider`](#built-in-iframeprovider) (for Universal RP), or other custom `IFrameProvider` implementation which provides input `RenderTexture` directly.
+> **Known Issue with WebGL**: In WebGL, flickering may occur on the screen during recording. This is caused by `ScreenshotFrameProvider`, which is the default `IFrameProvider` implementation. If you encounter this issue, please use [`BuiltinCameraFrameProvider`](#built-in-iframeprovider) (for Built-in RP), [`RendererFeatureFrameProvider`](#built-in-iframeprovider) (for Universal RP), or other custom `IFrameProvider` implementation which provides input `RenderTexture` directly.
 
 ### Encoder APIs in use
 

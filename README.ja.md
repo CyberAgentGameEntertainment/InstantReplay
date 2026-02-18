@@ -61,12 +61,12 @@ Android|8.0+|✅|✅|
 macOS|11.0+|✅|✅|
 Windows|Windows 10+, Windows Server 2016+|-|✅|
 Linux|kernel 3.2+, glibc 2.17+|-|✅|`ffmpeg` in PATH
-Web|(any)|(any)|(any)|[WebCodecs をサポートするブラウザ](#使用されるエンコーダー-api)、[WebAssembly 2023](https://docs.unity3d.com/6000.3/Documentation/Manual/webassembly-2023.html) が無効
+Web|(any)|(any)|(any)|[WebCodecs をサポートするブラウザ](#使用されるエンコーダー-api)
 
 - レガシーモードでは、他のプラットフォームでも `ffmpeg` が PATH に存在すれば動作する可能性があります。
 
 > [!WARNING]
-> **WebGL での既知の問題**: WebGL では、録画中にレンダリング結果が破損する可能性があります。これはデフォルトの `IFrameProvider` 実装である `ScreenshotFrameProvider` に起因するもので、この問題が発生した場合は、[`BuiltinCameraFrameProvider`](#ビルトインの-iframeprovider) (Built-in RP 用)、[`RendererFeatureFrameProvider`](#ビルトインの-iframeprovider) (Universal RP 用)、またはその他のカスタム `IFrameProvider` 実装を使用して、入力 `RenderTexture` を直接提供することで回避できます。
+> **WebGL での既知の問題**: WebGL では、録画中に画面にフリッカーが発生する可能性があります。これはデフォルトの `IFrameProvider` 実装である `ScreenshotFrameProvider` に起因するもので、この問題が発生した場合は、[`BuiltinCameraFrameProvider`](#ビルトインの-iframeprovider) (Built-in RP 用)、[`RendererFeatureFrameProvider`](#ビルトインの-iframeprovider) (Universal RP 用)、またはその他のカスタム `IFrameProvider` 実装を使用して、入力 `RenderTexture` を直接提供することで回避できます。
 
 ### 使用されるエンコーダー API
 
