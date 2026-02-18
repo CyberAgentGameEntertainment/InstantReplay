@@ -182,20 +182,21 @@ using var session = new RealtimeInstantReplaySession(options);
 
 ### 映像ソースの設定
 
-デフォルトでは `ScreenCapture.CaptureScreenshotIntoRenderTexture()` を使用して録画を行いますが、`IFrameProvider` を使用して映像ソースのカスタマイズも可能です。
-
-#### ビルトインの `IFrameProvider`
-
-- `BuiltinCameraFrameProvider`: Built-in Render Pipeline で `OnRenderImage()` を使用して特定のカメラの映像をキャプチャします。
-- `RendererFeatureFrameProvider`: Universal Render Pipeline で Renderer Feature を使用して特定のカメラの映像をキャプチャします。カメラが使用している Renderer に対して `InstantReplayFrameRendererFeature` を追加する必要があります。
+`IFrameProvider` を使用して映像ソースのカスタマイズが可能です。
 
 `RealtimeInstantReplaySession` のコンストラクタに `frameProvider` として渡してください。また `disposeFrameProvider` によって `RealtimeInstantReplaySession` 側で `frameProvider` を自動的に破棄するかどうかを指定できます。
 
 ```csharp
 
-new RealtimeInstantReplaySession(options, frameProvider: new RendererFeatureFrameProvider(), disposeFrameProvider: true);
+new RealtimeInstantReplaySession(options, frameProvider: new ScreenshotFrameProvider(), disposeFrameProvider: true);
 
 ```
+
+#### ビルトインの `IFrameProvider`
+
+- `ScreenshotFrameProvider`: デフォルトで使用される実装です。`ScreenCapture.CaptureScreenshotIntoRenderTexture()` を使用するため、Overlay Canvas などカメラに含まれない描画結果もキャプチャできます。キャプチャ用に追加の RenderTexture を使用するため、GPU メモリ使用量が増加します。
+- `BuiltinCameraFrameProvider`: Built-in Render Pipeline で `OnRenderImage()` を使用して特定のカメラの映像をキャプチャします。
+- `RendererFeatureFrameProvider`: Universal Render Pipeline で Renderer Feature を使用して特定のカメラの映像をキャプチャします。カメラに対応する Renderer に対して `InstantReplayFrameRendererFeature` を追加する必要があります。
 
 #### カスタム `IFrameProvider` の実装
 

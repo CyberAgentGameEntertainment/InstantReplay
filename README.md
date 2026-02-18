@@ -184,21 +184,21 @@ You can pause and resume the recording using `RealtimeInstantReplaySession.Pause
 
 ### Setting the Video Source
 
-By default, InstantReplay uses `ScreenCapture.CaptureScreenshotIntoRenderTexture()` for recording. You can also use custom video source using `IFrameProvider`.
-
-
-#### Built-in `IFrameProvider`
-
-- `BuiltinCameraFrameProvider`: Captures the footage of a specific camera using `OnRenderImage()` in Built-in Render Pipeline.
-- `RendererFeatureFrameProvider`: Captures the footage of a specific camera using Renderer Feature in Universal Render Pipeline. You need to add `InstantReplayFrameRendererFeature` to the Renderer used by the camera.
+You can use custom video source using `IFrameProvider`.
 
 Pass `IFrameProvider` instance as `frameProvider` to the `RealtimeInstantReplaySession` constructor. You can also specify whether `RealtimeInstantReplaySession` automatically discards `frameProvider` by `disposeFrameProvider`.
 
 ```csharp
 
-new RealtimeInstantReplaySession(options, frameProvider: new RendererFeatureFrameProvider(), disposeFrameProvider: true);
+new RealtimeInstantReplaySession(options, frameProvider: new ScreenshotFrameProvider(), disposeFrameProvider: true);
 
 ```
+
+#### Built-in `IFrameProvider`
+
+- `ScreenshotFrameProvider`: This is the default `IFrameProvider` implementation. It uses `ScreenCapture.CaptureScreenshotIntoRenderTexture()`, which allows it to capture the entire screen, including overlay canvases that are not rendered by a specific camera. However, it increases GPU memory usage due to the additional RenderTexture used for capturing.
+- `BuiltinCameraFrameProvider`: Captures the footage of a specific camera using `OnRenderImage()` in Built-in Render Pipeline.
+- `RendererFeatureFrameProvider`: Captures the footage of a specific camera using Renderer Feature in Universal Render Pipeline. You need to add `InstantReplayFrameRendererFeature` to the Renderer used by the camera.
 
 #### Custom `IFrameProvider` Implementation
 
