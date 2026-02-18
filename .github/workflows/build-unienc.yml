@@ -163,6 +163,7 @@ jobs:
           submodules: 'true'
       - run: rustup default stable
       - run: rustup target add wasm32-unknown-emscripten
+      - run: rustup component add rust-src --toolchain nightly
       - name: Build unienc
         run: RUSTFLAGS=-Ctarget-cpu=mvp cargo +nightly rustc -Z json-target-spec -Z build-std=panic_abort,std --target wasm32-unknown-emscripten --profile ${{ env._RUST_BUILD_CONFIG == 'debug' && 'dev' || env._RUST_BUILD_CONFIG }}-wasm --no-default-features --crate-type staticlib -p unienc_c
       - uses: actions/upload-artifact@v4
