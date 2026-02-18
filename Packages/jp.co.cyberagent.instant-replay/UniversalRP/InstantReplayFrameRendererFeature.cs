@@ -10,7 +10,7 @@ namespace InstantReplay.UniversalRP
         {
             _renderPass = new InstantReplayFrameRenderPass
             {
-                renderPassEvent = RenderPassEvent.AfterRendering
+                renderPassEvent = RenderPassEvent.AfterRenderingPostProcessing
             };
         }
 

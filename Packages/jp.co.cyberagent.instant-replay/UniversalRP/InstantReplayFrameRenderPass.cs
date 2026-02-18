@@ -25,24 +25,25 @@ namespace InstantReplay.UniversalRP
             var resources = frameData.Get<UniversalResourceData>();
             var camera = frameData.Get<UniversalCameraData>();
 
-            var source = resources.activeColorTexture;
-            passData.Camera = camera.camera;
+            var source = resources.cameraColor;
+            passData.CameraData = camera;
             passData.Source = source;
             builder.AllowPassCulling(false);
             builder.UseTexture(source);
             builder.SetRenderFunc(static (PassData data, UnsafeGraphContext context) =>
             {
                 var commandBuffer = WrappedCommandBufferField.GetValue(context.cmd) as CommandBuffer;
-                OnFrameProvided?.Invoke(data.Camera,
+                var flipped = data.CameraData.IsHandleYFlipped(data.Source);
+                OnFrameProvided?.Invoke(data.CameraData.camera,
                     new IFrameProvider.Frame(data.Source, Time.unscaledTimeAsDouble,
-                        SystemInfo.graphicsUVStartsAtTop, commandBuffer));
+                        SystemInfo.graphicsUVStartsAtTop ^ flipped, commandBuffer));
             });
         }
 
         private class PassData
         {
-            public Camera Camera;
             public TextureHandle Source;
+            public UniversalCameraData CameraData;
         }
 #endif
 
