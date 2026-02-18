@@ -34,14 +34,17 @@ When a bug occurs, you can export the operations performed up to that point as a
     * [Options](#options)
     * [Pausing and Resuming](#pausing-and-resuming)
     * [Setting the Video Source](#setting-the-video-source)
+      * [Built-in `IFrameProvider`](#built-in-iframeprovider)
+      * [Custom `IFrameProvider` Implementation](#custom-iframeprovider-implementation)
     * [Setting the Audio Source](#setting-the-audio-source)
+      * [CRI support](#cri-support)
     * [Getting the Recording State](#getting-the-recording-state)
-  * [CRI support](#cri-support)
   * [Unbounded Recording](#unbounded-recording)
   * [Legacy Mode](#legacy-mode)
     * [Setting Recording Time and Frame Rate](#setting-recording-time-and-frame-rate)
     * [Setting the Size](#setting-the-size)
     * [Video and Audio Sources](#video-and-audio-sources)
+  * [License](#license)
 <!-- TOC -->
 
 ## Requirements
@@ -58,8 +61,12 @@ Android|8.0+|✅|✅|
 macOS|11.0+|✅|✅|
 Windows|Windows 10+, Windows Server 2016+|-|✅|
 Linux|kernel 3.2+, glibc 2.17+|-|✅|`ffmpeg` in PATH
+Web|(any)|(any)|(any)|[Browser supports WebCodecs](#encoder-apis-in-use) and [WebAssembly 2023](https://docs.unity3d.com/6000.3/Documentation/Manual/webassembly-2023.html) is disabled
 
 - For legacy mode, other platforms may work if `ffmpeg` is available in PATH.
+
+>[!WARNING]
+> **Known Issue with WebGL**: the result of the rendering may corrupt during recording. This is caused by `ScreenshotFrameProvider`, which is the default `IFrameProvider` implementation. If you encounter this issue, please use [`BuiltinCameraFrameProvider`](#built-in-iframeprovider) (for Built-in RP), [`RendererFeatureFrameProvider`](#built-in-iframeprovider) (for Universal RP), or other custom `IFrameProvider` implementation which provides input `RenderTexture` directly.
 
 ### Encoder APIs in use
 
@@ -68,7 +75,8 @@ Platform|APIs
 iOS / macOS|Video Toolbox (H.264), Audio Toolbox (AAC)
 Android|MediaCodec (H.264 / AAC)
 Windows|Media Foundation (H.264 / AAC)
-Linux and others|FFmpeg installed on the system (H.264 / AAC)
+Linux|FFmpeg installed on the system (H.264 / AAC)
+Web|[WebCodecs](https://caniuse.com/webcodecs) (`avc1.640028` for video, `mp4a.40.2` for audio)
 
 ## Installation
 
@@ -176,9 +184,25 @@ You can pause and resume the recording using `RealtimeInstantReplaySession.Pause
 
 ### Setting the Video Source
 
-By default, InstantReplay uses `ScreenCapture.CaptureScreenshotIntoRenderTexture()` for recording. You can also use any RenderTexture as the source.
+By default, InstantReplay uses `ScreenCapture.CaptureScreenshotIntoRenderTexture()` for recording. You can also use custom video source using `IFrameProvider`.
 
-Create a class that inherits `InstantReplay.IFrameProvider` and pass it as `frameProvider` to the `RealtimeInstantReplaySession` constructor. You can also specify whether `RealtimeInstantReplaySession` automatically discards `frameProvider` by `disposeFrameProvider`.
+
+#### Built-in `IFrameProvider`
+
+- `BuiltinCameraFrameProvider`: Captures the footage of a specific camera using `OnRenderImage()` in Built-in Render Pipeline.
+- `RendererFeatureFrameProvider`: Captures the footage of a specific camera using Renderer Feature in Universal Render Pipeline. You need to add `InstantReplayFrameRendererFeature` to the Renderer used by the camera.
+
+Pass `IFrameProvider` instance as `frameProvider` to the `RealtimeInstantReplaySession` constructor. You can also specify whether `RealtimeInstantReplaySession` automatically discards `frameProvider` by `disposeFrameProvider`.
+
+```csharp
+
+new RealtimeInstantReplaySession(options, frameProvider: new RendererFeatureFrameProvider(), disposeFrameProvider: true);
+
+```
+
+#### Custom `IFrameProvider` Implementation
+
+Create a class that inherits `InstantReplay.IFrameProvider`.
 
 ```csharp
 public interface IFrameProvider : IDisposable
@@ -229,11 +253,7 @@ new RealtimeInstantReplaySession(options, audioSampleProvider: new CustomAudioSa
 
 ```
 
-### Getting the Recording State
-
-You can get the recording state with the `InstantReplaySession.State` property.
-
-## CRI support
+#### CRI support
 
 InstantReplay provides the `IAudioSampleProvider` implementation to capture audio from [CRIWARE](https://game.criware.jp/).
 
@@ -241,6 +261,10 @@ InstantReplay provides the `IAudioSampleProvider` implementation to capture audi
 2. Add scripting define symbol `INSTANTREPLAY_CRI` in player settings
 3. Add `InstantReplay.Cri` assembly reference if necessary
 4. Use `InstantReplay.Cri.CriAudioSampleProvider` as `audioSampleProvider` in `RealtimeInstantReplaySession` constructor
+
+### Getting the Recording State
+
+You can get the recording state with the `InstantReplaySession.State` property.
 
 ## Unbounded Recording
 
@@ -302,3 +326,9 @@ By default, it records at the actual screen size, but you can also specify `maxW
 ### Video and Audio Sources
 
 `InstantReplaySession` also supports custom video and audio sources in the same way as `RealtimeInstantReplaySession`.
+
+## License
+
+[MIT](LICENSE)
+
+For the licenses of the dependencies used, please refer to [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
