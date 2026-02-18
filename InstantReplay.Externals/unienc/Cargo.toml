@@ -33,6 +33,5 @@ panic = "abort" # It helps to make crash stacktraces readable
 
 [profile.release-wasm] # for platforms that support unwinding (e.g. wasm)
 inherits = "release"
-panic = "unwind"
 lto = true
 opt-level = "z"
