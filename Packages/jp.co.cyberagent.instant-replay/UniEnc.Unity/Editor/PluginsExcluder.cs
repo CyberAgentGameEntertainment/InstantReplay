@@ -1,13 +1,14 @@
+#if EXCLUDE_INSTANTREPLAY
+
 using System.Collections.Generic;
-using System.Linq;
-using System.Text.RegularExpressions;
 using UnityEditor;
 using UnityEditor.Build;
 using UnityEditor.Build.Reporting;
+using UnityEngine;
 
 namespace UniEnc.Unity.Editor
 {
-    public class PluginsExcluder : IPreprocessBuildWithReport, IPostprocessBuildWithReport
+    internal class PluginsExcluder : IPreprocessBuildWithReport, IPostprocessBuildWithReport
     {
         public int callbackOrder => 0;
 
@@ -16,10 +17,9 @@ namespace UniEnc.Unity.Editor
         void IPreprocessBuildWithReport.OnPreprocessBuild(BuildReport report)
         {
             _excluded.Clear();
-            var plugins = PluginImporter.GetAllImporters()
-                .Where(p => Regex.IsMatch(p.assetPath, @"/UniEnc/Plugins/.+\.(dll|dylib|a|so|mm)$"));
-            foreach (var plugin in plugins)
+            foreach (var plugin in PluginImporter.GetAllImporters())
             {
+                if (!plugin.assetPath.StartsWith("Packages/jp.co.cyberagent.instant-replay/UniEnc/Plugins/")) continue;
                 if (!plugin.GetCompatibleWithPlatform(report.summary.platform)) continue;
                 _excluded.Add(plugin.assetPath);
                 plugin.SetCompatibleWithPlatform(report.summary.platform, false);
@@ -40,3 +40,4 @@ namespace UniEnc.Unity.Editor
         }
     }
 }
+#endif
