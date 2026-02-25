@@ -185,7 +185,7 @@ namespace InstantReplay
         /// <returns>Path to the exported video file</returns>
         /// <exception cref="InvalidOperationException">Thrown if called when not in Recording state</exception>
         /// <exception cref="ArgumentException">Thrown if duration is not positive</exception>
-        public async Task<string> StopAndExportAsync(double? seconds = default, string outputPath = default)
+        public async ValueTask<string> StopAndExportAsync(double? seconds = default, string outputPath = default)
         {
             if (State != SessionState.Recording)
                 throw new InvalidOperationException(
@@ -234,7 +234,7 @@ namespace InstantReplay
                 _buffer.GetFramesForDuration(seconds, out var videoFrames, out var audioFrames);
 
                 // Mux the segment
-                await MuxSegmentAsync(muxer, videoFrames, audioFrames).ConfigureAwait(false);
+                await MuxSegmentAsync(muxer, videoFrames, audioFrames);
 
                 State = SessionState.Completed;
                 return outputPath;
@@ -247,11 +247,10 @@ namespace InstantReplay
         }
 
 
-        private async Task MuxSegmentAsync(Muxer muxer, ReadOnlyMemory<EncodedFrame> videoFrames,
+        private async ValueTask MuxSegmentAsync(Muxer muxer, ReadOnlyMemory<EncodedFrame> videoFrames,
             ReadOnlyMemory<EncodedFrame> audioFrames)
         {
-            // Process video and audio independently
-            var videoTask = Task.Run(async () =>
+            async ValueTask MuxVideoAsync()
             {
                 Exception exception = null;
                 for (var i = 0; i < videoFrames.Span.Length; i++)
@@ -262,7 +261,7 @@ namespace InstantReplay
                         using (frame)
                         {
                             if (exception == null)
-                                await muxer.PushVideoDataAsync(frame);
+                                await muxer.PushVideoDataAsync(frame).ConfigureAwait(false);
                         }
                     }
                     catch (Exception ex)
@@ -274,10 +273,11 @@ namespace InstantReplay
                 if (exception != null)
                     throw exception;
 
-                await muxer.FinishVideoAsync();
-            });
+                await muxer.FinishVideoAsync().ConfigureAwait(false);
+                ILogger.LogCore("Finished muxing video segment.");
+            }
 
-            var audioTask = Task.Run(async () =>
+            async ValueTask MuxAudioAsync()
             {
                 Exception exception = null;
                 for (var i = 0; i < audioFrames.Span.Length; i++)
@@ -288,7 +288,7 @@ namespace InstantReplay
                         using (frame)
                         {
                             if (exception == null)
-                                await muxer.PushAudioDataAsync(frame);
+                                await muxer.PushAudioDataAsync(frame).ConfigureAwait(false);
                         }
                     }
                     catch (Exception ex)
@@ -300,12 +300,17 @@ namespace InstantReplay
                 if (exception != null)
                     throw exception;
 
-                await muxer.FinishAudioAsync();
-            });
+                await muxer.FinishAudioAsync().ConfigureAwait(false);
+            }
 
-            await Task.WhenAll(videoTask, audioTask).ConfigureAwait(false);
+            var video = MuxVideoAsync();
+            var audio = MuxAudioAsync();
+            
+            await audio;
+            await video;
 
-            await muxer.CompleteAsync().ConfigureAwait(false);
+
+            await muxer.CompleteAsync();
         }
 
         /// <summary>

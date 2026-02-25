@@ -26,7 +26,7 @@ namespace InstantReplay
         ///     Reads back frame data from a RenderTexture asynchronously.
         /// </summary>
         public static bool TryReadbackFrameAsync(Texture texture, ref SharedBufferPool bufferPool,
-            out ValueTask<SharedBuffer<NativeArrayWrapper>> task)
+            out ValueTask<SharedBuffer<NativeArrayWrapper>> task, CommandBuffer commandBuffer = null)
         {
             if (texture == null)
                 throw new ArgumentNullException(nameof(texture));
@@ -61,7 +61,14 @@ namespace InstantReplay
                     OnAsyncGPUReadbackCompletedDelegate, context);
 
                 // Request asynchronous GPU readback
-                AsyncGPUReadback.RequestIntoNativeArray(ref nativeArray, texture, 0, callback.Wrapper);
+                if (commandBuffer != null)
+                {
+                    commandBuffer.RequestAsyncReadbackIntoNativeArray(ref nativeArray, texture, 0, callback.Wrapper);
+                }
+                else
+                {
+                    AsyncGPUReadback.RequestIntoNativeArray(ref nativeArray, texture, 0, callback.Wrapper);   
+                }
             }
             catch (Exception ex)
             {

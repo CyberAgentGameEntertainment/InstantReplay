@@ -1,9 +1,9 @@
-use anyhow::{anyhow, Context, Result};
 use jni::{objects::JValue, signature::ReturnType, sys::jint, JNIEnv};
 use std::sync::Arc;
 use std::time::Duration;
 use unienc_common::{Encoder, EncoderInput, EncoderOutput, VideoFrame, VideoSample};
 
+use crate::error::{AndroidError, OptionExt, Result};
 use crate::{java::*, VulkanTexture};
 
 use crate::vulkan::hardware_buffer_surface::HardwareBufferSurface;
@@ -12,13 +12,13 @@ use crate::{
     config::{format_keys::*, *},
 };
 
-pub struct MediaCodecVideoEncoder {
-    input: MediaCodecVideoEncoderInput,
+pub struct MediaCodecVideoEncoder<R: unienc_common::Runtime + 'static> {
+    input: MediaCodecVideoEncoderInput<R>,
     output: MediaCodecVideoEncoderOutput,
 }
 
 #[allow(dead_code)]
-pub struct MediaCodecVideoEncoderInput {
+pub struct MediaCodecVideoEncoderInput<R: unienc_common::Runtime + 'static> {
     codec: MediaCodec,
     original_width: u32,
     original_height: u32,
@@ -26,6 +26,7 @@ pub struct MediaCodecVideoEncoderInput {
     padded_height: u32,
     last_timestamp: i64,
     processor: MediaCodecVideoEncoderInputProcessor,
+    runtime: R,
 }
 
 struct UninitializedState {
@@ -40,7 +41,7 @@ enum MediaCodecVideoEncoderInputProcessor {
     HardwareBuffer(Arc<HardwareBufferSurface>),
 }
 
-unsafe impl Send for MediaCodecVideoEncoderInput {}
+unsafe impl<R: unienc_common::Runtime + 'static> Send for MediaCodecVideoEncoderInput<R> {}
 
 pub struct MediaCodecVideoEncoderOutput {
     codec: MediaCodec,
@@ -48,16 +49,16 @@ pub struct MediaCodecVideoEncoderOutput {
     initialization: Option<tokio::sync::oneshot::Receiver<()>>,
 }
 
-impl Encoder for MediaCodecVideoEncoder {
-    type InputType = MediaCodecVideoEncoderInput;
+impl<R: unienc_common::Runtime + 'static> Encoder for MediaCodecVideoEncoder<R> {
+    type InputType = MediaCodecVideoEncoderInput<R>;
     type OutputType = MediaCodecVideoEncoderOutput;
 
-    fn get(self) -> Result<(Self::InputType, Self::OutputType)> {
+    fn get(self) -> unienc_common::Result<(Self::InputType, Self::OutputType)> {
         Ok((self.input, self.output))
     }
 }
 
-impl Drop for MediaCodecVideoEncoderInput {
+impl<R: unienc_common::Runtime + 'static> Drop for MediaCodecVideoEncoderInput<R> {
     fn drop(&mut self) {
         // notify end of stream
         || -> Result<()> {
@@ -80,7 +81,7 @@ impl Drop for MediaCodecVideoEncoderInput {
                     if buffer_index == media_codec_errors::INFO_TRY_AGAIN_LATER {
                         std::thread::sleep(Duration::from_millis(10));
                     } else {
-                        return Err(anyhow::anyhow!("No input buffer available"));
+                        return Err(AndroidError::NoInputBuffer);
                     }
                 },
                 MediaCodecVideoEncoderInputProcessor::HardwareBuffer(_) => {
@@ -94,8 +95,8 @@ impl Drop for MediaCodecVideoEncoderInput {
     }
 }
 
-impl MediaCodecVideoEncoder {
-    pub fn new<V: unienc_common::VideoEncoderOptions>(options: &V) -> Result<Self> {
+impl<R: unienc_common::Runtime + 'static> MediaCodecVideoEncoder<R> {
+    pub fn new<V: unienc_common::VideoEncoderOptions>(options: &V, runtime: R) -> Result<Self> {
         // Calculate original and padded sizes
         let original_width = options.width();
         let original_height = options.height();
@@ -117,7 +118,7 @@ impl MediaCodecVideoEncoder {
         let (tx, rx) = tokio::sync::oneshot::channel();
 
         Ok(Self {
-            input: MediaCodecVideoEncoderInput {
+            input: MediaCodecVideoEncoderInput::<R> {
                 codec: codec_input,
                 original_width,
                 original_height,
@@ -129,6 +130,7 @@ impl MediaCodecVideoEncoder {
                     bitrate: options.bitrate(),
                     fps_hint: options.fps_hint(),
                 }),
+                runtime,
             },
             output: MediaCodecVideoEncoderOutput {
                 codec: codec_output,
@@ -139,194 +141,199 @@ impl MediaCodecVideoEncoder {
     }
 }
 
-impl EncoderInput for MediaCodecVideoEncoderInput {
+impl<R: unienc_common::Runtime + 'static> EncoderInput for MediaCodecVideoEncoderInput<R> {
     type Data = VideoSample<VulkanTexture>;
 
-    async fn push(&mut self, data: Self::Data) -> Result<()> {
-        match data.frame {
-            VideoFrame::Bgra32(frame) => {
-                match &self.processor {
-                    MediaCodecVideoEncoderInputProcessor::Uninitialized(_) => {
-                        // setup for buffer input mode with YUV420_FLEXIBLE
-                        let MediaCodecVideoEncoderInputProcessor::Uninitialized(state) =
-                            std::mem::replace(
-                                &mut self.processor,
-                                MediaCodecVideoEncoderInputProcessor::Buffer(),
-                            )
-                        else {
-                            unreachable!();
-                        };
+    async fn push(&mut self, data: Self::Data) -> unienc_common::Result<()> {
+        push_video_impl(self, data).await.map_err(Into::into)
+    }
+}
 
-                        // Configure encoder with YUV420_FLEXIBLE format for buffer input
-                        let env = &mut attach_current_thread()?;
-                        let format = create_video_format_raw(
-                            env,
-                            self.padded_width,
-                            self.padded_height,
-                            state.bitrate,
-                            state.fps_hint,
-                            false, // use_surface = false for buffer mode
-                        )?;
-                        self.codec.configure(&format)?;
-                        _ = self.codec.print_codec_info();
-
-                        self.codec.start()?;
-                        _ = state.tx.send(());
-                    }
-                    MediaCodecVideoEncoderInputProcessor::Buffer() => {}
-                    _ => {
-                        return Err(anyhow::anyhow!(
-                            "This encoder is initialized for other input"
-                        ));
-                    }
-                }
-
-                let mut buffer_index;
-                loop {
-                    let sleep;
-                    {
-                        // Get input buffer
-                        buffer_index = self
-                            .codec
-                            .dequeue_input_buffer(Duration::from_millis(100))?;
-                        if buffer_index == media_codec_errors::INFO_TRY_AGAIN_LATER {
-                            sleep = true;
-                        } else if buffer_index < 0 {
-                            return Err(anyhow::anyhow!("No input buffer available"));
-                        } else {
-                            break;
-                        }
-                    }
-                    if sleep {
-                        tokio::time::sleep(Duration::from_millis(10)).await;
-                    }
-                }
-
-                let buffer = self.codec.get_input_buffer(buffer_index)?;
-                let env = &mut attach_current_thread()?;
-                let (_base_ptr, capacity, position) = get_direct_buffer_info(env, buffer.as_obj())?;
-                let size = capacity - position;
-
-                let image = self.codec.get_input_image(buffer_index)?;
-
-                // Use Image-based approach with dynamic plane layout and padding
-                let planes = image.get_planes()?;
-                crate::common::write_bgra_to_yuv_planes_with_padding(
-                    &frame,
-                    self.padded_width,
-                    self.padded_height,
-                    &planes,
-                )?;
-
-                let timestamp = (data.timestamp * 1_000_000.0) as i64;
-                self.last_timestamp = timestamp;
-
-                // Queue input buffer - size is determined by the Image object
-                self.codec.queue_input_buffer(
-                    buffer_index,
-                    0,
-                    size,
-                    timestamp, // Convert to microseconds
-                    0,
-                )?;
-
-                Ok(())
-            }
-            VideoFrame::BlitSource {
-                source,
-                width,
-                height,
-                graphics_format,
-                flip_vertically,
-                is_gamma_workflow,
-                event_issuer,
-            } => {
-                // Use HardwareBuffer mode for better compatibility with Tensor/Exynos SoCs
-                if let MediaCodecVideoEncoderInputProcessor::Uninitialized(_) = &self.processor {
+async fn push_video_impl<R: unienc_common::Runtime + 'static>(
+    this: &mut MediaCodecVideoEncoderInput<R>,
+    data: VideoSample<VulkanTexture>,
+) -> Result<()> {
+    match data.frame {
+        VideoFrame::Bgra32(frame) => {
+            match &this.processor {
+                MediaCodecVideoEncoderInputProcessor::Uninitialized(_) => {
+                    // setup for buffer input mode with YUV420_FLEXIBLE
                     let MediaCodecVideoEncoderInputProcessor::Uninitialized(state) =
                         std::mem::replace(
-                            &mut self.processor,
-                            MediaCodecVideoEncoderInputProcessor::Buffer(), // temporary placeholder
+                            &mut this.processor,
+                            MediaCodecVideoEncoderInputProcessor::Buffer(),
                         )
                     else {
                         unreachable!();
                     };
 
-                    // Configure encoder with SURFACE format for hardware buffer input
+                    // Configure encoder with YUV420_FLEXIBLE format for buffer input
                     let env = &mut attach_current_thread()?;
                     let format = create_video_format_raw(
                         env,
-                        self.padded_width,
-                        self.padded_height,
+                        this.padded_width,
+                        this.padded_height,
                         state.bitrate,
                         state.fps_hint,
-                        true, // use_surface = true for hardware buffer mode
+                        false, // use_surface = false for buffer mode
                     )?;
-                    self.codec.configure(&format)?;
-                    _ = self.codec.print_codec_info();
+                    this.codec.configure(&format)?;
+                    _ = this.codec.print_codec_info();
 
-                    // Create input surface after configure, before start
-                    let surface = self.codec.create_input_surface()?;
-                    let hardware_buffer_surface = HardwareBufferSurface::new(
-                        &surface,
-                        self.padded_width,
-                        self.padded_height,
-                        3, // max_images
-                    )?;
-                    self.codec.start()?;
-
-                    // Replace temporary placeholder with actual HardwareBuffer processor
-                    self.processor = MediaCodecVideoEncoderInputProcessor::HardwareBuffer(Arc::new(
-                        hardware_buffer_surface,
-                    ));
+                    this.codec.start()?;
                     _ = state.tx.send(());
                 }
+                MediaCodecVideoEncoderInputProcessor::Buffer() => {}
+                _ => {
+                    return Err(AndroidError::EncoderInputMismatch);
+                }
+            }
 
-                let MediaCodecVideoEncoderInputProcessor::HardwareBuffer(hb_surface) =
-                    &self.processor
+            let mut buffer_index;
+            loop {
+                let sleep;
+                {
+                    // Get input buffer
+                    buffer_index = this
+                        .codec
+                        .dequeue_input_buffer(Duration::from_millis(100))?;
+                    if buffer_index == media_codec_errors::INFO_TRY_AGAIN_LATER {
+                        sleep = true;
+                    } else if buffer_index < 0 {
+                        return Err(AndroidError::NoInputBuffer);
+                    } else {
+                        break;
+                    }
+                }
+                if sleep {
+                    tokio::time::sleep(Duration::from_millis(10)).await;
+                }
+            }
+
+            let buffer = this.codec.get_input_buffer(buffer_index)?;
+            let env = &mut attach_current_thread()?;
+            let (_base_ptr, capacity, position) = get_direct_buffer_info(env, buffer.as_obj())?;
+            let size = capacity - position;
+
+            let image = this.codec.get_input_image(buffer_index)?;
+
+            // Use Image-based approach with dynamic plane layout and padding
+            let planes = image.get_planes()?;
+            crate::common::write_bgra_to_yuv_planes_with_padding(
+                &frame,
+                this.padded_width,
+                this.padded_height,
+                &planes,
+            )?;
+
+            let timestamp = (data.timestamp * 1_000_000.0) as i64;
+            this.last_timestamp = timestamp;
+
+            // Queue input buffer - size is determined by the Image object
+            this.codec.queue_input_buffer(
+                buffer_index,
+                0,
+                size,
+                timestamp, // Convert to microseconds
+                0,
+            )?;
+
+            Ok(())
+        }
+        VideoFrame::BlitSource {
+            source,
+            width,
+            height,
+            graphics_format,
+            flip_vertically,
+            is_gamma_workflow,
+            event_issuer,
+        } => {
+            // Use HardwareBuffer mode for better compatibility with Tensor/Exynos SoCs
+            if let MediaCodecVideoEncoderInputProcessor::Uninitialized(_) = &this.processor {
+                let MediaCodecVideoEncoderInputProcessor::Uninitialized(state) =
+                    std::mem::replace(
+                        &mut this.processor,
+                        MediaCodecVideoEncoderInputProcessor::Buffer(), // temporary placeholder
+                    )
                 else {
-                    return Err(anyhow::anyhow!(
-                        "This encoder is initialized for other input"
-                    ));
+                    unreachable!();
                 };
 
-                // Dequeue a frame from ImageWriter
-                let frame = hb_surface.dequeue_frame()?;
+                // Configure encoder with SURFACE format for hardware buffer input
+                let env = &mut attach_current_thread()?;
+                let format = create_video_format_raw(
+                    env,
+                    this.padded_width,
+                    this.padded_height,
+                    state.bitrate,
+                    state.fps_hint,
+                    true, // use_surface = true for hardware buffer mode
+                )?;
+                this.codec.configure(&format)?;
+                _ = this.codec.print_codec_info();
 
-                let (tx, rx) = tokio::sync::oneshot::channel();
+                // Create input surface after configure, before start
+                let surface = this.codec.create_input_surface()?;
+                let hardware_buffer_surface = HardwareBufferSurface::new(
+                    &surface,
+                    this.padded_width,
+                    this.padded_height,
+                    3, // max_images
+                )?;
+                this.codec.start()?;
 
-                event_issuer.issue_graphics_event(
-                    Box::new(move || {
-                        let image = source.tex;
-                        // Blit to hardware buffer and return the future
-                        let result = crate::vulkan::blit_to_hardware_buffer(
-                            &image,
-                            width,
-                            height,
-                            graphics_format,
-                            flip_vertically,
-                            is_gamma_workflow,
-                            &frame,
-                        );
-                        tx.send((result, frame))
-                            .map_err(|_e| anyhow!("Failed to send from render thread to push"))
-                            .unwrap();
-                    }),
-                    *crate::vulkan::EVENT_ID
-                        .get()
-                        .context("Event ID is not reserved")?,
-                );
-
-                let (blit_result, frame) = rx.await?;
-                let future = blit_result?;
-                future.await?;
-
-                // Queue the frame to MediaCodec
-                hb_surface
-                    .queue_frame(frame, (data.timestamp * 1000.0 * 1000.0 * 1000.0) as i64)?;
-
-                Ok(())
+                // Replace temporary placeholder with actual HardwareBuffer processor
+                this.processor = MediaCodecVideoEncoderInputProcessor::HardwareBuffer(Arc::new(
+                    hardware_buffer_surface,
+                ));
+                _ = state.tx.send(());
             }
+
+            let MediaCodecVideoEncoderInputProcessor::HardwareBuffer(hb_surface) =
+                &this.processor
+            else {
+                return Err(AndroidError::EncoderInputMismatch);
+            };
+
+            // Dequeue a frame from ImageWriter
+            let frame = hb_surface.dequeue_frame()?;
+
+            let (tx, rx) = tokio::sync::oneshot::channel();
+            let runtime = this.runtime.clone();
+
+            event_issuer.issue_graphics_event(
+                Box::new(move || {
+                    let image = source.tex;
+                    // Blit to hardware buffer and return the future
+                    let result = crate::vulkan::blit_to_hardware_buffer(
+                        &image,
+                        width,
+                        height,
+                        graphics_format,
+                        flip_vertically,
+                        is_gamma_workflow,
+                        &frame,
+                        runtime,
+                    );
+                    tx.send((result, frame))
+                        .map_err(|_| AndroidError::RenderThreadSendFailed)
+                        .unwrap();
+                }),
+                *crate::vulkan::EVENT_ID
+                    .get()
+                    .context("Event ID is not reserved")?,
+            );
+
+            let (blit_result, frame) = rx.await?;
+            let future = blit_result?;
+            future.await?;
+
+            // Queue the frame to MediaCodec
+            hb_surface
+                .queue_frame(frame, (data.timestamp * 1000.0 * 1000.0 * 1000.0) as i64)?;
+
+            Ok(())
         }
     }
 }
@@ -334,14 +341,20 @@ impl EncoderInput for MediaCodecVideoEncoderInput {
 impl EncoderOutput for MediaCodecVideoEncoderOutput {
     type Data = CommonEncodedData;
 
-    async fn pull(&mut self) -> Result<Option<Self::Data>> {
-        if let Some(rx) = &mut self.initialization {
-            rx.await?;
-            self.initialization = None;
-        }
-
-        pull_encoded_data_with_codec(&self.codec, &mut self.end_of_stream).await
+    async fn pull(&mut self) -> unienc_common::Result<Option<Self::Data>> {
+        pull_video_output_impl(self).await.map_err(Into::into)
     }
+}
+
+async fn pull_video_output_impl(
+    this: &mut MediaCodecVideoEncoderOutput,
+) -> Result<Option<CommonEncodedData>> {
+    if let Some(rx) = &mut this.initialization {
+        rx.await?;
+        this.initialization = None;
+    }
+
+    pull_encoded_data_with_codec(&this.codec, &mut this.end_of_stream).await
 }
 
 // Helper functions for JNI MediaCodec calls

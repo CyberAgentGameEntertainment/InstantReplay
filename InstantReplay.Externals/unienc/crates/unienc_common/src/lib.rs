@@ -4,10 +4,16 @@ use std::future::Future;
 use std::path::Path;
 
 use crate::buffer::SharedBuffer;
-use anyhow::Result;
 use bincode::{Decode, Encode};
 
 pub mod buffer;
+pub mod error;
+#[cfg(feature = "unity")]
+pub mod unity;
+mod runtime;
+
+pub use error::{CategorizedError, CommonError, ErrorCategory, OptionExt, Result, ResultExt};
+pub use crate::runtime::*;
 
 pub trait Encoder {
     type InputType: EncoderInput + 'static;
@@ -55,10 +61,12 @@ pub trait EncodingSystem {
         >,
     >;
     type BlitSourceType: TryFromUnityNativeTexturePointer + Send;
+    type RuntimeType: Runtime;
 
     fn new(
         video_options: &Self::VideoEncoderOptionsType,
         audio_options: &Self::AudioEncoderOptionsType,
+        runtime: Self::RuntimeType,
     ) -> Self;
     fn new_video_encoder(&self) -> Result<Self::VideoEncoderType>;
     fn new_audio_encoder(&self) -> Result<Self::AudioEncoderType>;
@@ -67,10 +75,6 @@ pub trait EncodingSystem {
     fn is_blit_supported(&self) -> bool {
         false
     }
-
-    #[allow(unused_variables)]
-    fn unity_plugin_load(interfaces: &unity_native_plugin::interface::UnityInterfaces) {}
-    fn unity_plugin_unload() {}
 }
 
 pub trait TryFromUnityNativeTexturePointer: Sized {
@@ -81,9 +85,7 @@ pub struct UnsupportedBlitData;
 
 impl TryFromUnityNativeTexturePointer for UnsupportedBlitData {
     fn try_from_unity_native_texture_ptr(_ptr: *mut c_void) -> Result<Self> {
-        Err(anyhow::anyhow!(
-            "Blit not supported in this encoding system"
-        ))
+        Err(CommonError::BlitNotSupported)
     }
 }
 

@@ -104,7 +104,9 @@ namespace InstantReplay.Examples
 
                 ShowText($"Video saved: {outputFileName}", 10f);
 
+#if !UNITY_WEBGL
                 videoPlayerView.Open(outputFileName);
+#endif
                 return outputFileName;
             }
             catch (Exception)

@@ -3,7 +3,7 @@ use windows::Win32::Media::MediaFoundation::{IMFSample, IMFTransform, MFT_OUTPUT
 use windows::Win32::System::Com::CoTaskMemFree;
 
 use crate::common::UnsafeSend;
-use anyhow::{anyhow, Context, Result};
+use crate::error::{WindowsError, Result};
 use std::cell::Cell;
 use std::future::Future;
 use std::mem::ManuallyDrop;
@@ -11,10 +11,11 @@ use std::ptr;
 use windows::core::*;
 use windows::Win32::Foundation::E_NOTIMPL;
 use windows::Win32::Media::MediaFoundation::*;
+use unienc_common::{Runtime, SpawnExt};
 
 pub trait MediaEventGeneratorCustom {
     fn get_event(&self) -> impl Future<Output = Result<UnsafeSend<IMFMediaEvent>>>;
-    fn get_events(&self) -> mpsc::Receiver<Result<UnsafeSend<IMFMediaEvent>>>;
+    fn get_events(&self, runtime: &impl Runtime) -> mpsc::Receiver<Result<UnsafeSend<IMFMediaEvent>>>;
 }
 
 impl MediaEventGeneratorCustom for IMFMediaEventGenerator {
@@ -27,8 +28,8 @@ impl MediaEventGeneratorCustom for IMFMediaEventGenerator {
                 tx.send(unsafe {
                     generator
                         .EndGetEvent(result.unwrap())
-                        .context("Failed to get media event")
                         .map(UnsafeSend::<IMFMediaEvent>::from)
+                        .map_err(WindowsError::from)
                 })
                 .unwrap();
             })
@@ -41,17 +42,17 @@ impl MediaEventGeneratorCustom for IMFMediaEventGenerator {
             result?;
             match rx.await {
                 Ok(event) => event,
-                Err(_) => Err(anyhow!("Failed to receive media event")),
+                Err(_) => Err(WindowsError::MediaEventReceiveFailed),
             }
         }
     }
 
-    fn get_events(&self) -> mpsc::Receiver<Result<UnsafeSend<IMFMediaEvent>>> {
+    fn get_events(&self, runtime: &impl Runtime) -> mpsc::Receiver<Result<UnsafeSend<IMFMediaEvent>>> {
         let (tx, rx) = mpsc::channel::<Result<UnsafeSend<IMFMediaEvent>>>(32);
 
         let generator: UnsafeSend<IMFMediaEventGenerator> = UnsafeSend((*self).clone());
 
-        tokio::spawn(async move {
+        runtime.spawn(async move {
             loop {
                 match generator.get_event().await {
                     Ok(event) => {
@@ -150,7 +151,7 @@ fn process_output(
 
     let buffer = &mut buffers[0];
 
-    let sample = buffer.pSample.take().context("Failed to get output")?;
+    let sample = buffer.pSample.take().ok_or(WindowsError::OutputGetFailed)?;
 
     Ok(sample.into())
 }
@@ -266,6 +267,7 @@ impl Transform {
         output: MFT_REGISTER_TYPE_INFO,
         input_type: IMFMediaType,
         output_type: IMFMediaType,
+        runtime: &impl Runtime,
     ) -> Result<(Self, mpsc::Receiver<UnsafeSend<IMFSample>>)> {
         let mfts = MftIter::new(category, input, output);
 
@@ -279,7 +281,7 @@ impl Transform {
                 println!("Skipping MFT: {}", Self::get_name(&activate)?);
                 continue;
             }
-            match Self::try_activate(activate, &mut input_type, &mut output_type) {
+            match Self::try_activate(activate, &mut input_type, &mut output_type, runtime) {
                 Ok(r) => {
                     result = Some(r);
                 },
@@ -289,7 +291,7 @@ impl Transform {
             };
         }
 
-        result.context("No suitable MFT found")
+        result.ok_or(WindowsError::NoSuitableMft)
     }
 
     fn get_name(activate: &IMFActivate) -> Result<String> {
@@ -300,7 +302,7 @@ impl Transform {
             activate.GetString(&MFT_FRIENDLY_NAME_Attribute, &mut buffer, Some(&mut length))?
         };
 
-        let value: String = BSTR::from_wide(&buffer[..length as usize]).try_into()?;
+        let value: String = BSTR::from_wide(&buffer[..length as usize]).try_into().map_err(|_| WindowsError::Utf16ToStringConversionFailed)?;
         Ok(value)
     }
 
@@ -308,6 +310,7 @@ impl Transform {
         activate: IMFActivate,
         input_type: &mut Option<IMFMediaType>,
         output_type: &mut Option<IMFMediaType>,
+        runtime: &impl Runtime,
     ) -> Result<(Self, mpsc::Receiver<UnsafeSend<IMFSample>>)> {
         println!("Trying MFT: {}", Self::get_name(&activate)?);
 
@@ -324,9 +327,7 @@ impl Transform {
         unsafe { transform.GetStreamCount(&mut input_streams, &mut output_streams)? };
 
         if input_streams != 1 || output_streams != 1 {
-            return Err(anyhow!(
-                "Expected 1 input and 1 output stream for video encoder"
-            ));
+            return Err(WindowsError::InvalidStreamCount);
         }
 
         let mut input_ids = [0; 1];
@@ -344,11 +345,11 @@ impl Transform {
 
         {
             let Some(input_type) = &input_type else {
-                return Err(anyhow!("Input type is None"));
+                return Err(WindowsError::InputTypeNone);
             };
 
             let Some(output_type) = &output_type else {
-                return Err(anyhow!("Output type is None"));
+                return Err(WindowsError::OutputTypeNone);
             };
 
             unsafe { transform.SetOutputType(output_id, output_type, 0)? };
@@ -366,7 +367,7 @@ impl Transform {
             let generator: UnsafeSend<IMFMediaEventGenerator> =
                 transform.cast::<IMFMediaEventGenerator>()?.into();
 
-            let mut rx = generator.get_events();
+            let mut rx = generator.get_events(runtime);
 
             unsafe { transform.ProcessMessage(MFT_MESSAGE_NOTIFY_START_OF_STREAM, 0)? };
 
@@ -375,7 +376,7 @@ impl Transform {
             let transform = UnsafeSend(transform);
 
             // event loop
-            tokio::spawn(async move {
+            runtime.spawn_ret(async move {
                 let mut sample_rx = sample_rx;
                 while let Some(event) = rx.recv().await {
                     match event {
@@ -429,8 +430,8 @@ impl Transform {
             Ok((
                 Self {
                     pipeline: Pipeline::Async { sample_tx },
-                    input_type: UnsafeSend(input_type.take().context("Input type is None")?),
-                    output_type: UnsafeSend(output_type.take().context("Output type is None")?),
+                    input_type: UnsafeSend(input_type.take().ok_or(WindowsError::InputTypeNone)?),
+                    output_type: UnsafeSend(output_type.take().ok_or(WindowsError::OutputTypeNone)?),
                 },
                 output_rx,
             ))
@@ -446,8 +447,8 @@ impl Transform {
                         output_id,
                         output_info,
                     },
-                    input_type: UnsafeSend(input_type.take().context("Input type is None")?),
-                    output_type: UnsafeSend(output_type.take().context("Output type is None")?),
+                    input_type: UnsafeSend(input_type.take().ok_or(WindowsError::InputTypeNone)?),
+                    output_type: UnsafeSend(output_type.take().ok_or(WindowsError::OutputTypeNone)?),
                 },
                 output_rx,
             ))
@@ -459,7 +460,7 @@ impl Transform {
             Pipeline::Async { sample_tx } => sample_tx
                 .send(sample)
                 .await
-                .map_err(|e| anyhow!("Failed to send video sample: {}", e)),
+                .map_err(|e| WindowsError::SampleSendFailed(e.to_string())),
             Pipeline::Sync {
                 output_tx,
                 transform,
@@ -475,7 +476,7 @@ impl Transform {
                             continue;
                         }
                         Err(err) => {
-                            if let Ok(err) = err.downcast::<windows_core::Error>() {
+                            if let WindowsError::Windows(err) = err {
                                 if err.code() == MF_E_TRANSFORM_NEED_MORE_INPUT {
                                     return Ok(());
                                 } else {
@@ -534,7 +535,7 @@ impl Drop for Transform {
                         continue;
                     }
                     Err(err) => {
-                        if let Ok(err) = err.downcast::<windows_core::Error>() {
+                        if let WindowsError::Windows(err) = err {
                             if err.code() == MF_E_TRANSFORM_NEED_MORE_INPUT {
                                 return;
                             } else {

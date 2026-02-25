@@ -1,4 +1,4 @@
-use anyhow::Result;
+use crate::error::Result;
 
 // an utility to calculate frame repeating / discarding to keep constant frame rate
 pub struct Cfr<T> {

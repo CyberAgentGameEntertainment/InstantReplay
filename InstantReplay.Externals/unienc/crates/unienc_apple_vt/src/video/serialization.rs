@@ -15,7 +15,7 @@ use objc2_core_media::{
     CMVideoFormatDescriptionGetH264ParameterSetAtIndex,
 };
 
-use crate::{video::VideoEncodedData, OsStatus};
+use crate::{video::VideoEncodedData, error::OsStatusExt};
 
 #[derive(Encode, Decode, Clone, Copy, Debug, PartialEq)]
 struct CMTimeForSerialization {

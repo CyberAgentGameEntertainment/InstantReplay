@@ -1,4 +1,3 @@
-use anyhow::Result;
 use bincode::{Decode, Encode};
 use jni::{
     objects::{JByteArray, JObject, JString, JValue},
@@ -6,8 +5,11 @@ use jni::{
     JNIEnv,
 };
 use std::{collections::HashMap, fmt::Display, sync::Arc, time::Duration};
+use std::pin::Pin;
+use std::task::{Context, Poll};
 use unienc_common::{EncodedData, UniencSampleKind, VideoFrameBgra32};
 
+use crate::error::{AndroidError, Result};
 use crate::java::*;
 
 /// Inner struct for MediaCodec
@@ -123,7 +125,7 @@ impl MediaCodec {
 
         let image = result.l()?;
         if image.is_null() {
-            return Err(anyhow::anyhow!("Image is null"));
+            return Err(AndroidError::ImageNull);
         }
 
         // Get width and height
@@ -733,9 +735,33 @@ pub(crate) async fn pull_encoded_data_with_codec(
             }
         }
         if sleep {
-            tokio::task::yield_now().await;
+            yield_now().await;
         }
     }
+}
+pub async fn yield_now() {
+    struct YieldNow {
+        yielded: bool,
+    }
+
+    impl Future for YieldNow {
+        type Output = ();
+
+        fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<()> {
+
+            if self.yielded {
+                return Poll::Ready(());
+            }
+
+            self.yielded = true;
+
+            cx.waker().wake_by_ref();
+
+            Poll::Pending
+        }
+    }
+
+    YieldNow { yielded: false }.await;
 }
 
 pub(crate) fn format_to_map(
@@ -978,7 +1004,7 @@ impl ImageWriter {
             .l()?;
 
         if image.is_null() {
-            return Err(anyhow::anyhow!("dequeueInputImage returned null"));
+            return Err(AndroidError::DequeueImageNull);
         }
 
         let image_ref = SafeGlobalRef::new(env, image)?;
@@ -1038,7 +1064,7 @@ impl ImageWriterImage {
             .l()?;
 
         if hardware_buffer.is_null() {
-            return Err(anyhow::anyhow!("getHardwareBuffer returned null"));
+            return Err(AndroidError::HardwareBufferNull);
         }
 
         // Convert Java HardwareBuffer to native AHardwareBuffer*
@@ -1052,9 +1078,7 @@ impl ImageWriterImage {
         env.call_method(&hardware_buffer, "close", "()V", &[])?;
 
         if ahb.is_null() {
-            return Err(anyhow::anyhow!(
-                "AHardwareBuffer_fromHardwareBuffer returned null"
-            ));
+            return Err(AndroidError::AHardwareBufferNull);
         }
 
         Ok(ahb)
@@ -1077,10 +1101,7 @@ pub fn write_bgra_to_yuv_planes_with_padding(
     planes: &[ImagePlane],
 ) -> Result<()> {
     if planes.len() != 3 {
-        return Err(anyhow::anyhow!(
-            "Unsupported number of planes: {}",
-            planes.len()
-        ));
+        return Err(AndroidError::UnsupportedPlaneCount(planes.len()));
     }
 
     let (y_data, u_data, v_data) = sample.to_yuv420_planes(Some((padded_width, padded_height)))?;
@@ -1163,7 +1184,7 @@ pub(crate) fn map_to_format<'a>(
                     &[JValue::Object(&byte_array)],
                 )?
                 else {
-                    return Err(anyhow::anyhow!("Failed to create byte buffer"));
+                    return Err(AndroidError::ByteBufferCreationFailed);
                 };
 
                 env.call_method(

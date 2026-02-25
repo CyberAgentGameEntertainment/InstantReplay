@@ -1,20 +1,64 @@
-use unienc_common::{
-    buffer::SharedBuffer, AudioSample, CompletionHandle, EncodedData, Encoder, EncoderInput,
-    EncoderOutput, EncodingSystem, Muxer, MuxerInput, VideoFrame, VideoFrameBgra32, VideoSample,
-};
+use unienc_common::{buffer::SharedBuffer, AudioSample, CompletionHandle, EncodedData, Encoder, EncoderInput, EncoderOutput, EncodingSystem, Muxer, MuxerInput, VideoFrame, VideoFrameBgra32, VideoSample};
 
 use unienc::PlatformEncodingSystem;
+
+#[derive(Copy, Clone)]
+pub struct VideoEncoderOptions {
+    pub width: u32,
+    pub height: u32,
+    pub fps_hint: u32,
+    pub bitrate: u32,
+}
+
+#[derive(Copy, Clone)]
+pub struct AudioEncoderOptions {
+    pub sample_rate: u32,
+    pub channels: u32,
+    pub bitrate: u32,
+}
+
+impl unienc::VideoEncoderOptions for VideoEncoderOptions {
+    fn width(&self) -> u32 {
+        self.width
+    }
+
+    fn height(&self) -> u32 {
+        self.height
+    }
+
+    fn fps_hint(&self) -> u32 {
+        self.fps_hint
+    }
+
+    fn bitrate(&self) -> u32 {
+        self.bitrate
+    }
+}
+
+impl unienc::AudioEncoderOptions for AudioEncoderOptions {
+    fn sample_rate(&self) -> u32 {
+        self.sample_rate
+    }
+
+    fn channels(&self) -> u32 {
+        self.channels
+    }
+
+    fn bitrate(&self) -> u32 {
+        self.bitrate
+    }
+}
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_e2e() {
     test_e2e_typed(PlatformEncodingSystem::new(
-        &unienc::VideoEncoderOptionsNative {
+        &VideoEncoderOptions {
             width: 1280,
             height: 720,
             fps_hint: 5,
             bitrate: 1000000,
         },
-        &unienc::AudioEncoderOptionsNative {
+        &AudioEncoderOptions {
             sample_rate: 48000,
             channels: 2,
             bitrate: 128000,
