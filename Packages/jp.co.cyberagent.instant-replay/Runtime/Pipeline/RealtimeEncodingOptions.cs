@@ -55,6 +55,17 @@ namespace InstantReplay
 
         public bool ForceReadback { get; set; }
 
+        /// <summary>
+        ///     Storage path for disk-based frame buffer. When set, frames are written to disk instead of memory.
+        ///     Null or empty uses the default in-memory buffer.
+        /// </summary>
+        public string DiskBufferStoragePath { get; set; }
+
+        /// <summary>
+        ///     Maximum disk usage in bytes for the disk buffer. Only used when DiskBufferStoragePath is set.
+        /// </summary>
+        public long MaxDiskUsageBytes { get; set; }
+
         public static ref readonly RealtimeEncodingOptions Default => ref DefaultValue; 
         private static readonly RealtimeEncodingOptions DefaultValue =
             new()

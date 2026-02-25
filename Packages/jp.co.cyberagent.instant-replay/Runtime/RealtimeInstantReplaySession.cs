@@ -18,7 +18,7 @@ namespace InstantReplay
     public class RealtimeInstantReplaySession : IDisposable
     {
         private readonly AudioSampleProviderSubscription _audioPipeline;
-        private readonly BoundedEncodedFrameBuffer _buffer;
+        private readonly IEncodedFrameBuffer _buffer;
         private readonly EncodingSystem _encodingSystem;
         private readonly object _lock = new();
         private readonly TemporalController _temporalController = new();
@@ -69,7 +69,21 @@ namespace InstantReplay
             var encodingSystem = _encodingSystem = new EncodingSystem(options.VideoOptions, options.AudioOptions);
             var videoEncoder = encodingSystem.CreateVideoEncoder();
             var audioEncoder = encodingSystem.CreateAudioEncoder();
-            var buffer = _buffer = new BoundedEncodedFrameBuffer(options.MaxMemoryUsageBytesForCompressedFrames);
+            IEncodedFrameBuffer buffer;
+            if (!string.IsNullOrEmpty(options.DiskBufferStoragePath))
+            {
+                buffer = new DiskEncodedFrameBuffer(
+                    options.DiskBufferStoragePath,
+                    options.MaxDiskUsageBytes,
+                    options.VideoOptions,
+                    options.AudioOptions);
+            }
+            else
+            {
+                buffer = new BoundedEncodedFrameBuffer(options.MaxMemoryUsageBytesForCompressedFrames);
+            }
+
+            _buffer = buffer;
 
             // ReSharper disable once ConvertToLocalFunction
             Action<LazyVideoFrameData> onLazyVideoFrameDataDropped = async static dropped =>
@@ -97,7 +111,7 @@ namespace InstantReplay
                                 options.VideoInputQueueSize,
                                 onLazyVideoFrameDataDropped,
                                 new VideoEncoderInput(videoEncoder,
-                                    new BoundedEncodedDataBufferVideoInput(buffer).AsAsync())))));
+                                    new EncodedFrameBufferVideoInput(buffer).AsAsync())))));
             }
             else
             {
@@ -122,7 +136,7 @@ namespace InstantReplay
                                     options.VideoInputQueueSize,
                                     onLazyVideoFrameDataDropped,
                                     new VideoEncoderInput(videoEncoder,
-                                        new BoundedEncodedDataBufferVideoInput(buffer).AsAsync()))))));
+                                        new EncodedFrameBufferVideoInput(buffer).AsAsync()))))));
             }
 
             var audioInputQueueSizeSeconds = options.AudioInputQueueSizeSeconds ?? 1.0;
@@ -138,7 +152,7 @@ namespace InstantReplay
                     options.AudioLagAdjustmentThreshold).AsInput(
                     new PcmAudioFrameDroppingChannelInput(audioInputQueueSizeSamples,
                         new AudioEncoderInput(audioEncoder,
-                            new BoundedEncodedDataBufferAudioInput(buffer).AsAsync()))));
+                            new EncodedFrameBufferAudioInput(buffer).AsAsync()))));
 
             _temporalController.Resume();
             State = SessionState.Recording;
@@ -237,6 +251,8 @@ namespace InstantReplay
                 await MuxSegmentAsync(muxer, videoFrames, audioFrames);
 
                 State = SessionState.Completed;
+                if (_buffer is DiskEncodedFrameBuffer diskBuffer)
+                    diskBuffer.CleanupStorage();
                 return outputPath;
             }
             catch (Exception)

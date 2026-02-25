@@ -12,7 +12,7 @@ namespace InstantReplay
     /// <summary>
     ///     Circular buffer for encoded frames with memory bounds.
     /// </summary>
-    internal class BoundedEncodedFrameBuffer : IDisposable
+    internal class BoundedEncodedFrameBuffer : IEncodedFrameBuffer
     {
         [ThreadStatic] private static List<EncodedFrame> _tempFrames;
         private readonly List<EncodedFrame> _audioMetadata = new();
