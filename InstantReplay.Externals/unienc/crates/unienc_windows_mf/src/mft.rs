@@ -15,7 +15,6 @@ use unienc_common::{Runtime, SpawnExt};
 
 pub trait MediaEventGeneratorCustom {
     fn get_event(&self) -> impl Future<Output = Result<UnsafeSend<IMFMediaEvent>>>;
-    fn get_events(&self, runtime: &impl Runtime) -> mpsc::Receiver<Result<UnsafeSend<IMFMediaEvent>>>;
 }
 
 impl MediaEventGeneratorCustom for IMFMediaEventGenerator {
@@ -45,30 +44,6 @@ impl MediaEventGeneratorCustom for IMFMediaEventGenerator {
                 Err(_) => Err(WindowsError::MediaEventReceiveFailed),
             }
         }
-    }
-
-    fn get_events(&self, runtime: &impl Runtime) -> mpsc::Receiver<Result<UnsafeSend<IMFMediaEvent>>> {
-        let (tx, rx) = mpsc::channel::<Result<UnsafeSend<IMFMediaEvent>>>(32);
-
-        let generator: UnsafeSend<IMFMediaEventGenerator> = UnsafeSend((*self).clone());
-
-        runtime.spawn(async move {
-            loop {
-                match generator.get_event().await {
-                    Ok(event) => {
-                        if tx.send(Ok(event)).await.is_err() {
-                            break; // Receiver dropped
-                        }
-                    }
-                    Err(e) => {
-                        let _ = tx.send(Err(e)).await;
-                        break;
-                    }
-                }
-            }
-        });
-
-        rx
     }
 }
 
@@ -105,8 +80,6 @@ where
         if let Some(on_invoke) = self.on_invoke.take() {
             on_invoke(result);
         }
-        /*
-         */
         Ok(())
     }
 }
@@ -147,11 +120,16 @@ fn process_output(
     }
 
     let mut status = 0;
-    unsafe { transform.ProcessOutput(0, &mut buffers, &mut status) }?;
+    let result = unsafe { transform.ProcessOutput(0, &mut buffers, &mut status) };
 
     let buffer = &mut buffers[0];
 
-    let sample = buffer.pSample.take().ok_or(WindowsError::OutputGetFailed)?;
+    let sample = unsafe { ManuallyDrop::take(&mut buffer.pSample) };
+    drop(unsafe { ManuallyDrop::take(&mut buffer.pEvents) });
+
+    result?;
+
+    let sample = sample.ok_or(WindowsError::OutputGetFailed)?;
 
     Ok(sample.into())
 }
@@ -223,13 +201,13 @@ fn enum_mft(
     };
 
     let activates = if num_activate > 0 {
-        unsafe {
-            std::slice::from_raw_parts(activate, num_activate as usize)
-                .iter()
-                .flatten()
-                .cloned()
+        let activates = unsafe {
+            std::slice::from_raw_parts_mut(activate, num_activate as usize)
+                .iter_mut()
+                .filter_map(Option::take)
                 .collect::<Vec<_>>()
-        }
+        };
+        activates
     } else {
         vec![]
     };
@@ -367,19 +345,16 @@ impl Transform {
             let generator: UnsafeSend<IMFMediaEventGenerator> =
                 transform.cast::<IMFMediaEventGenerator>()?.into();
 
-            let mut rx = generator.get_events(runtime);
-
             unsafe { transform.ProcessMessage(MFT_MESSAGE_NOTIFY_START_OF_STREAM, 0)? };
 
             let (sample_tx, sample_rx) = mpsc::channel::<UnsafeSend<IMFSample>>(32);
 
             let transform = UnsafeSend(transform);
 
-            // event loop
             runtime.spawn_ret(async move {
                 let mut sample_rx = sample_rx;
-                while let Some(event) = rx.recv().await {
-                    match event {
+                loop {
+                    match generator.get_event().await {
                         Ok(event) => {
                             let event_type: u32 = unsafe { event.GetType()? };
                             match MF_EVENT_TYPE(event_type as i32) {
@@ -410,7 +385,7 @@ impl Transform {
                                 #[allow(non_upper_case_globals)]
                                 METransformDrainComplete => {
                                     println!("Transform drain complete");
-                                    // end
+                                    // end - generator and transform are dropped here
                                     break;
                                 }
                                 _ => {
