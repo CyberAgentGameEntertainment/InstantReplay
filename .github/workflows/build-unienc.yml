@@ -36,7 +36,9 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.arch }}-pc-windows
-          path: InstantReplay.Externals/unienc/target/${{ matrix.arch }}-pc-windows-msvc/${{ env._RUST_BUILD_CONFIG }}/libunienc_c.dll
+          path: |
+            InstantReplay.Externals/unienc/target/${{ matrix.arch }}-pc-windows-msvc/${{ env._RUST_BUILD_CONFIG }}/libunienc_c.dll
+            InstantReplay.Externals/unienc/target/${{ matrix.arch }}-pc-windows-msvc/${{ env._RUST_BUILD_CONFIG }}/unienc_c.pdb
           retention-days: 1
   build-android:
     name: Build unienc (Android)
