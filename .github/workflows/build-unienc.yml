@@ -173,22 +173,36 @@ jobs:
           name: wasm32-unknown-emscripten
           path: InstantReplay.Externals/unienc/target/wasm32-unknown-emscripten/${{ env._RUST_BUILD_CONFIG }}-wasm/libunienc_c.a
           retention-days: 1
-  update-unity-native:
-    name: Push unienc native libraries
-    needs: [build-wasm, build-windows, build-android, build-ios, build-macos, build-linux, lipo-macos]
+  update-tpn:
+    name: Update third-party notices
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: 'true'
-      - uses: actions/download-artifact@v4
-        with:
-          path: ./Packages/jp.co.cyberagent.instant-replay/UniEnc/Plugins/
       - run: |
           cargo install cargo-about --locked
           cargo about generate about.hbs > ../../THIRD-PARTY-NOTICES.md
         working-directory: InstantReplay.Externals/unienc
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ~third-party-notices
+          path: InstantReplay.Externals/unienc/THIRD-PARTY-NOTICES.md
+  update-unity-native:
+    name: Push unienc native libraries
+    needs: [build-wasm, build-windows, build-android, build-ios, build-macos, build-linux, lipo-macos, update-tpn]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: ~third-party-notices
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: '[a-z]*'
+          path: ./Packages/jp.co.cyberagent.instant-replay/UniEnc/Plugins/
       - run: |
           git add ./Packages/jp.co.cyberagent.instant-replay/UniEnc/Plugins
           git add ./THIRD-PARTY-NOTICES.md
