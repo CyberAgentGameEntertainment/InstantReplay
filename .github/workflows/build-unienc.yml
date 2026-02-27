@@ -188,7 +188,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: ~third-party-notices
-          path: InstantReplay.Externals/unienc/THIRD-PARTY-NOTICES.md
+          path: ./THIRD-PARTY-NOTICES.md
   update-unity-native:
     name: Push unienc native libraries
     needs: [build-wasm, build-windows, build-android, build-ios, build-macos, build-linux, lipo-macos, update-tpn]
