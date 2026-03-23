@@ -176,7 +176,6 @@ struct Stream {
 
 impl Stream {
     pub fn new(stream: IMFStreamSink, runtime: &impl Runtime) -> Result<(Self, oneshot::Receiver<()>)> {
-        let mut ev_rx = stream.get_events(runtime);
         let stream = UnsafeSend(stream);
         let stream_cap = UnsafeSend(stream.clone());
 
@@ -186,32 +185,30 @@ impl Stream {
         runtime.spawn_ret(async move {
             let mut sample_rx = sample_rx;
             let mut finish_tx = Some(finish_tx);
-            while let Some(event) = ev_rx.recv().await {
-                if let Ok(event) = event {
-                    let event_type: u32 = unsafe { event.GetType()? };
-                    match MF_EVENT_TYPE(event_type as i32) {
-                        #[allow(non_upper_case_globals)]
-                        MEStreamSinkRequestSample => {
-                            if let Some(sample) = sample_rx.recv().await {
-                                unsafe { stream_cap.ProcessSample(&*sample)? };
-                            } else {
-                                unsafe {
-                                    stream_cap.PlaceMarker(
-                                        MFSTREAMSINK_MARKER_ENDOFSEGMENT,
-                                        std::ptr::null(),
-                                        std::ptr::null(),
-                                    )?
-                                };
-                                if let Some(finish_tx) = finish_tx.take() {
-                                    finish_tx
-                                        .send(())
-                                        .map_err(|_e| WindowsError::FinishSignalSendFailed)?
-                                };
-                            }
+            while let Ok(event) = stream_cap.get_event().await {
+                let event_type: u32 = unsafe { event.GetType()? };
+                match MF_EVENT_TYPE(event_type as i32) {
+                    #[allow(non_upper_case_globals)]
+                    MEStreamSinkRequestSample => {
+                        if let Some(sample) = sample_rx.recv().await {
+                            unsafe { stream_cap.ProcessSample(&*sample)? };
+                        } else {
+                            unsafe {
+                                stream_cap.PlaceMarker(
+                                    MFSTREAMSINK_MARKER_ENDOFSEGMENT,
+                                    std::ptr::null(),
+                                    std::ptr::null(),
+                                )?
+                            };
+                            if let Some(finish_tx) = finish_tx.take() {
+                                finish_tx
+                                    .send(())
+                                    .map_err(|_e| WindowsError::FinishSignalSendFailed)?
+                            };
                         }
-                        _ => {
-                            println!("Unhandled media sink event type: {:?}", event_type);
-                        }
+                    }
+                    _ => {
+                        println!("Unhandled media sink event type: {:?}", event_type);
                     }
                 }
             }
