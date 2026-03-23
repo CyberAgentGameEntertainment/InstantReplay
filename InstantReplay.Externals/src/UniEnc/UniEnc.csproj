@@ -36,7 +36,7 @@
         <UniEncNativeArtifactTarget Include="x86_64-pc-windows" Rid="win-x64" Ext=".dll"/>
         <UniEncNativeArtifactTarget Include="x86_64-unknown-linux" Rid="linux-x64" Ext=".so"/>
 
-        <Content Include="@(UniEncNativeArtifactTarget-&gt;'..\..\..\Packages\jp.co.cyberagent.instant-replay\UniEnc\Plugins\%(Identity)\libunienc%(Ext)')">
+        <Content Include="@(UniEncNativeArtifactTarget-&gt;'..\..\..\Packages\jp.co.cyberagent.instant-replay\UniEnc\Plugins\%(Identity)\libunienc_c%(Ext)')">
             <Visible>true</Visible>
             <Pack>true</Pack>
             <PackagePath>runtimes/%(Rid)/native/</PackagePath>
