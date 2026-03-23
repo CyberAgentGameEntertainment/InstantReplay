@@ -10,7 +10,7 @@ internal static class NativeLibraryResolver
     {
         NativeLibrary.SetDllImportResolver(typeof(EncodingSystem).Assembly, (name, _, _) =>
         {
-            if (!name.Contains("libunienc"))
+            if (!name.Contains("libunienc_c"))
                 return nint.Zero;
 
             string ext;
