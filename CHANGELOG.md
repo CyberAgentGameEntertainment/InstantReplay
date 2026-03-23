@@ -1,3 +1,17 @@
+## [1.5.0] - 2026/02/25
+
+### Added
+
+- Added WebGL / WebGPU support.
+- Added `EXCLUDE_INSTANTREPLAY` scripting symbol to exclude InstantReplay from the build.
+
+### Fixed
+
+- Fixed macOS universal standalone player build fails to run due to lack of universal binary of UniEnc.
+- Fixed crash on Windows environment with AMD GPU.
+- Fixed OOB crash when the input frame dimentions are odd.
+- Fixed memory leaks on Windows.
+
 ## [1.4.2] - 2026/01/08
 
 ### Fixed
