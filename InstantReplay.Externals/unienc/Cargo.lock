@@ -1178,6 +1178,8 @@ name = "unienc"
 version = "1.4.1"
 dependencies = [
  "bincode",
+ "blocking",
+ "futures",
  "rand",
  "tokio",
  "unienc_android_mc",

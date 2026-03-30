@@ -27,6 +27,8 @@ unienc_webcodecs = { workspace = true }
 [dev-dependencies]
 tokio = "1.48.0"
 rand = "0.9.1"
+futures = { version = "0.3.31", features = ["thread-pool"] }
+blocking = "1.6.2"
 
 [features]
 default = []

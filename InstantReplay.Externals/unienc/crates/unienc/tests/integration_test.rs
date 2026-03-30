@@ -1,4 +1,14 @@
-use unienc_common::{buffer::SharedBuffer, AudioSample, CompletionHandle, EncodedData, Encoder, EncoderInput, EncoderOutput, EncodingSystem, Muxer, MuxerInput, VideoFrame, VideoFrameBgra32, VideoSample};
+use futures::channel::oneshot::Canceled;
+use futures::executor;
+use futures::executor::ThreadPool;
+use futures::task::SpawnExt;
+use rand::RngCore;
+use std::pin::Pin;
+use unienc_common::{
+    AudioSample, CompletionHandle, EncodedData, Encoder, EncoderInput, EncoderOutput,
+    EncodingSystem, Muxer, MuxerInput, Spawn, SpawnBlocking, VideoFrame, VideoFrameBgra32,
+    VideoSample, buffer::SharedBuffer,
+};
 
 use unienc::PlatformEncodingSystem;
 
@@ -49,25 +59,69 @@ impl unienc::AudioEncoderOptions for AudioEncoderOptions {
     }
 }
 
-#[tokio::test(flavor = "multi_thread")]
-async fn test_e2e() {
-    test_e2e_typed(PlatformEncodingSystem::new(
-        &VideoEncoderOptions {
-            width: 1280,
-            height: 720,
-            fps_hint: 5,
-            bitrate: 1000000,
-        },
-        &AudioEncoderOptions {
-            sample_rate: 48000,
-            channels: 2,
-            bitrate: 128000,
-        },
-    ))
-    .await;
+#[derive(Clone)]
+struct Runtime {
+    pool: ThreadPool,
 }
 
-async fn test_e2e_typed<T: EncodingSystem + Send>(encoding_system: T) {
+impl Spawn for Runtime {
+    fn spawn(&self, future: impl Future<Output = ()> + Send + 'static) {
+        self.pool
+            .spawn(future)
+            .expect("Failed to spawn task on threaded executor");
+    }
+}
+
+impl SpawnBlocking for Runtime {
+    fn spawn_blocking<Result: Send + 'static>(
+        &self,
+        f: impl FnOnce() -> Result + Send + 'static,
+    ) -> Pin<Box<dyn Future<Output = Result> + Send + 'static>> {
+        Box::pin(blocking::unblock(f))
+    }
+}
+
+impl unienc_common::Runtime for Runtime {}
+
+impl Runtime {
+    pub fn spawn_fut<Output: Send + 'static>(
+        &self,
+        future: impl Future<Output = Output> + Send + 'static,
+    ) -> impl Future<Output = Result<Output, Canceled>> + Send + 'static {
+        let (tx, rx) = futures::channel::oneshot::channel();
+        self.spawn(async move {
+            let _ = tx.send(future.await);
+        });
+
+        rx
+    }
+}
+
+#[test]
+fn test_e2e() {
+    let pool = ThreadPool::new().expect("Failed to build pool");
+    let runtime = Runtime { pool: pool.clone() };
+
+    executor::block_on(test_e2e_typed(
+        PlatformEncodingSystem::new(
+            &VideoEncoderOptions {
+                width: 1280,
+                height: 720,
+                fps_hint: 1,
+                bitrate: 1000000,
+            },
+            &AudioEncoderOptions {
+                sample_rate: 48000,
+                channels: 2,
+                bitrate: 128000,
+            },
+            runtime.clone(),
+        ),
+        runtime,
+    ));
+}
+
+async fn test_e2e_typed<T: EncodingSystem + Send>(encoding_system: T, runtime: Runtime) {
     let video_encoder = encoding_system.new_video_encoder().unwrap();
 
     let audio_encoder = encoding_system.new_audio_encoder().unwrap();
@@ -79,14 +133,14 @@ async fn test_e2e_typed<T: EncodingSystem + Send>(encoding_system: T) {
 
     let target_duration = 10.0;
 
-    let emit_video = tokio::spawn(async move {
-        let frames = (target_duration * 10.0) as u32;
+    let emit_video = runtime.spawn_fut(async move {
+        let frames = (target_duration * 1.0) as u32;
         for i in 0..frames {
-            let data = vec![0; 1280 * 720 * 4];
+            let mut data = vec![0; 1280 * 720 * 4];
 
             {
-                // let mut rng = rand::rng();
-                // rng.fill_bytes(&mut data);
+                let mut rng = rand::rng();
+                rng.fill_bytes(&mut data);
             }
 
             video_input
@@ -96,14 +150,14 @@ async fn test_e2e_typed<T: EncodingSystem + Send>(encoding_system: T) {
                         width: 1280,
                         height: 720,
                     }),
-                    timestamp: (i as f64) / 10.0 + 100.0,
+                    timestamp: (i as f64) / 1.0 + 100.0,
                 })
                 .await
                 .unwrap();
         }
     });
 
-    let emit_audio = tokio::spawn(async move {
+    let emit_audio = runtime.spawn_fut(async move {
         for i in 0..target_duration as u64 {
             let mut data = vec![0_i16; 48000 * 2];
             {
@@ -129,7 +183,7 @@ async fn test_e2e_typed<T: EncodingSystem + Send>(encoding_system: T) {
 
     let (mut video_input, mut audio_input, completion_handle) = muxer.get_inputs().unwrap();
 
-    let transfer_video = tokio::spawn(async move {
+    let transfer_video = runtime.spawn_fut(async move {
         while let Some(data) = video_output.pull().await.unwrap() {
             let encoded = bincode::encode_to_vec(data, bincode::config::standard()).unwrap();
             let (mut data, _size) =
@@ -141,7 +195,7 @@ async fn test_e2e_typed<T: EncodingSystem + Send>(encoding_system: T) {
         video_input.finish().await.unwrap();
     });
 
-    let transfer_audio = tokio::spawn(async move {
+    let transfer_audio = runtime.spawn_fut(async move {
         while let Some(data) = audio_output.pull().await.unwrap() {
             let encoded = bincode::encode_to_vec(data, bincode::config::standard()).unwrap();
             let (data, _size) =
