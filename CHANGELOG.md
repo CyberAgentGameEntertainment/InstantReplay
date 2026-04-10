@@ -1,3 +1,11 @@
+## [1.5.1] - 2026/04/10
+
+### Fixed
+
+- Fixed a crash on iOS and macOS caused by Metal command encoder conflicts during readback-free encoding.
+- Fixed produced MP4 files on Apple platforms (iOS/macOS) being unplayable in some video players due to incorrect audio format description handling.
+- Fixed UniEnc NuGet package failing to be released due to libray name mismatch.
+
 ## [1.5.0] - 2026/02/25
 
 ### Added
