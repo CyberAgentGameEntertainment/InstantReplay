@@ -43,7 +43,7 @@ pub struct AVFMuxerAudioInput {
     asbd: AudioStreamBasicDescription,
     tx: mpsc::Sender<Mutex<UnsafeSendRetained<CMSampleBuffer>>>,
     finish_rx: oneshot::Receiver<Result<()>>,
-    magic_cookie_applied: bool,
+    format_desc: Option<Retained<CMFormatDescription>>,
 }
 
 impl MuxerInput for AVFMuxerVideoInput {
@@ -68,9 +68,16 @@ impl MuxerInput for AVFMuxerAudioInput {
     type Data = AudioPacket;
 
     async fn push(&mut self, data: Self::Data) -> unienc_common::Result<()> {
+        let format_desc = match &self.format_desc {
+            Some(fd) => fd.clone(),
+            None => {
+                let fd = create_audio_format_desc(&data.magic_cookie, &mut self.asbd)?;
+                self.format_desc = Some(fd.clone());
+                fd
+            }
+        };
         let sample_buffer =
-            create_audio_sample_buffer(&data, &mut self.asbd, !self.magic_cookie_applied)?;
-        self.magic_cookie_applied = true;
+            create_audio_sample_buffer(&data, &format_desc)?;
         self.tx.send(Mutex::new(sample_buffer.into())).await.map_err(AppleError::from)?;
 
         Ok(())
@@ -213,11 +220,10 @@ impl AVFMuxer {
         }
 
         if !unsafe { writer.startWriting() } {
-            if unsafe { writer.status() } == AVAssetWriterStatus::Failed {
-                if let Some(err) = unsafe { writer.error() } {
+            if unsafe { writer.status() } == AVAssetWriterStatus::Failed
+                && let Some(err) = unsafe { writer.error() } {
                     return Err(AppleError::AssetWriterStartFailed(err.to_string()));
                 }
-            }
             return Err(AppleError::AssetWriterStartFailedUnknown);
         }
 
@@ -295,41 +301,37 @@ impl AVFMuxer {
                 asbd,
                 tx: audio_tx,
                 finish_rx: audio_finish_rx,
-                magic_cookie_applied: false,
+                format_desc: None,
             },
         })
     }
 }
 
-fn create_audio_sample_buffer(
-    audio: &AudioPacket,
+fn create_audio_format_desc(
+    magic_cookie: &[u8],
     asbd: &mut AudioStreamBasicDescription,
-    apply_magic_cookie: bool,
-) -> Result<Retained<CMSampleBuffer>> {
-    let format_desc = unsafe {
+) -> Result<Retained<CMFormatDescription>> {
+    unsafe {
         let mut format_desc: *const CMFormatDescription = std::ptr::null();
         objc2_core_media::CMAudioFormatDescriptionCreate(
             kCFAllocatorDefault,
             NonNull::new(asbd).unwrap(),
             0,
             std::ptr::null(),
-            if apply_magic_cookie {
-                audio.magic_cookie.len()
-            } else {
-                0
-            },
-            if apply_magic_cookie {
-                audio.magic_cookie.as_ptr() as *const c_void
-            } else {
-                std::ptr::null()
-            },
+            magic_cookie.len(),
+            magic_cookie.as_ptr() as *const c_void,
             None,
             NonNull::new(&mut format_desc).unwrap(),
         )
         .to_result()?;
-        Retained::from_raw(format_desc as _).unwrap()
-    };
+        Ok(Retained::from_raw(format_desc as _).unwrap())
+    }
+}
 
+fn create_audio_sample_buffer(
+    audio: &AudioPacket,
+    format_desc: &CMFormatDescription,
+) -> Result<Retained<CMSampleBuffer>> {
     let block_buffer = unsafe {
         let mut block_buffer: *mut objc2_core_media::CMBlockBuffer = std::ptr::null_mut();
 
@@ -374,7 +376,7 @@ fn create_audio_sample_buffer(
     }
 
     let sample_buffer = unsafe {
-        let timestamp = CMTime::new(audio.timestamp_in_samples as i64, asbd.mSampleRate as i32);
+        let timestamp = CMTime::new(audio.timestamp_in_samples as i64, audio.sample_rate as i32);
 
         let packet_desc = AudioStreamPacketDescription {
             mStartOffset: 0,
@@ -386,7 +388,7 @@ fn create_audio_sample_buffer(
         CMAudioSampleBufferCreateReadyWithPacketDescriptions(
             kCFAllocatorDefault,
             &block_buffer,
-            &format_desc,
+            format_desc,
             1_isize,
             timestamp,
             &packet_desc as *const _,
