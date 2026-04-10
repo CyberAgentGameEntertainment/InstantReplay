@@ -11,8 +11,8 @@ use objc2_core_foundation::{kCFAllocatorDefault, kCFBooleanTrue, CFDictionary};
 use objc2_core_video::{kCVPixelBufferMetalCompatibilityKey, kCVPixelFormatType_32BGRA, CVMetalTexture, CVMetalTextureCache, CVMetalTextureGetTexture, CVPixelBuffer, CVPixelBufferCreate};
 use objc2_foundation::NSString;
 use objc2_metal::{
-    MTLBuffer, MTLCommandBuffer, MTLCommandEncoder, MTLCullMode, MTLDevice, MTLIndexType,
-    MTLLibrary, MTLPixelFormat, MTLPrimitiveType, MTLRenderCommandEncoder,
+    MTLBuffer, MTLCommandBuffer, MTLCommandEncoder, MTLCommandQueue, MTLCullMode, MTLDevice,
+    MTLIndexType, MTLLibrary, MTLPixelFormat, MTLPrimitiveType, MTLRenderCommandEncoder,
     MTLRenderPassColorAttachmentDescriptor, MTLRenderPipelineColorAttachmentDescriptor,
     MTLRenderPipelineDescriptor, MTLRenderPipelineState, MTLResourceOptions, MTLSamplerAddressMode,
     MTLSamplerDescriptor, MTLSamplerMinMagFilter, MTLSamplerMipFilter, MTLTexture,
@@ -22,7 +22,7 @@ use objc2_metal::{
 use tokio::sync::oneshot;
 use unity_native_plugin::{
     graphics::{GfxDeviceEventType, UnityGraphics},
-    metal::objc2::{UnityGraphicsMetalV1, UnityGraphicsMetalV1Interface},
+    metal::objc2::{UnityGraphicsMetalV1Interface, UnityGraphicsMetalV2, UnityGraphicsMetalV2Interface},
 };
 
 use crate::error::{AppleError, Result, OsStatusExt};
@@ -38,7 +38,7 @@ pub(crate) fn is_initialized() -> bool {
 }
 
 struct GlobalContext {
-    metal: UnityGraphicsMetalV1,
+    metal: UnityGraphicsMetalV2,
     device: Retained<ProtocolObject<dyn MTLDevice>>,
     pipeline_state: Retained<ProtocolObject<dyn MTLRenderPipelineState>>,
     pipeline_state_srgb: Retained<ProtocolObject<dyn MTLRenderPipelineState>>,
@@ -85,7 +85,7 @@ extern "system" fn on_device_event(ev_type: GfxDeviceEventType) {
                 println!("unienc: reserved event id {event_id}");
 
                 let interfaces = unity_native_plugin::interface::UnityInterfaces::get();
-                let metal = interfaces.interface::<UnityGraphicsMetalV1>().unwrap();
+                let metal = interfaces.interface::<UnityGraphicsMetalV2>().unwrap();
                 let device = metal.metal_device().unwrap();
                 let library = device
                     .newLibraryWithSource_options_error(
@@ -262,7 +262,6 @@ pub(crate) fn custom_blit(
         .ok_or(AppleError::MetalNotInitialized)?
         .lock()
         .map_err(|e| AppleError::Other(e.to_string()))?;
-    let metal = context.metal;
     let device = &context.device;
 
     let mut cache: *mut CVMetalTextureCache = std::ptr::null_mut();
@@ -286,10 +285,17 @@ pub(crate) fn custom_blit(
 
     let shared_texture = SharedTexture::new(&cache, width as usize, height as usize, !is_gamma_workflow)?; // with gamma workflow, input is unorm with gamma color space
 
-    let command_buffer = metal
-        .current_command_buffer()
+    // Commit Unity's current command buffer to ensure all prior GPU work
+    // (including writes to the source texture) is submitted, and any active
+    // encoder is ended. Then create our own command buffer on Unity's queue
+    // so GPU execution order is guaranteed and resource tracking works.
+    let metal = context.metal;
+    metal.commit_current_command_buffer();
+    let command_queue = metal.command_queue()
         .ok_or(AppleError::CommandBufferNotAvailable)?;
-    metal.end_current_command_encoder();
+    let command_buffer = command_queue
+        .commandBuffer()
+        .ok_or(AppleError::CommandBufferNotAvailable)?;
 
     let color_attachment_desc = MTLRenderPassColorAttachmentDescriptor::new();
     color_attachment_desc.setTexture(Some(&shared_texture.metal_texture()));
@@ -401,6 +407,7 @@ pub(crate) fn custom_blit(
     let block_ptr = RcBlock::into_raw(block);
 
     unsafe { command_buffer.addCompletedHandler(block_ptr) };
+    command_buffer.commit();
     Ok(async move { rx.await.map_err(AppleError::from) })
 }
 
