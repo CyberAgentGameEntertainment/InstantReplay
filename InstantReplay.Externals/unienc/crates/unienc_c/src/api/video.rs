@@ -48,7 +48,7 @@ pub unsafe extern "C" fn unienc_video_encoder_push_shared_buffer(
 pub unsafe extern "C" fn unienc_video_encoder_push_blit_source(
     runtime: *mut Runtime,
     input: SendPtr<Mutex<Option<VideoEncoderInput>>>,
-    source_native_texture_ptr: *mut c_void,
+    texture_token: usize,
     width: u32,
     height: u32,
     graphics_format: u32,
@@ -60,7 +60,7 @@ pub unsafe extern "C" fn unienc_video_encoder_push_blit_source(
     user_data: SendPtr<c_void>,
 ) {
     let callback: UniencCallback = unsafe { std::mem::transmute(callback) };
-    if input.is_null() || source_native_texture_ptr.is_null() {
+    if input.is_null() {
         UniencError::invalid_input_error("Invalid input parameters")
             .apply_callback(callback, user_data);
         return;
@@ -88,29 +88,23 @@ pub unsafe extern "C" fn unienc_video_encoder_push_blit_source(
         // weak runtime for graphics event
         let weak = runtime.weak();
 
-        match <BlitSource as unienc::TryFromUnityNativeTexturePointer>::try_from_unity_native_texture_ptr(source_native_texture_ptr) {
-            Ok(blit_source) => {
-                let sample = VideoSample {
-                    frame: VideoFrame::BlitSource {
-                        source: blit_source,
-                        width,
-                        height,
-                        graphics_format,
-                        flip_vertically,
-                        is_gamma_workflow,
-                        event_issuer: Box::new(crate::unity::UniencGraphicsEventIssuer::new(
-                            unienc_issue_graphics_event_callback,
-                            weak
-                        )),
-                    },
-                    timestamp,
-                };
-                unsafe { video_encoder_push_video_sample(runtime, input, sample, callback, user_data) };
-            }
-            Err(err) => {
-                UniencError::from_common(err).apply_callback(callback, user_data);
-            }
-        }
+        let sample = VideoSample {
+            frame: VideoFrame::BlitSource {
+                texture_token,
+                width,
+                height,
+                graphics_format,
+                flip_vertically,
+                is_gamma_workflow,
+                event_issuer: Box::new(crate::unity::UniencGraphicsEventIssuer::new(
+                    unienc_issue_graphics_event_callback,
+                    weak
+                )),
+                _phantom: std::marker::PhantomData,
+            },
+            timestamp,
+        };
+        unsafe { video_encoder_push_video_sample(runtime, input, sample, callback, user_data) };
     }
 }
 

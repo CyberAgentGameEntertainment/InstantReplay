@@ -72,17 +72,19 @@ namespace InstantReplay
                 case LazyVideoFrameData.DataKind.BlitSource:
                 {
                     if (!value.BlitSource)
-                        throw new ArgumentException("Frame data is invalid", nameof(value));
+                        break;
 
+                    var textureHandle = TextureHandle.Alloc(value.BlitSource);
                     try
                     {
-                        await _videoEncoder.UnsafePushUnityFrameAsync(value.NativeBlitSourceHandle, (uint)value.Width,
+                        await _videoEncoder.UnsafePushUnityFrameAsync(textureHandle, (uint)value.Width,
                             (uint)value.Height, value.BlitSourceFormat, value.IsGammaWorkflow, value.Timestamp,
                             value.FlipVertically);
                     }
                     catch (ObjectDisposedException)
                     {
-                        // ignore
+                        // FFI call was not made — free the handle to avoid GCHandle leak.
+                        textureHandle.Free();
                     }
 
                     break;

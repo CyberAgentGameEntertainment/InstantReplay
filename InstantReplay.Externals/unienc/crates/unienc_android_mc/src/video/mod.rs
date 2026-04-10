@@ -1,7 +1,7 @@
 use jni::{objects::JValue, signature::ReturnType, sys::jint, JNIEnv};
 use std::sync::Arc;
 use std::time::Duration;
-use unienc_common::{Encoder, EncoderInput, EncoderOutput, VideoFrame, VideoSample};
+use unienc_common::{Encoder, EncoderInput, EncoderOutput, TryFromUnityNativeTexturePointer, VideoFrame, VideoSample};
 
 use crate::error::{AndroidError, OptionExt, Result};
 use crate::{java::*, VulkanTexture};
@@ -241,13 +241,14 @@ async fn push_video_impl<R: unienc_common::Runtime + 'static>(
             Ok(())
         }
         VideoFrame::BlitSource {
-            source,
+            texture_token,
             width,
             height,
             graphics_format,
             flip_vertically,
             is_gamma_workflow,
             event_issuer,
+            _phantom,
         } => {
             // Use HardwareBuffer mode for better compatibility with Tensor/Exynos SoCs
             if let MediaCodecVideoEncoderInputProcessor::Uninitialized(_) = &this.processor {
@@ -303,19 +304,22 @@ async fn push_video_impl<R: unienc_common::Runtime + 'static>(
             let runtime = this.runtime.clone();
 
             event_issuer.issue_graphics_event(
-                Box::new(move || {
-                    let image = source.tex;
-                    // Blit to hardware buffer and return the future
-                    let result = crate::vulkan::blit_to_hardware_buffer(
-                        &image,
-                        width,
-                        height,
-                        graphics_format,
-                        flip_vertically,
-                        is_gamma_workflow,
-                        &frame,
-                        runtime,
-                    );
+                Box::new(move |native_texture_ptr| {
+                    let result = crate::VulkanTexture::try_from_unity_native_texture_ptr(native_texture_ptr)
+                        .map_err(|_| AndroidError::NullVulkanTexture)
+                        .and_then(|texture| {
+                            let image = texture.tex;
+                            crate::vulkan::blit_to_hardware_buffer(
+                                &image,
+                                width,
+                                height,
+                                graphics_format,
+                                flip_vertically,
+                                is_gamma_workflow,
+                                &frame,
+                                runtime,
+                            )
+                        });
                     tx.send((result, frame))
                         .map_err(|_| AndroidError::RenderThreadSendFailed)
                         .unwrap();
@@ -323,6 +327,7 @@ async fn push_video_impl<R: unienc_common::Runtime + 'static>(
                 *crate::vulkan::EVENT_ID
                     .get()
                     .context("Event ID is not reserved")?,
+                texture_token,
             );
 
             let (blit_result, frame) = rx.await?;

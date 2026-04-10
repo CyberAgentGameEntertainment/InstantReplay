@@ -111,13 +111,14 @@ pub struct VideoSample<BlitSourceType> {
 pub enum VideoFrame<BlitSourceType> {
     Bgra32(VideoFrameBgra32),
     BlitSource{
-        source: BlitSourceType,
+        texture_token: usize,
         width: u32,
         height: u32,
         graphics_format: u32,
         flip_vertically: bool,
         is_gamma_workflow: bool,
         event_issuer: Box<dyn GraphicsEventIssuer + Send>,
+        _phantom: std::marker::PhantomData<BlitSourceType>,
     },
 }
 
@@ -200,7 +201,7 @@ pub trait EncoderInput: Send + 'static {
 }
 
 pub trait GraphicsEventIssuer: Send + 'static {
-    fn issue_graphics_event(&self, callback: Box<dyn FnOnce() + Send + 'static>, event_id: i32);
+    fn issue_graphics_event(&self, callback: Box<dyn FnOnce(*mut c_void) + Send + 'static>, event_id: i32, texture_token: usize);
 }
 
 pub trait EncoderOutput: Send {
