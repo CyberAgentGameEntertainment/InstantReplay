@@ -93,64 +93,82 @@ impl MediaFoundationMuxer {
         let runtime_clone = runtime.clone();
 
         runtime.spawn_ret(async move {
-            let video_type = video_type_rx.await??;
-            let audio_type = audio_type_rx.await??;
+            let mut finish_tx = Some(finish_tx);
 
-            let sink = unsafe { MFCreateMPEG4MediaSink(&*file, &*video_type, &*audio_type)? };
-            assert_eq!(
-                unsafe { sink.GetCharacteristics()? } & MEDIASINK_RATELESS,
-                MEDIASINK_RATELESS
-            );
-            let finalizable = sink.cast::<IMFFinalizableMediaSink>().ok();
-            let sink_count = unsafe { sink.GetStreamSinkCount()? };
-            assert_eq!(sink_count, 2);
-            let (video_stream, video_finish_rx) =
-                Stream::new(unsafe { sink.GetStreamSinkByIndex(0)? }, &runtime_clone)?;
-            let (audio_stream, audio_finish_rx) =
-                Stream::new(unsafe { sink.GetStreamSinkByIndex(1)? }, &runtime_clone)?;
+            let result: Result<()> = async {
+                let video_type = video_type_rx.await??;
+                let audio_type = audio_type_rx.await??;
 
-            if let Some(finalizable) = finalizable {
-                let finalizable = UnsafeSend(finalizable);
-                let sink = UnsafeSend(sink.clone());
-                runtime_clone.spawn_ret(async move {
-                    video_finish_rx.await.unwrap();
-                    audio_finish_rx.await.unwrap();
+                let sink = unsafe { MFCreateMPEG4MediaSink(&*file, &*video_type, &*audio_type)? };
+                assert_eq!(
+                    unsafe { sink.GetCharacteristics()? } & MEDIASINK_RATELESS,
+                    MEDIASINK_RATELESS
+                );
+                let finalizable = sink.cast::<IMFFinalizableMediaSink>().ok();
+                let sink_count = unsafe { sink.GetStreamSinkCount()? };
+                assert_eq!(sink_count, 2);
+                let (video_stream, video_finish_rx) =
+                    Stream::new(unsafe { sink.GetStreamSinkByIndex(0)? }, &runtime_clone)?;
+                let (audio_stream, audio_finish_rx) =
+                    Stream::new(unsafe { sink.GetStreamSinkByIndex(1)? }, &runtime_clone)?;
 
-                    let finalizable_clone = UnsafeSend(finalizable.clone());
-                    let callback: IMFAsyncCallback = AsyncCallback::new(move |result| unsafe {
-                        finalizable_clone.EndFinalize(result.unwrap()).unwrap();
-                        sink.Shutdown().unwrap();
-                        finish_tx.send(Ok(())).unwrap();
-                    })
-                    .into();
+                if let Some(finalizable) = finalizable {
+                    let finalizable = UnsafeSend(finalizable);
+                    let sink = UnsafeSend(sink.clone());
+                    let finish_tx = finish_tx.take().unwrap();
+                    runtime_clone.spawn_ret(async move {
+                        video_finish_rx.await.unwrap();
+                        audio_finish_rx.await.unwrap();
 
-                    unsafe { finalizable.BeginFinalize(&callback, Option::<&IUnknown>::None)? };
+                        let finalizable_clone = UnsafeSend(finalizable.clone());
+                        let (done_tx, done_rx) = oneshot::channel::<()>();
+                        let callback: IMFAsyncCallback = AsyncCallback::new(move |result| unsafe {
+                            finalizable_clone.EndFinalize(result.unwrap()).unwrap();
+                            done_tx.send(()).unwrap();
+                        })
+                        .into();
 
-                    Result::<()>::Ok(())
-                });
-            } else {
-                runtime_clone.spawn_ret(async move {
-                    video_finish_rx.await.unwrap();
-                    audio_finish_rx.await.unwrap();
-                    finish_tx.send(Ok(()))
-                });
+                        let result = match unsafe {
+                            finalizable.BeginFinalize(&callback, Option::<&IUnknown>::None)
+                        } {
+                            Ok(()) => done_rx.await.map(|()| ()).map_err(|e| WindowsError::Other(e.to_string())),
+                            Err(e) => Err(e.into()),
+                        };
+
+                        let _ = unsafe { sink.Shutdown() };
+                        let _ = finish_tx.send(result);
+                    });
+                } else {
+                    let finish_tx = finish_tx.take().unwrap();
+                    runtime_clone.spawn_ret(async move {
+                        video_finish_rx.await.unwrap();
+                        audio_finish_rx.await.unwrap();
+                        let _ = finish_tx.send(Ok(()));
+                    });
+                }
+
+                let presentation_clock = unsafe { MFCreatePresentationClock()? };
+                let time_source = unsafe { MFCreateSystemTimeSource()? };
+                unsafe { presentation_clock.SetTimeSource(&time_source)? };
+                unsafe { sink.SetPresentationClock(&presentation_clock)? };
+
+                unsafe { presentation_clock.Start(0)? };
+
+                video_stream_tx
+                    .send(Ok(video_stream))
+                    .map_err(|_| WindowsError::StreamSendFailed)?;
+                audio_stream_tx
+                    .send(Ok(audio_stream))
+                    .map_err(|_| WindowsError::StreamSendFailed)?;
+
+                Result::<()>::Ok(())
             }
+            .await;
 
-            let presentation_clock = unsafe { MFCreatePresentationClock()? };
-            let time_source = unsafe { MFCreateSystemTimeSource()? };
-            unsafe { presentation_clock.SetTimeSource(&time_source)? };
-            unsafe { sink.SetPresentationClock(&presentation_clock)? };
-
-            unsafe { presentation_clock.Start(0)? };
-
-            video_stream_tx
-                .send(Ok(video_stream))
-                .map_err(|_| WindowsError::StreamSendFailed)?;
-            audio_stream_tx
-                .send(Ok(audio_stream))
-                .map_err(|_| WindowsError::StreamSendFailed)?;
-
-            Result::<()>::Ok(())
+            // If finish_tx was not yet moved to the inner task, send the error
+            if let Some(finish_tx) = finish_tx.take() {
+                let _ = finish_tx.send(result);
+            }
         });
 
         let video_stream = LazyStream::None {

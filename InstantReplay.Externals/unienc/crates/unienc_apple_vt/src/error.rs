@@ -65,6 +65,9 @@ pub enum AppleError {
     #[error("Failed to start writing")]
     AssetWriterStartFailedUnknown,
 
+    #[error("Failed to append sample buffer ({0}): {1}")]
+    AssetWriterAppendFailed(String, String),
+
     // CVPixelBuffer/CVMetalTexture related errors
     #[error("CVMetalTexture is null")]
     MetalTextureNull,
@@ -137,6 +140,7 @@ impl CategorizedError for AppleError {
             // Muxing errors
             AppleError::AssetWriterStartFailed(_) => ErrorCategory::Muxing,
             AppleError::AssetWriterStartFailedUnknown => ErrorCategory::Muxing,
+            AppleError::AssetWriterAppendFailed(_, _) => ErrorCategory::Muxing,
 
             // Wrapped common errors - delegate to inner
             AppleError::Common(e) => e.category(),
