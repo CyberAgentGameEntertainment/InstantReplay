@@ -1,13 +1,15 @@
-use crate::error::{WindowsError, OptionExt, Result};
+use crate::error::{OptionExt, Result, WindowsError};
 use std::path::Path;
 use std::sync::Arc;
 use tokio::sync::mpsc;
 use tokio::sync::oneshot;
-use unienc_common::{AudioEncoderOptions, CompletionHandle, Muxer, MuxerInput, Runtime, VideoEncoderOptions};
-use windows::Win32::Media::MediaFoundation::*;
-use windows_core::IUnknown;
-use windows_core::HSTRING;
 use unienc_common::SpawnExt;
+use unienc_common::{
+    AudioEncoderOptions, CompletionHandle, Muxer, MuxerInput, Runtime, VideoEncoderOptions,
+};
+use windows::Win32::Media::MediaFoundation::*;
+use windows_core::HSTRING;
+use windows_core::IUnknown;
 
 use crate::audio::AudioEncodedData;
 use crate::common::{Payload, UnsafeSend};
@@ -32,15 +34,9 @@ impl LazyStream {
         }
     }
 
-    pub async fn get(
-        &mut self,
-        media_type: UnsafeSend<IMFMediaType>,
-    ) -> Result<()> {
+    pub async fn get(&mut self, media_type: UnsafeSend<IMFMediaType>) -> Result<()> {
         let result = async {
-            match std::mem::replace(
-                self,
-                LazyStream::Some(Err(WindowsError::StreamGetFailed)),
-            ) {
+            match std::mem::replace(self, LazyStream::Some(Err(WindowsError::StreamGetFailed))) {
                 LazyStream::None { tx, rx } => {
                     tx.send(Ok(media_type))
                         .map_err(|_| WindowsError::MediaTypeSendFailed)?;
@@ -93,18 +89,20 @@ impl MediaFoundationMuxer {
         let runtime_clone = runtime.clone();
 
         runtime.spawn_ret(async move {
-            let mut finish_tx = Some(finish_tx);
+            let result: Result<()> = async move {
+                let runtime_clone = runtime_clone.clone();
 
-            let result: Result<()> = async {
                 let video_type = video_type_rx.await??;
                 let audio_type = audio_type_rx.await??;
 
-                let sink = unsafe { MFCreateMPEG4MediaSink(&*file, &*video_type, &*audio_type)? };
+                let sink = UnsafeSend(unsafe {
+                    MFCreateMPEG4MediaSink(&*file, &*video_type, &*audio_type)?
+                });
                 assert_eq!(
                     unsafe { sink.GetCharacteristics()? } & MEDIASINK_RATELESS,
                     MEDIASINK_RATELESS
                 );
-                let finalizable = sink.cast::<IMFFinalizableMediaSink>().ok();
+                let finalizable = sink.cast::<IMFFinalizableMediaSink>().ok().map(UnsafeSend);
                 let sink_count = unsafe { sink.GetStreamSinkCount()? };
                 assert_eq!(sink_count, 2);
                 let (video_stream, video_finish_rx) =
@@ -112,47 +110,14 @@ impl MediaFoundationMuxer {
                 let (audio_stream, audio_finish_rx) =
                     Stream::new(unsafe { sink.GetStreamSinkByIndex(1)? }, &runtime_clone)?;
 
-                if let Some(finalizable) = finalizable {
-                    let finalizable = UnsafeSend(finalizable);
-                    let sink = UnsafeSend(sink.clone());
-                    let finish_tx = finish_tx.take().unwrap();
-                    runtime_clone.spawn_ret(async move {
-                        video_finish_rx.await.unwrap();
-                        audio_finish_rx.await.unwrap();
+                {
+                    let presentation_clock = unsafe { MFCreatePresentationClock()? };
+                    let time_source = unsafe { MFCreateSystemTimeSource()? };
+                    unsafe { presentation_clock.SetTimeSource(&time_source)? };
+                    unsafe { sink.SetPresentationClock(&presentation_clock)? };
 
-                        let finalizable_clone = UnsafeSend(finalizable.clone());
-                        let (done_tx, done_rx) = oneshot::channel::<()>();
-                        let callback: IMFAsyncCallback = AsyncCallback::new(move |result| unsafe {
-                            finalizable_clone.EndFinalize(result.unwrap()).unwrap();
-                            done_tx.send(()).unwrap();
-                        })
-                        .into();
-
-                        let result = match unsafe {
-                            finalizable.BeginFinalize(&callback, Option::<&IUnknown>::None)
-                        } {
-                            Ok(()) => done_rx.await.map(|()| ()).map_err(|e| WindowsError::Other(e.to_string())),
-                            Err(e) => Err(e.into()),
-                        };
-
-                        let _ = unsafe { sink.Shutdown() };
-                        let _ = finish_tx.send(result);
-                    });
-                } else {
-                    let finish_tx = finish_tx.take().unwrap();
-                    runtime_clone.spawn_ret(async move {
-                        video_finish_rx.await.unwrap();
-                        audio_finish_rx.await.unwrap();
-                        let _ = finish_tx.send(Ok(()));
-                    });
+                    unsafe { presentation_clock.Start(0)? };
                 }
-
-                let presentation_clock = unsafe { MFCreatePresentationClock()? };
-                let time_source = unsafe { MFCreateSystemTimeSource()? };
-                unsafe { presentation_clock.SetTimeSource(&time_source)? };
-                unsafe { sink.SetPresentationClock(&presentation_clock)? };
-
-                unsafe { presentation_clock.Start(0)? };
 
                 video_stream_tx
                     .send(Ok(video_stream))
@@ -161,14 +126,40 @@ impl MediaFoundationMuxer {
                     .send(Ok(audio_stream))
                     .map_err(|_| WindowsError::StreamSendFailed)?;
 
+                video_finish_rx.await?;
+                audio_finish_rx.await?;
+
+                if let Some(finalizable) = finalizable {
+                    let finalizable = UnsafeSend(finalizable);
+
+                    let finalizable_clone = UnsafeSend(finalizable.clone());
+                    let (done_tx, done_rx) = oneshot::channel();
+
+                    {
+                        let callback: IMFAsyncCallback = AsyncCallback::new(move |result| unsafe {
+                            let result: windows_core::Result<()> = (move || {
+                                finalizable_clone.EndFinalize(result.ok()?)?;
+                                Ok(())
+                            })();
+                            let _ = done_tx.send(result);
+                        })
+                        .into();
+
+                        unsafe { finalizable.BeginFinalize(&callback, Option::<&IUnknown>::None) }?;
+                    }
+
+                    done_rx
+                        .await
+                        .map_err(|e| WindowsError::Other(e.to_string()))??;
+
+                    let _ = unsafe { sink.Shutdown() };
+                }
+
                 Result::<()>::Ok(())
             }
             .await;
 
-            // If finish_tx was not yet moved to the inner task, send the error
-            if let Some(finish_tx) = finish_tx.take() {
-                let _ = finish_tx.send(result);
-            }
+            let _ = finish_tx.send(result);
         });
 
         let video_stream = LazyStream::None {
@@ -193,7 +184,10 @@ struct Stream {
 }
 
 impl Stream {
-    pub fn new(stream: IMFStreamSink, runtime: &impl Runtime) -> Result<(Self, oneshot::Receiver<()>)> {
+    pub fn new(
+        stream: IMFStreamSink,
+        runtime: &impl Runtime,
+    ) -> Result<(Self, oneshot::Receiver<()>)> {
         let stream = UnsafeSend(stream);
         let stream_cap = UnsafeSend(stream.clone());
 
@@ -274,11 +268,17 @@ impl MuxerInput for VideoMuxerInputImpl {
     async fn push(&mut self, data: Self::Data) -> unienc_common::Result<()> {
         match data.payload {
             Payload::Format(media_type) => {
-                self.stream.get(media_type).await.map_err(|e| WindowsError::Other(e.to_string()))?;
+                self.stream
+                    .get(media_type)
+                    .await
+                    .map_err(|e| WindowsError::Other(e.to_string()))?;
                 Ok(())
             }
             Payload::Sample(sample) => {
-                let stream = self.stream.some().ok_or(WindowsError::StreamNotInitialized)?;
+                let stream = self
+                    .stream
+                    .some()
+                    .ok_or(WindowsError::StreamNotInitialized)?;
                 stream
                     .sample_tx
                     .send(sample)
@@ -305,11 +305,17 @@ impl MuxerInput for AudioMuxerInputImpl {
     async fn push(&mut self, data: Self::Data) -> unienc_common::Result<()> {
         match data.payload {
             Payload::Format(media_type) => {
-                self.stream.get(media_type).await.map_err(|e| WindowsError::Other(e.to_string()))?;
+                self.stream
+                    .get(media_type)
+                    .await
+                    .map_err(|e| WindowsError::Other(e.to_string()))?;
                 Ok(())
             }
             Payload::Sample(sample) => {
-                let stream = self.stream.some().ok_or(WindowsError::StreamNotInitialized)?;
+                let stream = self
+                    .stream
+                    .some()
+                    .ok_or(WindowsError::StreamNotInitialized)?;
                 stream
                     .sample_tx
                     .send(sample)
@@ -334,6 +340,7 @@ impl CompletionHandle for MuxerCompletionHandleImpl {
     async fn finish(self) -> unienc_common::Result<()> {
         self.receiver
             .await
-            .map_err(|e| WindowsError::MuxerCompletionWaitFailed(e.to_string()))?.map_err(|e| e.into())
+            .map_err(|e| WindowsError::MuxerCompletionWaitFailed(e.to_string()))?
+            .map_err(|e| e.into())
     }
 }
