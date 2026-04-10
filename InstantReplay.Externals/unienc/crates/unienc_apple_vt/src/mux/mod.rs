@@ -254,11 +254,15 @@ impl AVFMuxer {
                             if !unsafe {
                                 input_clone.appendSampleBuffer(&sample_buffer.lock().unwrap())
                             } {
-                                // TODO: handle error
-                                println!(
-                                    "failed to append sample buffer: {label_clone}, {}",
-                                    unsafe { writer.error().unwrap() }
-                                );
+                                let err_msg = unsafe { writer.error() }
+                                    .map(|e| e.to_string())
+                                    .unwrap_or_else(|| "unknown error".to_string());
+                                if let Some(finish_tx) = finish_tx.borrow_mut().take() {
+                                    let _ = finish_tx.send(Err(AppleError::AssetWriterAppendFailed(
+                                        label_clone.clone(),
+                                        err_msg,
+                                    )));
+                                }
                                 return;
                             }
                         }
