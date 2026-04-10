@@ -23,7 +23,6 @@ namespace InstantReplay
         public readonly ValueTask<SharedBuffer<NativeArrayWrapper>> ReadbackTask;
         public readonly Texture BlitSource;
         public readonly GraphicsFormat BlitSourceFormat;
-        public readonly nint NativeBlitSourceHandle;
         public readonly bool IsGammaWorkflow;
         public readonly bool FlipVertically;
 
@@ -38,7 +37,6 @@ namespace InstantReplay
 
             BlitSource = null;
             BlitSourceFormat = default;
-            NativeBlitSourceHandle = default;
             IsGammaWorkflow = QualitySettings.activeColorSpace == ColorSpace.Gamma;
             FlipVertically = false;
         }
@@ -48,7 +46,6 @@ namespace InstantReplay
             Kind = DataKind.BlitSource;
             BlitSource = texture;
             BlitSourceFormat = texture.graphicsFormat;
-            NativeBlitSourceHandle = texture.GetNativeTexturePtr();
             Timestamp = timestamp;
 
             ReadbackTask = default;

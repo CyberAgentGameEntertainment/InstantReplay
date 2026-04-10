@@ -20,6 +20,7 @@ use tokio::sync::mpsc;
 use unienc_common::{buffer::SharedBuffer, EncodedData, Encoder, EncoderInput, EncoderOutput, VideoSample};
 
 use crate::{common::UnsafeSendRetained, metal, MetalTexture};
+use unienc_common::TryFromUnityNativeTexturePointer;
 
 pub struct VideoToolboxEncoder {
     input: VideoToolboxEncoderInput,
@@ -168,25 +169,29 @@ impl EncoderInput for VideoToolboxEncoderInput {
                 unsafe { Retained::from_raw(buffer) }.ok_or(AppleError::PixelBufferNull)?
             }
             unienc_common::VideoFrame::BlitSource {
-                source,
+                texture_token,
                 width: _,
                 height: _,
                 graphics_format: _,
                 flip_vertically,
                 is_gamma_workflow,
                 event_issuer,
+                _phantom,
             } => {
                 let width = self.width;
                 let height = self.height;
 
                 let (tx, rx) = tokio::sync::oneshot::channel();
                 event_issuer
-                    .issue_graphics_event(Box::new(move || {
-                        let r = metal::custom_blit(&source.texture, width, height, flip_vertically, is_gamma_workflow);
+                    .issue_graphics_event(Box::new(move |native_texture_ptr| {
+                        let r = MetalTexture::try_from_unity_native_texture_ptr(native_texture_ptr)
+                            .map_err(|_| AppleError::MetalTextureRetainFailed)
+                            .and_then(|texture| metal::custom_blit(&texture.texture, width, height, flip_vertically, is_gamma_workflow));
                         tx.send(r).map_err(|_e| AppleError::BlitFutureSendFailed).unwrap();
                     }), *crate::metal::EVENT_ID
                         .get()
-                        .ok_or(AppleError::EventIdNotReserved)?);
+                        .ok_or(AppleError::EventIdNotReserved)?,
+                    texture_token);
 
                 let texture = rx.await.map_err(AppleError::from)? // failed to receive
                     ? // failed to issue blit
