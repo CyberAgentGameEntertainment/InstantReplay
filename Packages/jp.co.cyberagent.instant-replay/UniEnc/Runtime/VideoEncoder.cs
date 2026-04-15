@@ -73,7 +73,7 @@ namespace UniEnc
             }
         }
 
-        public ValueTask UnsafePushUnityFrameAsync(nint sourceTexturePtr, uint width, uint height,
+        public ValueTask UnsafePushTextureTokenAsync(nuint textureToken, uint width, uint height,
             uint unityGraphicsFormat, bool isGammaWorkflow, double timestamp, nuint onIssueGraphicsEventPtr,
             bool flipVertically = false)
         {
@@ -94,7 +94,7 @@ namespace UniEnc
                         NativeMethods.unienc_video_encoder_push_blit_source(
                             runtime.Runtime,
                             _inputHandle.DangerousGetHandle(),
-                            (void*)sourceTexturePtr,
+                            textureToken,
                             width,
                             height,
                             unityGraphicsFormat,
@@ -114,6 +114,14 @@ namespace UniEnc
                     throw;
                 }
             }
+        }
+
+        [Obsolete("Use the overload that takes a texture token (nuint) instead of a raw native texture pointer.", true)]
+        public ValueTask UnsafePushUnityFrameAsync(nint sourceTexturePtr, uint width, uint height,
+            uint unityGraphicsFormat, bool isGammaWorkflow, double timestamp, nuint onIssueGraphicsEventPtr,
+            bool flipVertically = false)
+        {
+            throw new NotSupportedException();
         }
 
         public static unsafe void UnsafeReleaseGraphicsEventContext(nint context)

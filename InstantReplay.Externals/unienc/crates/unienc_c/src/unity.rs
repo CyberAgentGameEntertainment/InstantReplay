@@ -4,7 +4,7 @@ use unienc::{EncodingSystem, GraphicsEventIssuer};
 use crate::*;
 
 pub type UniencIssueGraphicsEventCallback =
-unsafe extern "C" fn(func: RenderingEventAndData, event_id: i32, user_data: *mut c_void);
+unsafe extern "C" fn(func: RenderingEventAndData, event_id: i32, user_data: *mut c_void, texture_token: usize);
 
 pub struct UniencGraphicsEventIssuer {
     func: UniencIssueGraphicsEventCallback,
@@ -17,20 +17,46 @@ impl UniencGraphicsEventIssuer {
     }
 }
 
-struct GraphicsEventContext {
-    callback: Box<dyn FnOnce() + Send>,
+/// Layout shared with C# — C# writes `native_texture_ptr` directly.
+/// `rust_context` is an opaque pointer owned by Rust (the callback + runtime).
+#[repr(C)]
+pub struct GraphicsEventContext {
+    pub native_texture_ptr: *mut c_void,
+    rust_context: *mut RustGraphicsEventData,
+}
+
+impl GraphicsEventContext {
+    /// # Safety
+    /// Must only be called once. Frees the inner `RustGraphicsEventData`.
+    pub(crate) unsafe fn drop_rust_context(self) {
+        if !self.rust_context.is_null() {
+            unsafe { let _ = Box::from_raw(self.rust_context); }
+        }
+    }
+}
+
+struct RustGraphicsEventData {
+    callback: Box<dyn FnOnce(*mut c_void) + Send>,
     weak_runtime: WeakRuntime,
 }
 
 impl GraphicsEventIssuer for UniencGraphicsEventIssuer {
-    fn issue_graphics_event(&self, callback: Box<dyn FnOnce() + Send>, event_id: c_int) {
+    fn issue_graphics_event(&self, callback: Box<dyn FnOnce(*mut c_void) + Send>, event_id: c_int, texture_token: usize) {
 
-        let user_data = Box::into_raw(Box::new(GraphicsEventContext{ callback, weak_runtime: self.weak_runtime.clone() })) as *mut c_void;
+        let rust_data = Box::into_raw(Box::new(RustGraphicsEventData {
+            callback,
+            weak_runtime: self.weak_runtime.clone(),
+        }));
+        let user_data = Box::into_raw(Box::new(GraphicsEventContext {
+            native_texture_ptr: std::ptr::null_mut(),
+            rust_context: rust_data,
+        })) as *mut c_void;
         unsafe {
             (self.func)(
                 Some(graphics_event_callback_trampoline),
                 event_id,
                 user_data,
+                texture_token,
             )
         }
     }
@@ -40,14 +66,14 @@ unsafe extern "system" fn graphics_event_callback_trampoline(
     _event_id: c_int,
     user_data: *mut c_void,
 ) {
-    let context = unsafe { Box::<GraphicsEventContext>::from_raw(user_data as *mut _) };
-    let Some(runtime) = context.weak_runtime.upgrade() else {
+    let context = unsafe { Box::from_raw(user_data as *mut GraphicsEventContext) };
+    let rust_data = unsafe { Box::from_raw(context.rust_context) };
+    let Some(runtime) = rust_data.weak_runtime.upgrade() else {
         println!("Failed to upgrade runtime in graphics event callback");
         return;
     };
     let _guard = runtime.enter();
-    let callback = context.callback;
-    callback();
+    (rust_data.callback)(context.native_texture_ptr);
 }
 
 #[cfg(not(target_os = "ios"))]
