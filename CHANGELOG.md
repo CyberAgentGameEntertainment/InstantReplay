@@ -1,3 +1,9 @@
+## [1.5.2] - 2026/04/15
+
+### Fixed
+
+- Fixed a crash that could occur when the recorded texture is resized or destroyed during recording (e.g., window resize on macOS, or RenderTexture recreation). The native texture pointer is now resolved at the latest safe moment, preventing dangling pointer access.
+
 ## [1.5.1] - 2026/04/10
 
 ### Fixed
