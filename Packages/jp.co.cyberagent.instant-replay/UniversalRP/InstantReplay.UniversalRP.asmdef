@@ -12,7 +12,7 @@
     "overrideReferences": false,
     "precompiledReferences": [],
     "autoReferenced": true,
-    "defineConstraints": [],
+    "defineConstraints": ["INSTANTREPLAY_URP_17_0_OR_NEWER"],
     "versionDefines": [
         {
             "name": "com.unity.render-pipelines.universal",
