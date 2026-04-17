@@ -30,7 +30,7 @@ jobs:
           submodules: 'true'
       - run: rustup default stable
       - run: rustup target add ${{ matrix.arch }}-pc-windows-msvc
-      - run: cargo build --target ${{ matrix.arch }}-pc-windows-msvc --profile ${{ env._RUST_BUILD_CONFIG == 'debug' && 'dev' || env._RUST_BUILD_CONFIG }}
+      - run: cargo build --target ${{ matrix.arch }}-pc-windows-msvc --profile ${{ env._RUST_BUILD_CONFIG == 'debug' && 'dev' || env._RUST_BUILD_CONFIG }} -F mimalloc
       - run: Move-Item -Path unienc_c.dll -Destination libunienc_c.dll -Force
         working-directory: InstantReplay.Externals/unienc/target/${{ matrix.arch }}-pc-windows-msvc/${{ env._RUST_BUILD_CONFIG }}
       - uses: actions/upload-artifact@v4
@@ -59,7 +59,7 @@ jobs:
       - run: sudo apt update && sudo apt install gcc-multilib
       - run: echo "ANDROID_NDK_HOME=$(echo $ANDROID_NDK_LATEST_HOME)" >> $GITHUB_ENV
       - run: cargo install cargo-ndk
-      - run: cargo ndk -t ${{ matrix.triple }} --platform 26 build --profile ${{ env._RUST_BUILD_CONFIG == 'debug' && 'dev' || env._RUST_BUILD_CONFIG }} -F unity
+      - run: cargo ndk -t ${{ matrix.triple }} --platform 26 build --profile ${{ env._RUST_BUILD_CONFIG == 'debug' && 'dev' || env._RUST_BUILD_CONFIG }} -F unity,mimalloc
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.triple }}
@@ -81,7 +81,7 @@ jobs:
           submodules: 'true'
       - run: rustup default stable
       - run: rustup target add ${{ matrix.arch }}-apple-darwin
-      - run: cargo build --target ${{ matrix.arch }}-apple-darwin --profile ${{ env._RUST_BUILD_CONFIG == 'debug' && 'dev' || env._RUST_BUILD_CONFIG }} -F unity
+      - run: cargo build --target ${{ matrix.arch }}-apple-darwin --profile ${{ env._RUST_BUILD_CONFIG == 'debug' && 'dev' || env._RUST_BUILD_CONFIG }} -F unity,mimalloc
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.arch }}-apple-darwin
@@ -123,7 +123,7 @@ jobs:
           submodules: 'true'
       - run: rustup default stable
       - run: rustup target add ${{ matrix.arch }}-apple-ios
-      - run: cargo build --target ${{ matrix.arch }}-apple-ios --profile ${{ env._RUST_BUILD_CONFIG == 'debug' && 'dev' || env._RUST_BUILD_CONFIG }} -F unity
+      - run: cargo build --target ${{ matrix.arch }}-apple-ios --profile ${{ env._RUST_BUILD_CONFIG == 'debug' && 'dev' || env._RUST_BUILD_CONFIG }} -F unity,mimalloc
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.arch }}-apple-ios
@@ -146,7 +146,7 @@ jobs:
       - run: rustup default stable
       - run: rustup target add ${{ matrix.arch }}-unknown-linux-gnu
       - run: sudo apt update && sudo apt install gcc-multilib
-      - run: cargo build --target ${{ matrix.arch }}-unknown-linux-gnu --profile ${{ env._RUST_BUILD_CONFIG == 'debug' && 'dev' || env._RUST_BUILD_CONFIG }}
+      - run: cargo build --target ${{ matrix.arch }}-unknown-linux-gnu --profile ${{ env._RUST_BUILD_CONFIG == 'debug' && 'dev' || env._RUST_BUILD_CONFIG }} -F mimalloc
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.arch }}-unknown-linux

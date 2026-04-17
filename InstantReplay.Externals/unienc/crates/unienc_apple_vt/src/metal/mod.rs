@@ -7,7 +7,8 @@ use std::{
 use std::os::raw::c_int;
 use block2::RcBlock;
 use objc2::{rc::Retained, runtime::ProtocolObject};
-use objc2_core_foundation::{kCFAllocatorDefault, kCFBooleanTrue, CFDictionary};
+use crate::allocator;
+use objc2_core_foundation::{kCFBooleanTrue, CFDictionary};
 use objc2_core_video::{kCVPixelBufferMetalCompatibilityKey, kCVPixelFormatType_32BGRA, CVMetalTexture, CVMetalTextureCache, CVMetalTextureGetTexture, CVPixelBuffer, CVPixelBufferCreate};
 use objc2_foundation::NSString;
 use objc2_metal::{
@@ -267,7 +268,7 @@ pub(crate) fn custom_blit(
     let mut cache: *mut CVMetalTextureCache = std::ptr::null_mut();
     unsafe {
         CVMetalTextureCache::create(
-            kCFAllocatorDefault,
+            allocator::default(),
             None,
             device,
             None,
@@ -436,7 +437,7 @@ impl SharedTexture {
         let mut buffer: *mut CVPixelBuffer = std::ptr::null_mut();
         unsafe {
             CVPixelBufferCreate(
-                kCFAllocatorDefault,
+                allocator::default(),
                 width,
                 height,
                 pixel_format,
@@ -451,7 +452,7 @@ impl SharedTexture {
         let mut texture: *mut CVMetalTexture = std::ptr::null_mut();
         unsafe {
             CVMetalTextureCache::create_texture_from_image(
-                kCFAllocatorDefault,
+                allocator::default(),
                 cache,
                 &buffer,
                 None,

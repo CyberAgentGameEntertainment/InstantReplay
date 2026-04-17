@@ -3,8 +3,9 @@ use std::{ffi::c_void, ptr::NonNull};
 
 use crate::error::{AppleError, Result, OsStatusExt};
 use objc2::rc::Retained;
+use crate::allocator;
 use objc2_core_foundation::{
-    kCFAllocatorDefault, kCFBooleanFalse, kCFBooleanTrue, CFBoolean, CFDictionary, CFNumber,
+    kCFBooleanFalse, kCFBooleanTrue, CFBoolean, CFDictionary, CFNumber,
     CFString, CFType,
 };
 use objc2_core_media::{
@@ -147,7 +148,7 @@ impl EncoderInput for VideoToolboxEncoderInput {
                 let mut buffer: *mut CVPixelBuffer = std::ptr::null_mut();
                 unsafe {
                     CVPixelBufferCreateWithBytes(
-                        kCFAllocatorDefault,
+                        allocator::default(),
                         bgra32.width as usize,
                         bgra32.height as usize,
                         kCVPixelFormatType_32BGRA,
@@ -265,7 +266,7 @@ impl CompressionSession {
 
         unsafe {
             VTCompressionSession::create(
-                kCFAllocatorDefault,
+                allocator::default(),
                 width as i32,
                 height as i32,
                 kCMVideoCodecType_H264,

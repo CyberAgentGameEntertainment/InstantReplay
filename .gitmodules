@@ -4,3 +4,6 @@
 [submodule "InstantReplay.Externals/unienc/external/muxide"]
 	path = InstantReplay.Externals/unienc/external/muxide
 	url = https://github.com/ruccho/muxide
+[submodule "InstantReplay.Externals/unienc/external/mimalloc_rust"]
+	path = InstantReplay.Externals/unienc/external/mimalloc_rust
+	url = https://github.com/CyberAgentGameEntertainment/mimalloc_rust.git
