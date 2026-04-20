@@ -27,7 +27,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          submodules: 'true'
+          submodules: 'recursive'
       - run: rustup default stable
       - run: rustup target add ${{ matrix.arch }}-pc-windows-msvc
       - run: cargo build --target ${{ matrix.arch }}-pc-windows-msvc --profile ${{ env._RUST_BUILD_CONFIG == 'debug' && 'dev' || env._RUST_BUILD_CONFIG }} -F mimalloc
@@ -53,7 +53,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          submodules: 'true'
+          submodules: 'recursive'
       - run: rustup default stable
       - run: rustup target add ${{ matrix.triple }}
       - run: sudo apt update && sudo apt install gcc-multilib
@@ -78,7 +78,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          submodules: 'true'
+          submodules: 'recursive'
       - run: rustup default stable
       - run: rustup target add ${{ matrix.arch }}-apple-darwin
       - run: cargo build --target ${{ matrix.arch }}-apple-darwin --profile ${{ env._RUST_BUILD_CONFIG == 'debug' && 'dev' || env._RUST_BUILD_CONFIG }} -F unity,mimalloc
@@ -120,7 +120,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          submodules: 'true'
+          submodules: 'recursive'
       - run: rustup default stable
       - run: rustup target add ${{ matrix.arch }}-apple-ios
       - run: cargo build --target ${{ matrix.arch }}-apple-ios --profile ${{ env._RUST_BUILD_CONFIG == 'debug' && 'dev' || env._RUST_BUILD_CONFIG }} -F unity,mimalloc
@@ -142,7 +142,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          submodules: 'true'
+          submodules: 'recursive'
       - run: rustup default stable
       - run: rustup target add ${{ matrix.arch }}-unknown-linux-gnu
       - run: sudo apt update && sudo apt install gcc-multilib
@@ -162,7 +162,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          submodules: 'true'
+          submodules: 'recursive'
       - run: rustup default stable
       - run: rustup target add wasm32-unknown-emscripten
       - run: rustup component add rust-src --toolchain nightly
@@ -180,7 +180,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          submodules: 'true'
+          submodules: 'recursive'
       - run: |
           cargo install cargo-about --locked
           cargo about generate about.hbs > ../../THIRD-PARTY-NOTICES.md
