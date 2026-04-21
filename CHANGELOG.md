@@ -1,3 +1,9 @@
+## [1.5.3] - 2026/04/21
+
+### Fixed
+
+- Fixed iOS build conflicts with other plugins that also subclass `UnityAppController`. InstantReplay now registers its native rendering plugin through Unity's `LifeCycleListener` mechanism instead of subclassing `UnityAppController`, allowing it to coexist with other plugins that use `IMPL_APP_CONTROLLER_SUBCLASS`.
+
 ## [1.5.2] - 2026/04/15
 
 ### Fixed
