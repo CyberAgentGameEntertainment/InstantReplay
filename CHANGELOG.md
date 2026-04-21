@@ -1,3 +1,9 @@
+## [1.5.4] - 2026/04/21
+
+### Fixed
+
+- Fixed compilation errors that occurred in projects where Universal Render Pipeline (URP) is not installed. The `InstantReplay.UniversalRP` assembly is now excluded from compilation when URP is absent.
+
 ## [1.5.3] - 2026/04/21
 
 ### Fixed
