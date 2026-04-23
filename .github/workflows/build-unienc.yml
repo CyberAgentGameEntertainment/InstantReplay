@@ -15,10 +15,11 @@ env:
 
 jobs:
   build-windows:
-    name: Build unienc (Windows)
+    name: Build unienc (Windows, ${{ matrix.variant }})
     runs-on: windows-2022
     strategy:
       matrix:
+        variant: [unity, nuget]
         arch: [x86_64]
     timeout-minutes: 30
     defaults:
@@ -30,21 +31,22 @@ jobs:
           submodules: 'recursive'
       - run: rustup default stable
       - run: rustup target add ${{ matrix.arch }}-pc-windows-msvc
-      - run: cargo build --target ${{ matrix.arch }}-pc-windows-msvc --profile ${{ env._RUST_BUILD_CONFIG == 'debug' && 'dev' || env._RUST_BUILD_CONFIG }} -F mimalloc
+      - run: cargo build --target ${{ matrix.arch }}-pc-windows-msvc --profile ${{ env._RUST_BUILD_CONFIG == 'debug' && 'dev' || env._RUST_BUILD_CONFIG }} ${{ matrix.variant == 'unity' && '-F mimalloc' || '' }}
       - run: Move-Item -Path unienc_c.dll -Destination libunienc_c.dll -Force
         working-directory: InstantReplay.Externals/unienc/target/${{ matrix.arch }}-pc-windows-msvc/${{ env._RUST_BUILD_CONFIG }}
       - uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.arch }}-pc-windows
+          name: ${{ matrix.variant }}-${{ matrix.arch }}-pc-windows
           path: |
             InstantReplay.Externals/unienc/target/${{ matrix.arch }}-pc-windows-msvc/${{ env._RUST_BUILD_CONFIG }}/libunienc_c.dll
             InstantReplay.Externals/unienc/target/${{ matrix.arch }}-pc-windows-msvc/${{ env._RUST_BUILD_CONFIG }}/unienc_c.pdb
           retention-days: 1
   build-android:
-    name: Build unienc (Android)
+    name: Build unienc (Android ${{ matrix.triple }}, ${{ matrix.variant }})
     runs-on: ubuntu-latest
     strategy:
       matrix:
+        variant: [unity, nuget]
         triple: [aarch64-linux-android, x86_64-linux-android]
     timeout-minutes: 30
     defaults:
@@ -59,17 +61,18 @@ jobs:
       - run: sudo apt update && sudo apt install gcc-multilib
       - run: echo "ANDROID_NDK_HOME=$(echo $ANDROID_NDK_LATEST_HOME)" >> $GITHUB_ENV
       - run: cargo install cargo-ndk
-      - run: cargo ndk -t ${{ matrix.triple }} --platform 26 build --profile ${{ env._RUST_BUILD_CONFIG == 'debug' && 'dev' || env._RUST_BUILD_CONFIG }} -F unity,mimalloc
+      - run: cargo ndk -t ${{ matrix.triple }} --platform 26 build --profile ${{ env._RUST_BUILD_CONFIG == 'debug' && 'dev' || env._RUST_BUILD_CONFIG }} ${{ matrix.variant == 'unity' && '-F unity,mimalloc' || '' }}
       - uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.triple }}
+          name: ${{ matrix.variant }}-${{ matrix.triple }}
           path: InstantReplay.Externals/unienc/target/${{ matrix.triple }}/${{ env._RUST_BUILD_CONFIG }}/libunienc_c.so
           retention-days: 1
   build-macos:
-    name: Build unienc (macOS)
+    name: Build unienc (macOS ${{ matrix.arch }}, ${{ matrix.variant }})
     runs-on: macos-15
     strategy:
       matrix:
+        variant: [unity, nuget]
         arch: [aarch64, x86_64]
     timeout-minutes: 30
     defaults:
@@ -81,14 +84,14 @@ jobs:
           submodules: 'recursive'
       - run: rustup default stable
       - run: rustup target add ${{ matrix.arch }}-apple-darwin
-      - run: cargo build --target ${{ matrix.arch }}-apple-darwin --profile ${{ env._RUST_BUILD_CONFIG == 'debug' && 'dev' || env._RUST_BUILD_CONFIG }} -F unity,mimalloc
+      - run: cargo build --target ${{ matrix.arch }}-apple-darwin --profile ${{ env._RUST_BUILD_CONFIG == 'debug' && 'dev' || env._RUST_BUILD_CONFIG }} ${{ matrix.variant == 'unity' && '-F unity,mimalloc' || '' }}
       - uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.arch }}-apple-darwin
+          name: ${{ matrix.variant }}-${{ matrix.arch }}-apple-darwin
           path: InstantReplay.Externals/unienc/target/${{ matrix.arch }}-apple-darwin/${{ env._RUST_BUILD_CONFIG }}/libunienc_c.dylib
           retention-days: 1
   lipo-macos:
-    name: Create unienc macOS bundle
+    name: Create unienc macOS bundle (Unity)
     runs-on: macos-15
     needs: [build-macos]
     timeout-minutes: 30
@@ -96,22 +99,23 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           path: ./artifacts
-          pattern: '*-apple-darwin'
+          pattern: 'unity-*-apple-darwin'
       - run: |
           lipo -create -output libunienc_c.bundle \
-          aarch64-apple-darwin/libunienc_c.dylib \
-          x86_64-apple-darwin/libunienc_c.dylib
+          unity-aarch64-apple-darwin/libunienc_c.dylib \
+          unity-x86_64-apple-darwin/libunienc_c.dylib
         working-directory: artifacts
       - uses: actions/upload-artifact@v4
         with:
-          name: apple-darwin
+          name: unity-apple-darwin
           path: artifacts/libunienc_c.bundle
           retention-days: 1
   build-ios:
-    name: Build unienc (iOS)
+    name: Build unienc (iOS ${{ matrix.arch }}, ${{ matrix.variant }})
     runs-on: macos-15
     strategy:
       matrix:
+        variant: [unity, nuget]
         arch: [aarch64]
     timeout-minutes: 30
     defaults:
@@ -123,17 +127,18 @@ jobs:
           submodules: 'recursive'
       - run: rustup default stable
       - run: rustup target add ${{ matrix.arch }}-apple-ios
-      - run: cargo build --target ${{ matrix.arch }}-apple-ios --profile ${{ env._RUST_BUILD_CONFIG == 'debug' && 'dev' || env._RUST_BUILD_CONFIG }} -F unity,mimalloc
+      - run: cargo build --target ${{ matrix.arch }}-apple-ios --profile ${{ env._RUST_BUILD_CONFIG == 'debug' && 'dev' || env._RUST_BUILD_CONFIG }} ${{ matrix.variant == 'unity' && '-F unity,mimalloc' || '' }}
       - uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.arch }}-apple-ios
+          name: ${{ matrix.variant }}-${{ matrix.arch }}-apple-ios
           path: InstantReplay.Externals/unienc/target/${{ matrix.arch }}-apple-ios/${{ env._RUST_BUILD_CONFIG }}/libunienc_c.a
           retention-days: 1
   build-linux:
-    name: Build unienc (Linux)
+    name: Build unienc (Linux, ${{ matrix.variant }})
     runs-on: ubuntu-latest
     strategy:
       matrix:
+        variant: [unity, nuget]
         arch: [x86_64]
     timeout-minutes: 30
     defaults:
@@ -146,14 +151,14 @@ jobs:
       - run: rustup default stable
       - run: rustup target add ${{ matrix.arch }}-unknown-linux-gnu
       - run: sudo apt update && sudo apt install gcc-multilib
-      - run: cargo build --target ${{ matrix.arch }}-unknown-linux-gnu --profile ${{ env._RUST_BUILD_CONFIG == 'debug' && 'dev' || env._RUST_BUILD_CONFIG }} -F mimalloc
+      - run: cargo build --target ${{ matrix.arch }}-unknown-linux-gnu --profile ${{ env._RUST_BUILD_CONFIG == 'debug' && 'dev' || env._RUST_BUILD_CONFIG }} ${{ matrix.variant == 'unity' && '-F mimalloc' || '' }}
       - uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.arch }}-unknown-linux
+          name: ${{ matrix.variant }}-${{ matrix.arch }}-unknown-linux
           path: InstantReplay.Externals/unienc/target/${{ matrix.arch }}-unknown-linux-gnu/${{ env._RUST_BUILD_CONFIG }}/libunienc_c.so
           retention-days: 1
   build-wasm:
-    name: Build unienc (WebAssembly)
+    name: Build unienc (WebAssembly, Unity)
     runs-on: ubuntu-latest
     timeout-minutes: 120
     defaults:
@@ -170,7 +175,7 @@ jobs:
         run: RUSTFLAGS=-Ctarget-cpu=mvp cargo +nightly rustc -Z json-target-spec -Z build-std=panic_abort,std --target wasm32-unknown-emscripten --profile ${{ env._RUST_BUILD_CONFIG == 'debug' && 'dev' || env._RUST_BUILD_CONFIG }}-wasm --no-default-features --crate-type staticlib -p unienc_c
       - uses: actions/upload-artifact@v4
         with:
-          name: wasm32-unknown-emscripten
+          name: unity-wasm32-unknown-emscripten
           path: InstantReplay.Externals/unienc/target/wasm32-unknown-emscripten/${{ env._RUST_BUILD_CONFIG }}-wasm/libunienc_c.a
           retention-days: 1
   update-tpn:
@@ -189,7 +194,7 @@ jobs:
         with:
           name: ~third-party-notices
           path: ./THIRD-PARTY-NOTICES.md
-  update-unity-native:
+  update-natives:
     name: Push unienc native libraries
     needs: [build-wasm, build-windows, build-android, build-ios, build-macos, build-linux, lipo-macos, update-tpn]
     runs-on: ubuntu-latest
@@ -201,10 +206,37 @@ jobs:
           name: ~third-party-notices
       - uses: actions/download-artifact@v4
         with:
-          pattern: '[a-z]*'
-          path: ./Packages/jp.co.cyberagent.instant-replay/UniEnc/Plugins/
+          pattern: 'unity-*'
+          path: ./staging-unity
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: 'nuget-*'
+          path: ./staging-nuget
+      - name: Place Unity native libraries
+        run: |
+          set -euo pipefail
+          dest="./Packages/jp.co.cyberagent.instant-replay/UniEnc/Plugins"
+          mkdir -p "$dest"
+          for d in ./staging-unity/unity-*; do
+            target="$(basename "$d")"
+            target="${target#unity-}"
+            mkdir -p "$dest/$target"
+            cp -R "$d"/. "$dest/$target/"
+          done
+      - name: Place NuGet native libraries
+        run: |
+          set -euo pipefail
+          dest="./InstantReplay.Externals/src/UniEnc/Plugins"
+          mkdir -p "$dest"
+          for d in ./staging-nuget/nuget-*; do
+            target="$(basename "$d")"
+            target="${target#nuget-}"
+            mkdir -p "$dest/$target"
+            cp -R "$d"/. "$dest/$target/"
+          done
       - run: |
           git add ./Packages/jp.co.cyberagent.instant-replay/UniEnc/Plugins
+          git add ./InstantReplay.Externals/src/UniEnc/Plugins
           git add ./THIRD-PARTY-NOTICES.md
           git config --local user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
