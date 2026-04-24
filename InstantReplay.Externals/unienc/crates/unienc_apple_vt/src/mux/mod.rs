@@ -15,7 +15,7 @@ use objc2_av_foundation::{
 use objc2_core_audio_types::{
     kAudioFormatMPEG4AAC, AudioStreamBasicDescription, AudioStreamPacketDescription, MPEG4ObjectID,
 };
-use objc2_core_foundation::kCFAllocatorDefault;
+use crate::allocator;
 use objc2_core_media::{
     kCMBlockBufferAssureMemoryNowFlag, kCMTimeZero, kCMVideoCodecType_H264,
     CMAudioFormatDescriptionCreate, CMAudioSampleBufferCreateReadyWithPacketDescriptions,
@@ -162,7 +162,7 @@ impl AVFMuxer {
         let source_format_hint = unsafe {
             let mut format_desc: *const CMFormatDescription = std::ptr::null();
             CMVideoFormatDescriptionCreate(
-                kCFAllocatorDefault,
+                allocator::default(),
                 kCMVideoCodecType_H264,
                 video_options.width() as i32,
                 video_options.height() as i32,
@@ -194,7 +194,7 @@ impl AVFMuxer {
         let source_format_hint = unsafe {
             let mut format_desc: *const CMFormatDescription = std::ptr::null();
             CMAudioFormatDescriptionCreate(
-                kCFAllocatorDefault,
+                allocator::default(),
                 NonNull::new(&mut asbd).unwrap(),
                 0,
                 std::ptr::null(),
@@ -314,7 +314,7 @@ fn create_audio_format_desc(
     unsafe {
         let mut format_desc: *const CMFormatDescription = std::ptr::null();
         objc2_core_media::CMAudioFormatDescriptionCreate(
-            kCFAllocatorDefault,
+            allocator::default(),
             NonNull::new(asbd).unwrap(),
             0,
             std::ptr::null(),
@@ -336,10 +336,10 @@ fn create_audio_sample_buffer(
         let mut block_buffer: *mut objc2_core_media::CMBlockBuffer = std::ptr::null_mut();
 
         CMBlockBuffer::create_with_memory_block(
-            kCFAllocatorDefault,
+            allocator::default(),
             std::ptr::null_mut(),
             audio.data.len(),
-            kCFAllocatorDefault,
+            allocator::default(),
             std::ptr::null(),
             0,
             audio.data.len(),
@@ -386,7 +386,7 @@ fn create_audio_sample_buffer(
 
         let mut sample_buffer: *mut CMSampleBuffer = std::ptr::null_mut();
         CMAudioSampleBufferCreateReadyWithPacketDescriptions(
-            kCFAllocatorDefault,
+            allocator::default(),
             &block_buffer,
             format_desc,
             1_isize,

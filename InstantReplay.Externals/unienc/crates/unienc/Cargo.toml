@@ -33,3 +33,4 @@ blocking = "1.6.2"
 [features]
 default = []
 unity = ["unienc_common/unity"]
+mimalloc = ["unienc_apple_vt/mimalloc"]

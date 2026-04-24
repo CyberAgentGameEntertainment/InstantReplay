@@ -12,6 +12,7 @@ use crate::{
     audio::AudioToolboxEncoder, common::UnsafeSendRetained, mux::AVFMuxer,
     video::VideoToolboxEncoder,
 };
+mod allocator;
 pub mod audio;
 mod common;
 pub mod error;

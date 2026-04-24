@@ -7,6 +7,7 @@ resolver = "2"
 objc2 = { version = "0.6.1", features = ["catch-all"] }
 bincode = { version = "2.0.1", features = ["derive"] }
 thiserror = "2.0"
+mimalloc = { version = "0.1.48" }
 unienc_common = { path = "./crates/unienc_common" }
 unienc = { path = "./crates/unienc" }
 unienc_android_mc = { path = "./crates/unienc_android_mc" }
@@ -21,6 +22,7 @@ unity-native-plugin-vulkan = { path = "./external/unity-native-plugin-rs/unity-n
 unity-native-plugin = { path = "./external/unity-native-plugin-rs/unity-native-plugin" }
 unity-native-plugin-vulkan = { path = "./external/unity-native-plugin-rs/unity-native-plugin-vulkan" }
 muxide = { path = "./external/muxide" }
+mimalloc = { path = "./external/mimalloc_rust"}
 
 [workspace.package]
 edition = "2024"
@@ -31,7 +33,7 @@ version = "1.4.1"
 [profile.release]
 panic = "abort" # It helps to make crash stacktraces readable
 
-[profile.release-wasm] # for platforms that support unwinding (e.g. wasm)
+[profile.release-wasm]
 inherits = "release"
 lto = true
 opt-level = "z"
