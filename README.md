@@ -6,16 +6,16 @@
 
 [日本語](README.ja.md)
 
-Instant Replay is a library that allows you to save recent gameplay videos at any time in Unity.
-You can save recent game footage retroactively when needed, ensuring you don't miss recording important moments. The recording time is limited to a pre-specified length, and frames exceeding this limit are discarded.
+Instant Replay is a Unity library for saving recent gameplay footage on demand.
+It maintains a rolling buffer, so you can save important moments even after they happen. Recording is limited to a preconfigured duration, and frames older than that limit are discarded.
 
-### For Sharing Gameplay on SNS
+### For Sharing Gameplay on Social Media
 
 You can implement a feature that allows users to share their recent gameplay footage on social media.
 
-### For Recording Reproduction Steps of Bugs
+### For Recording Bug Reproduction Steps
 
-When a bug occurs, you can export the operations performed up to that point as a video, which can be useful for reproducing the bug.
+When a bug occurs, you can export the recent gameplay leading up to the bug as a video, which can help reproduce it.
 
 ## Table of Contents
 
@@ -37,14 +37,14 @@ When a bug occurs, you can export the operations performed up to that point as a
       * [Built-in `IFrameProvider`](#built-in-iframeprovider)
       * [Custom `IFrameProvider` Implementation](#custom-iframeprovider-implementation)
     * [Setting the Audio Source](#setting-the-audio-source)
-      * [CRI support](#cri-support)
+      * [CRI Support](#cri-support)
     * [Getting the Recording State](#getting-the-recording-state)
   * [Unbounded Recording](#unbounded-recording)
   * [Legacy Mode](#legacy-mode)
     * [Setting Recording Time and Frame Rate](#setting-recording-time-and-frame-rate)
     * [Setting the Size](#setting-the-size)
     * [Video and Audio Sources](#video-and-audio-sources)
-  * [Exclude from the release builds](#exclude-from-the-release-builds)
+  * [Excluding from the Release Builds](#excluding-from-the-release-builds)
   * [License](#license)
 <!-- TOC -->
 
@@ -67,7 +67,7 @@ Web|(any)|(any)|(any)|[Browser supports WebCodecs](#encoder-apis-in-use)
 - For legacy mode, other platforms may work if `ffmpeg` is available in PATH.
 
 >[!WARNING]
-> **Known Issue with WebGL**: In WebGL, flickering may occur on the screen during recording. This is caused by `ScreenshotFrameProvider`, which is the default `IFrameProvider` implementation. If you encounter this issue, please use [`BuiltinCameraFrameProvider`](#built-in-iframeprovider) (for Built-in RP), [`RendererFeatureFrameProvider`](#built-in-iframeprovider) (for Universal RP), or other custom `IFrameProvider` implementation which provides input `RenderTexture` directly.
+> **Known Issue with WebGL**: In WebGL, flickering may occur on the screen during recording. This is caused by `ScreenshotFrameProvider`, which is the default `IFrameProvider` implementation. If you encounter this issue, please use [`BuiltinCameraFrameProvider`](#built-in-iframeprovider) (for Built-in RP), [`RendererFeatureFrameProvider`](#built-in-iframeprovider) (for Universal RP), or another custom `IFrameProvider` implementation that provides input `RenderTexture` directly.
 
 ### Encoder APIs in use
 
@@ -83,11 +83,11 @@ Web|[WebCodecs](https://caniuse.com/webcodecs) (`avc1.640028` for video, `mp4a.4
 
 ### Install Dependencies
 
-There are two ways to install the dependencies. You can use either of them.
+You can install the dependencies using either of the following methods.
 
 #### Method 1: Install via UnityNuGet and dependency package
 
-[Add UnityNuGet scoped registry](https://github.com/xoofx/UnityNuGet#add-scope-registry-manifestjson) and add the following git URL to the package manager:
+[Add UnityNuGet scoped registry](https://github.com/xoofx/UnityNuGet#add-scope-registry-manifestjson) and add the following git URL to the Package Manager:
 
 ```
 https://github.com/CyberAgentGameEntertainment/InstantReplay.git?path=/Packages/jp.co.cyberagent.instant-replay.dependencies#release
@@ -102,7 +102,7 @@ Install individual packages using [NuGetForUnity](https://github.com/GlitchEnzo/
 
 ### Install the Package
 
-Add the following git URL to the package manager:
+Add the following git URL to the Package Manager:
 
 ```
 https://github.com/CyberAgentGameEntertainment/InstantReplay.git?path=Packages/jp.co.cyberagent.instant-replay#release
@@ -110,11 +110,11 @@ https://github.com/CyberAgentGameEntertainment/InstantReplay.git?path=Packages/j
 
 ## Quick Start
 
-Import "User Interfaces" sample from the package manager.
+Import the "User Interfaces" sample from the Package Manager.
 
 <img width="913" alt="Image" src="https://github.com/user-attachments/assets/970ad1e3-a5cf-410c-a2cb-70e0004e88e2" />
 
-Place `InstantReplay Recorder.prefab` in the scene. This prefab has `RecorderInterface` and `PersistentRecorder` component, which will automatically record the gameplay during enabled.
+Place `InstantReplay Recorder.prefab` in the scene. This prefab contains `RecorderInterface` and `PersistentRecorder` components, which automatically record the gameplay while enabled.
 
 <img width="585" alt="Image" src="https://github.com/user-attachments/assets/0724b264-f92b-4a68-b6dc-85b9aae9c05b" />
 
@@ -122,13 +122,13 @@ Then, you can stop the recording and save the video by calling `RecorderInterfac
 
 <img width="585" alt="Image" src="https://github.com/user-attachments/assets/0674da6c-e7e8-4988-8890-01baa11f4322" />
 
-Recorded video will be displayed on the screen.
+The recorded video will be displayed on the screen.
 
 ![image](https://github.com/user-attachments/assets/f147e50d-a3e8-4dda-bfa3-22c1240f2904)
 
 ## Detailed Usage
 
-To record the gameplay, use `RealtimeInstantReplaySession`.
+To record gameplay from code, use `RealtimeInstantReplaySession` as shown below.
 
 ```csharp
 using InstantReplay;
@@ -148,9 +148,11 @@ File.Move(outputPath, Path.Combine(Application.persistentDataPath, Path.GetFileN
 
 ### Options
 
-The recording duration is determined by the memory usage. The default setting is set to 20 MiB, and when the total size of compressed frames and audio samples reaches this limit, older data is discarded. To enable longer recordings, increase the memory usage `MaxMemoryUsageBytesForCompressedFrames` or reduce the frame rate, resolution, or bitrate.
+Recording uses memory in two places: buffers for compressed output, and buffers for raw frames and audio samples awaiting encoding.
 
-It consumes some memory for the buffers that hold the compressed data, as well as for the raw frames and audio samples to be encoded. This is necessary because the encoder operates asynchronously, allowing it to receive the next frame while encoding the current one. You can specify the number of frames stored concurrently with `VideoInputQueueSize` and `AudioInputQueueSizeSeconds`, and the max number of raw frame buffers with `MaxNumberOfRawFrameBuffers` (optional). Reducing these values can decrease memory usage, but it may increase the likelihood of frame drops.
+`MaxMemoryUsageBytesForCompressedFrames` controls the recording duration. By default, recording holds up to 20 MiB of compressed data; when the total size of compressed frames and audio samples reaches this limit, older data is discarded. To enable longer recordings, increase this value or reduce the frame rate, resolution, or bitrate.
+
+`VideoInputQueueSize`, `AudioInputQueueSizeSeconds`, and `MaxNumberOfRawFrameBuffers` (optional) control how many raw frames and audio samples are queued for encoding. These queues are needed because the encoder runs asynchronously, receiving the next frame while encoding the current one. Reducing these values decreases memory usage but may increase the likelihood of dropped frames.
 
 ```csharp
 // Default settings
@@ -171,7 +173,7 @@ var options = new RealtimeEncodingOptions
     },
     MaxNumberOfRawFrameBuffers = 2, // (Optional) Max number of buffers to store frames to be encoded. Each buffer size is VideoOptions.Width * VideoOptions.Height * 4 bytes.
     MaxMemoryUsageBytesForCompressedFrames = 20 * 1024 * 1024, // 20 MiB
-    FixedFrameRate = 30.0, // null if not using fixed frame rate
+    FixedFrameRate = 30.0, // null to use the actual rendering frame rate
     VideoInputQueueSize = 5, // Maximum number of raw frames to keep before encoding
     AudioInputQueueSizeSeconds = 1.0 // Max queued audio input duration to be buffered before encoding, in seconds
 };
@@ -185,9 +187,9 @@ You can pause and resume the recording using `RealtimeInstantReplaySession.Pause
 
 ### Setting the Video Source
 
-You can use custom video source using `IFrameProvider`.
+You can use a custom video source by implementing `IFrameProvider`.
 
-Pass `IFrameProvider` instance as `frameProvider` to the `RealtimeInstantReplaySession` constructor. You can also specify whether `RealtimeInstantReplaySession` automatically discards `frameProvider` by `disposeFrameProvider`.
+Pass an `IFrameProvider` instance as `frameProvider` to the `RealtimeInstantReplaySession` constructor. You can also specify whether `RealtimeInstantReplaySession` automatically disposes `frameProvider` via the `disposeFrameProvider` parameter.
 
 ```csharp
 
@@ -219,12 +221,12 @@ new RealtimeInstantReplaySession(options, frameProvider: new CustomFrameProvider
 
 ### Setting the Audio Source
 
-By default, it captures the audio via `OnAudioFilterRead`. THis automatically searches for and uses a specific AudioListener on the scene.
+By default, `RealtimeInstantReplaySession` captures the audio via `OnAudioFilterRead`. This automatically searches for and uses a specific AudioListener in the scene.
 
 > [!WARNING]
-> AudioSource with Bypass Listener Effects will not be captured.
+> AudioSources with Bypass Listener Effects enabled will not be captured.
 
-If there are multiple AudioListeners in the scene, you can specify which one to use by passing it to the `InstantReplay.UnityAudioSampleProvider` constructor and then passing it as `audioSampleProvider` to the `RealtimeInstantReplaySession` constructor.
+If there are multiple AudioListeners in the scene, create a `UnityAudioSampleProvider` with the one you want to use. Then pass it to the `RealtimeInstantReplaySession` constructor via the `audioSampleProvider` parameter.
 
 ```csharp
 new RealtimeInstantReplaySession(options, audioSampleProvider: new UnityAudioSampleProvider(audioListener), disposeAudioSampleProvider: true);
@@ -237,7 +239,7 @@ new RealtimeInstantReplaySession(options, audioSampleProvider: NullAudioSamplePr
 ```
 
 > [!NOTE]
-> You don't have to care about `IDisposable` of `NullAudioSampleProvider`.
+> You don't need to dispose `NullAudioSampleProvider.Instance` because it is a shared singleton.
 
 You can also use your own audio source by implementing `IAudioSampleProvider`.
 
@@ -250,29 +252,29 @@ public interface IAudioSampleProvider : IDisposable
     event ProvideAudioSamples OnProvideAudioSamples;
 }
 
-new RealtimeInstantReplaySession(options, audioSampleProvider: new CustomAudioSampleProvider(), disposeFrameProvider: true);
+new RealtimeInstantReplaySession(options, audioSampleProvider: new CustomAudioSampleProvider(), disposeAudioSampleProvider: true);
 
 ```
 
-#### CRI support
+#### CRI Support
 
-InstantReplay provides the `IAudioSampleProvider` implementation to capture audio from [CRIWARE](https://game.criware.jp/).
+InstantReplay provides `CriAudioSampleProvider`, an `IAudioSampleProvider` implementation that captures audio from [CRIWARE](https://game.criware.jp/).
 
 1. Install CRIWARE Unity Plug-in
-2. Add scripting define symbol `INSTANTREPLAY_CRI` in player settings
+2. Add scripting define symbol `INSTANTREPLAY_CRI` in Player Settings
 3. Add `InstantReplay.Cri` assembly reference if necessary
 4. Use `InstantReplay.Cri.CriAudioSampleProvider` as `audioSampleProvider` in `RealtimeInstantReplaySession` constructor
 
 ### Getting the Recording State
 
-You can get the recording state with the `InstantReplaySession.State` property.
+You can get the recording state with the `RealtimeInstantReplaySession.State` property.
 
 ## Unbounded Recording
 
-By using `UnboundedRecordingSession`, you can write the encoded data directly to an MP4 file on disk without keeping it in memory. This allows for recording without time limits, as long as there is sufficient disk space. Other than specifying the output file path in the constructor, it can be used in the same way as `RealtimeInstantReplaySession`.
+`UnboundedRecordingSession` writes encoded data directly to an MP4 file on disk without keeping it in memory, enabling unbounded recording limited only by available disk space. Apart from the required output file path in the constructor, `UnboundedRecordingSession` is used similarly to `RealtimeInstantReplaySession`.
 
 > [!WARNING]
-> If the app goes to the background during recording, the recording may stop and the recorded file may become corrupted. It is recommended to complete the recording when transitioning to the background.
+> If the app goes to the background during recording, the recording may stop and the recorded file may become corrupted. It is recommended to complete the recording before the app goes to the background.
 
 ```csharp
 using InstantReplay;
@@ -291,7 +293,7 @@ await session.CompleteAsync();
 
 ## Legacy Mode
 
-By default, `RealtimeInstantReplaySession` encodes video and audio samples in real-time but legacy `InstantReplaySession` saves JPEG-compressed video frames and raw audio samples into disk and transcodes them to a video file when `StopAndTranscodeAsync` is called. While this mode has a higher disk access, it reduces the CPU load during recording.
+By default, `RealtimeInstantReplaySession` encodes video and audio samples in real-time, but legacy `InstantReplaySession` saves JPEG-compressed video frames and raw audio samples to disk and transcodes them to a video file when `StopAndTranscodeAsync` is called. While this mode has higher disk I/O, it reduces the CPU load during recording.
 
 ```csharp
 using InstantReplay;
@@ -317,23 +319,22 @@ You can specify `numFrames` and `fixedFrameRate` in the `InstantReplaySession` c
 new InstantReplaySession(numFrames: 900, fixedFrameRate: 30);
  ```
 
-If you set `fixedFrameRate` to `null`, the actual FPS will be used.
-Frames exceeding `numFrames` will be discarded from the oldest. The disk usage during recording increases in proportion to `numFrames`, so set it to an appropriate size.
+If you set `fixedFrameRate` to `null`, the actual frame rate will be used.
+When the number of frames exceeds `numFrames`, the oldest frames are discarded. The disk usage during recording increases in proportion to `numFrames`, so set it to an appropriate size.
 
 ### Setting the Size
 
-By default, it records at the actual screen size, but you can also specify `maxWidth` and `maxHeight` in the `InstantReplaySession` constructor. If you specify `maxWidth` and `maxHeight`, it will automatically resize. Reducing the size can reduce the disk usage and time required for writing during recording. It also reduces memory usage during recording.
+By default, recordings use the actual screen size. You can cap the output resolution with `maxWidth` and `maxHeight` in the `InstantReplaySession` constructor. Reducing the size lowers disk usage, write time, and memory usage during recording.
 
 ### Video and Audio Sources
 
 `InstantReplaySession` also supports custom video and audio sources in the same way as `RealtimeInstantReplaySession`.
 
-## Exclude from the release builds
+## Excluding from the Release Builds
 
-If you are using **InstantReplay** as part of your bug collection, you should exclude script and plugin files in your release builds.
+If you are using **InstantReplay** as part of your bug reporting workflow, you should exclude script and plugin files in your release builds.
 
-You can exclude all scripts of the **InstantReplay** by adding **EXCLUDE_INSTANTREPLAY** to the **Scripting Define Symbols** in the **Player Settings**.
-Thus, if you enclose all your own code that accesses the **InstantReplay** with `#if !EXCLUDE_INSTANTREPLAY`, you can exclude all the code from the release builds.
+You can exclude all library scripts by adding `EXCLUDE_INSTANTREPLAY` to the Scripting Define Symbols in the Player Settings. To exclude your own code from the release builds, wrap it in `#if !EXCLUDE_INSTANTREPLAY`.
 
 ## License
 
