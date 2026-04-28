@@ -122,7 +122,7 @@ Then, you can stop the recording and save the video by calling `RecorderInterfac
 
 <img width="585" alt="Image" src="https://github.com/user-attachments/assets/0674da6c-e7e8-4988-8890-01baa11f4322" />
 
-The recorded video will be displayed on the screen.
+The recorded video will play on the screen.
 
 ![image](https://github.com/user-attachments/assets/f147e50d-a3e8-4dda-bfa3-22c1240f2904)
 
