@@ -23,9 +23,9 @@ use objc2_metal::{
 use tokio::sync::oneshot;
 use unity_native_plugin::{
     graphics::{GfxDeviceEventType, UnityGraphics},
-    metal::objc2::{UnityGraphicsMetalV1Interface, UnityGraphicsMetalV2, UnityGraphicsMetalV2Interface},
+    metal::{UnityGraphicsMetalV1Interface, UnityGraphicsMetalV2, UnityGraphicsMetalV2Interface},
 };
-
+use unity_native_plugin::graphics::IUnityGraphics;
 use crate::error::{AppleError, Result, OsStatusExt};
 
 use crate::common::UnsafeSendRetained;

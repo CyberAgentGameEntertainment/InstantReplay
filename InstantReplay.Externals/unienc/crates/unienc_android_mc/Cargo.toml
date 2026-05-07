@@ -15,5 +15,4 @@ ndk-sys = { version = "0.6.0", features = ["media"] }
 bitflags = "2.9.1"
 libc = "0.2.174"
 ash = "0.38.0"
-unity-native-plugin = { workspace = true, features = ["profiler"] }
-unity-native-plugin-vulkan.workspace = true
+unity-native-plugin = { workspace = true, features = ["profiler", "vulkan"] }
