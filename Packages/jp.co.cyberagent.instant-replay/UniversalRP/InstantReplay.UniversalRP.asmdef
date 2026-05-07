@@ -13,7 +13,8 @@
     "precompiledReferences": [],
     "autoReferenced": true,
     "defineConstraints": [
-        "INSTANTREPLAY_URP"
+        "INSTANTREPLAY_URP",
+        "!EXCLUDE_INSTANTREPLAY"
     ],
     "versionDefines": [
         {
