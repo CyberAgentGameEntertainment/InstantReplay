@@ -13,9 +13,10 @@ use objc2_foundation::NSString;
 use objc2_metal::{
     MTLBuffer, MTLCommandBuffer, MTLCommandEncoder, MTLCommandQueue, MTLCullMode, MTLDevice,
     MTLIndexType, MTLLibrary, MTLPixelFormat, MTLPrimitiveType, MTLRenderCommandEncoder,
-    MTLRenderPassColorAttachmentDescriptor, MTLRenderPipelineColorAttachmentDescriptor,
-    MTLRenderPipelineDescriptor, MTLRenderPipelineState, MTLResourceOptions, MTLSamplerAddressMode,
-    MTLSamplerDescriptor, MTLSamplerMinMagFilter, MTLSamplerMipFilter, MTLTexture,
+    MTLRenderPassColorAttachmentDescriptor, MTLRenderPassDescriptor,
+    MTLRenderPipelineColorAttachmentDescriptor, MTLRenderPipelineDescriptor,
+    MTLRenderPipelineState, MTLResourceOptions, MTLSamplerAddressMode, MTLSamplerDescriptor,
+    MTLSamplerMinMagFilter, MTLSamplerMipFilter, MTLSamplerState, MTLTexture,
     MTLVertexAttributeDescriptor, MTLVertexBufferLayoutDescriptor, MTLVertexDescriptor,
     MTLVertexFormat, MTLVertexStepFunction,
 };
@@ -58,6 +59,11 @@ struct Markers {
     custom_blit_resources_commit_unity: ProfilerMarkerDesc,
     custom_blit_resources_command_buffer: ProfilerMarkerDesc,
     custom_blit_commands: ProfilerMarkerDesc,
+    custom_blit_commands_encoder_create: ProfilerMarkerDesc,
+    custom_blit_commands_vert_uniforms: ProfilerMarkerDesc,
+    custom_blit_commands_record: ProfilerMarkerDesc,
+    custom_blit_commands_end_encoding: ProfilerMarkerDesc,
+    custom_blit_commands_completion_handler: ProfilerMarkerDesc,
     custom_blit_submit: ProfilerMarkerDesc,
 }
 
@@ -94,11 +100,18 @@ pub(crate) fn is_initialized() -> bool {
 
 struct GlobalContext {
     metal: UnityGraphicsMetalV2,
-    device: Retained<ProtocolObject<dyn MTLDevice>>,
     pipeline_state: Retained<ProtocolObject<dyn MTLRenderPipelineState>>,
     pipeline_state_srgb: Retained<ProtocolObject<dyn MTLRenderPipelineState>>,
     vertices: UnsafeSendRetained<ProtocolObject<dyn MTLBuffer>>,
     indices: UnsafeSendRetained<ProtocolObject<dyn MTLBuffer>>,
+    // The blit's sampler is invariant across frames; build once and reuse.
+    sampler_state: Retained<ProtocolObject<dyn MTLSamplerState>>,
+    // The render pass descriptor is reused across frames; per-frame we only
+    // mutate its colorAttachment[0]'s texture binding via objectAtIndexedSubscript.
+    // (Note: setObject:atIndexedSubscript: copies the input, so we must mutate
+    // the descriptor's own colorAttachment in place rather than caching a
+    // standalone MTLRenderPassColorAttachmentDescriptor.)
+    render_pass_descriptor: UnsafeSendRetained<MTLRenderPassDescriptor>,
     // CVMetalTextureCache is tied to the MTLDevice and expensive to create,
     // so reuse one per device for the entire plugin lifetime. Pooling
     // CVPixelBuffers (below) keeps the cache contents bounded, so explicit
@@ -185,6 +198,46 @@ pub(crate) fn unity_plugin_load(interfaces: &unity_native_plugin::interface::Uni
             custom_blit_commands: profiler
                 .create_marker(
                     c"unienc_apple_vt::metal::custom_blit::commands",
+                    BuiltinProfilerCategory::Other as ProfilerCategoryId,
+                    ProfilerMarkerFlags::new(ProfilerMarkerFlag::Default),
+                    0,
+                )
+                .unwrap(),
+            custom_blit_commands_encoder_create: profiler
+                .create_marker(
+                    c"unienc_apple_vt::metal::custom_blit::commands::encoder_create",
+                    BuiltinProfilerCategory::Other as ProfilerCategoryId,
+                    ProfilerMarkerFlags::new(ProfilerMarkerFlag::Default),
+                    0,
+                )
+                .unwrap(),
+            custom_blit_commands_vert_uniforms: profiler
+                .create_marker(
+                    c"unienc_apple_vt::metal::custom_blit::commands::vert_uniforms",
+                    BuiltinProfilerCategory::Other as ProfilerCategoryId,
+                    ProfilerMarkerFlags::new(ProfilerMarkerFlag::Default),
+                    0,
+                )
+                .unwrap(),
+            custom_blit_commands_record: profiler
+                .create_marker(
+                    c"unienc_apple_vt::metal::custom_blit::commands::record",
+                    BuiltinProfilerCategory::Other as ProfilerCategoryId,
+                    ProfilerMarkerFlags::new(ProfilerMarkerFlag::Default),
+                    0,
+                )
+                .unwrap(),
+            custom_blit_commands_end_encoding: profiler
+                .create_marker(
+                    c"unienc_apple_vt::metal::custom_blit::commands::end_encoding",
+                    BuiltinProfilerCategory::Other as ProfilerCategoryId,
+                    ProfilerMarkerFlags::new(ProfilerMarkerFlag::Default),
+                    0,
+                )
+                .unwrap(),
+            custom_blit_commands_completion_handler: profiler
+                .create_marker(
+                    c"unienc_apple_vt::metal::custom_blit::commands::completion_handler",
                     BuiltinProfilerCategory::Other as ProfilerCategoryId,
                     ProfilerMarkerFlags::new(ProfilerMarkerFlag::Default),
                     0,
@@ -397,14 +450,38 @@ fragment FShaderOutput fragment_main(VertexOut in [[stage_in]],
                 let texture_cache = unsafe { Retained::from_raw(cache) }
                     .expect("CVMetalTextureCache::create returned null");
 
+                let sampler_desc = MTLSamplerDescriptor::new();
+                sampler_desc.setSAddressMode(MTLSamplerAddressMode::ClampToEdge);
+                sampler_desc.setTAddressMode(MTLSamplerAddressMode::ClampToEdge);
+                sampler_desc.setMinFilter(MTLSamplerMinMagFilter::Linear);
+                sampler_desc.setMagFilter(MTLSamplerMinMagFilter::Linear);
+                sampler_desc.setMipFilter(MTLSamplerMipFilter::NotMipmapped);
+                let sampler_state = device
+                    .newSamplerStateWithDescriptor(&sampler_desc)
+                    .expect("MTLSamplerState creation failed");
+
+                let render_pass_descriptor = MTLRenderPassDescriptor::new();
+                {
+                    // Accessing colorAttachments[0] lazily allocates the
+                    // attachment owned by the descriptor; configure it once.
+                    let color_attachment = unsafe {
+                        render_pass_descriptor
+                            .colorAttachments()
+                            .objectAtIndexedSubscript(0)
+                    };
+                    color_attachment.setLoadAction(objc2_metal::MTLLoadAction::DontCare);
+                    color_attachment.setStoreAction(objc2_metal::MTLStoreAction::Store);
+                }
+
                 CONTEXT
                     .set(Mutex::new(GlobalContext {
                         metal,
-                        device,
                         pipeline_state,
                         pipeline_state_srgb,
                         vertices: vertices.into(),
                         indices: indices.into(),
+                        sampler_state,
+                        render_pass_descriptor: render_pass_descriptor.into(),
                         texture_cache: texture_cache.into(),
                         pixel_buffer_pool: None,
                     }))
@@ -492,119 +569,126 @@ pub(crate) fn custom_blit(
         (shared_texture, command_buffer)
     };
 
-    let device = &context.device;
-
     let (block_ptr, rx) = {
         let _guard = markers.map(|m| m.custom_blit_commands.get());
 
-        let color_attachment_desc = MTLRenderPassColorAttachmentDescriptor::new();
-        color_attachment_desc.setTexture(Some(&shared_texture.metal_texture()));
-        color_attachment_desc.setLoadAction(objc2_metal::MTLLoadAction::DontCare);
-        color_attachment_desc.setStoreAction(objc2_metal::MTLStoreAction::Store);
+        let encoder = {
+            let _guard = markers.map(|m| m.custom_blit_commands_encoder_create.get());
 
-        let render_pass_descriptor = objc2_metal::MTLRenderPassDescriptor::new();
-        unsafe {
-            render_pass_descriptor
-                .colorAttachments()
-                .setObject_atIndexedSubscript(Some(&color_attachment_desc), 0)
+            // Reuse the cached MTLRenderPassDescriptor; mutate its
+            // colorAttachment[0] in place via objectAtIndexedSubscript.
+            // (setObject:atIndexedSubscript: copies the input, so we must
+            // not cache a standalone MTLRenderPassColorAttachmentDescriptor.)
+            // custom_blit is render-thread serial, so in-place mutation
+            // across frames is safe.
+            unsafe {
+                context
+                    .render_pass_descriptor
+                    .colorAttachments()
+                    .objectAtIndexedSubscript(0)
+            }
+            .setTexture(Some(&shared_texture.metal_texture()));
+
+            command_buffer
+                .renderCommandEncoderWithDescriptor(&context.render_pass_descriptor)
+                .ok_or(AppleError::RenderCommandEncoderCreationFailed)?
         };
 
-        let encoder = command_buffer
-            .renderCommandEncoderWithDescriptor(&render_pass_descriptor)
-            .ok_or(AppleError::RenderCommandEncoderCreationFailed)?;
+        let vert_uniforms = {
+            let _guard = markers.map(|m| m.custom_blit_commands_vert_uniforms.get());
 
-        let sampler_desc = MTLSamplerDescriptor::new();
-        sampler_desc.setSAddressMode(MTLSamplerAddressMode::ClampToEdge);
-        sampler_desc.setTAddressMode(MTLSamplerAddressMode::ClampToEdge);
-        sampler_desc.setMinFilter(MTLSamplerMinMagFilter::Linear);
-        sampler_desc.setMagFilter(MTLSamplerMinMagFilter::Linear);
-        sampler_desc.setMipFilter(MTLSamplerMipFilter::NotMipmapped);
+            // scale to fit
+            let pixel_scale = f32::min(
+                dst_width as f32 / source.width() as f32,
+                dst_height as f32 / source.height() as f32,
+            );
+            let render_scale_x = pixel_scale * source.width() as f32 / dst_width as f32;
+            let render_scale_y = pixel_scale * source.height() as f32 / dst_height as f32;
 
-        let sampler_state = device
-            .newSamplerStateWithDescriptor(&sampler_desc)
-            .ok_or(AppleError::SamplerStateCreationFailed)?;
-
-        if is_gamma_workflow {
-            encoder.setRenderPipelineState(&context.pipeline_state);
-        } else {
-            encoder.setRenderPipelineState(&context.pipeline_state_srgb);
-        }
-
-        encoder.setCullMode(MTLCullMode::None);
-
-        // vertex
-        unsafe { encoder.setVertexBuffer_offset_atIndex(Some(&*context.vertices), 0, 0) };
-
-        // scale to fit
-        let pixel_scale = f32::min(
-            dst_width as f32 / source.width() as f32,
-            dst_height as f32 / source.height() as f32,
-        );
-        let render_scale_x = pixel_scale * source.width() as f32 / dst_width as f32;
-        let render_scale_y = pixel_scale * source.height() as f32 / dst_height as f32;
-
-        let mut vert_uniforms = if flip_vertically {
-            VertexUniforms {
-                scale_and_tiling: [1f32 / render_scale_x, -1f32 / render_scale_y, 0.0, 1.0],
-            }
-        } else {
-            VertexUniforms {
-                scale_and_tiling: [1f32 / render_scale_x, 1f32 / render_scale_y, 0.0, 0.0],
+            if flip_vertically {
+                VertexUniforms {
+                    scale_and_tiling: [1f32 / render_scale_x, -1f32 / render_scale_y, 0.0, 1.0],
+                }
+            } else {
+                VertexUniforms {
+                    scale_and_tiling: [1f32 / render_scale_x, 1f32 / render_scale_y, 0.0, 0.0],
+                }
             }
         };
 
-        let vert_uniforms = unsafe {
-            device.newBufferWithBytes_length_options(
-                NonNull::new(&mut vert_uniforms as *mut VertexUniforms as *mut _)
-                    .ok_or(AppleError::NonNullCreationFailed)?,
-                std::mem::size_of::<VertexUniforms>(),
-                MTLResourceOptions::CPUCacheModeWriteCombined,
-            )
-        }
-        .ok_or(AppleError::VertexUniformsBufferCreationFailed)?;
+        {
+            let _guard = markers.map(|m| m.custom_blit_commands_record.get());
 
-        unsafe { encoder.setVertexBuffer_offset_atIndex(Some(&vert_uniforms), 0, 1) };
-
-        // fragment
-
-        unsafe { encoder.setFragmentTexture_atIndex(Some(source), 0) };
-        unsafe { encoder.setFragmentSamplerState_atIndex(Some(&sampler_state), 0) };
-
-        unsafe {
-            encoder.drawIndexedPrimitives_indexCount_indexType_indexBuffer_indexBufferOffset(
-                MTLPrimitiveType::Triangle,
-                3,
-                MTLIndexType::UInt16,
-                &context.indices,
-                0,
-            )
-        };
-
-        encoder.endEncoding();
-
-        let (tx, rx) = oneshot::channel();
-
-        let cell = Arc::new(RefCell::new(None));
-        let cell_clone = cell.clone();
-
-        fn fnonce_to_fn<Args>(closure: impl FnOnce(Args)) -> impl Fn(Args) {
-            let cell = Cell::new(Some(closure));
-            move |args| {
-                let closure = cell.take().expect("called twice");
-                closure(args)
+            if is_gamma_workflow {
+                encoder.setRenderPipelineState(&context.pipeline_state);
+            } else {
+                encoder.setRenderPipelineState(&context.pipeline_state_srgb);
             }
+
+            encoder.setCullMode(MTLCullMode::None);
+
+            // vertex
+            unsafe { encoder.setVertexBuffer_offset_atIndex(Some(&*context.vertices), 0, 0) };
+            // setVertexBytes copies into Metal's per-frame scratch and avoids
+            // allocating a transient MTLBuffer for the 16-byte uniforms.
+            unsafe {
+                encoder.setVertexBytes_length_atIndex(
+                    NonNull::new(&vert_uniforms as *const VertexUniforms as *mut _)
+                        .ok_or(AppleError::NonNullCreationFailed)?,
+                    std::mem::size_of::<VertexUniforms>(),
+                    1,
+                )
+            };
+
+            // fragment
+            unsafe { encoder.setFragmentTexture_atIndex(Some(source), 0) };
+            unsafe { encoder.setFragmentSamplerState_atIndex(Some(&context.sampler_state), 0) };
+
+            unsafe {
+                encoder.drawIndexedPrimitives_indexCount_indexType_indexBuffer_indexBufferOffset(
+                    MTLPrimitiveType::Triangle,
+                    3,
+                    MTLIndexType::UInt16,
+                    &context.indices,
+                    0,
+                )
+            };
         }
 
-        let block = RcBlock::new(fnonce_to_fn(
-            move |_command_buffer: NonNull<ProtocolObject<dyn MTLCommandBuffer>>| {
-                tx.send(shared_texture).unwrap();
+        {
+            let _guard = markers.map(|m| m.custom_blit_commands_end_encoding.get());
+            encoder.endEncoding();
+        }
 
-                drop(cell_clone.borrow_mut().take()); // drop self
-            },
-        ));
+        let (block_ptr, rx) = {
+            let _guard = markers.map(|m| m.custom_blit_commands_completion_handler.get());
 
-        cell.borrow_mut().replace(block.clone());
-        let block_ptr = RcBlock::into_raw(block);
+            let (tx, rx) = oneshot::channel();
+
+            let cell = Arc::new(RefCell::new(None));
+            let cell_clone = cell.clone();
+
+            fn fnonce_to_fn<Args>(closure: impl FnOnce(Args)) -> impl Fn(Args) {
+                let cell = Cell::new(Some(closure));
+                move |args| {
+                    let closure = cell.take().expect("called twice");
+                    closure(args)
+                }
+            }
+
+            let block = RcBlock::new(fnonce_to_fn(
+                move |_command_buffer: NonNull<ProtocolObject<dyn MTLCommandBuffer>>| {
+                    tx.send(shared_texture).unwrap();
+
+                    drop(cell_clone.borrow_mut().take()); // drop self
+                },
+            ));
+
+            cell.borrow_mut().replace(block.clone());
+            let block_ptr = RcBlock::into_raw(block);
+
+            (block_ptr, rx)
+        };
 
         (block_ptr, rx)
     };
@@ -694,8 +778,7 @@ impl SharedTexture {
             let _guard = markers.map(|m| m.custom_blit_resources_pixel_buffer_create.get());
 
             let threshold_num = CFNumber::new_i32(POOL_ALLOCATION_THRESHOLD);
-            let aux_keys: [&CFString; 1] =
-                unsafe { [kCVPixelBufferPoolAllocationThresholdKey] };
+            let aux_keys: [&CFString; 1] = unsafe { [kCVPixelBufferPoolAllocationThresholdKey] };
             let aux_values: [&CFType; 1] = [&threshold_num];
             let aux_attrs = CFDictionary::from_slices(&aux_keys, &aux_values);
 

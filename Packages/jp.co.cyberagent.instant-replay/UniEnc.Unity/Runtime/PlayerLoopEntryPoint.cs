@@ -34,7 +34,7 @@ namespace UniEnc.Unity
             // Drain queued graphics events as late as possible in the update phase.
             // GetNativeTexturePtr would otherwise stall on the previous frame's GPU work
             // when called from EarlyUpdate (where SynchronizationContext continuations run).
-            InsertBefore<PostLateUpdate.PlayerSendFrameStarted>(
+            InsertBefore<PostLateUpdate.FinishFrameRendering>(
                 new PlayerLoopSystem
                 {
                     type = typeof(BeforeRendering),
