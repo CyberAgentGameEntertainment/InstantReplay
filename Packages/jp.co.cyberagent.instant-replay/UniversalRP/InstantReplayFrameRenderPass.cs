@@ -52,7 +52,7 @@ namespace InstantReplay.UniversalRP
 #endif
         public override void Execute(ScriptableRenderContext context, ref RenderingData renderingData)
         {
-            var commandBuffer = CommandBufferPool.Get();
+            var commandBuffer = CommandBufferPool.Get("InstantReplay.UniversalRP.InstantReplayFrameRenderPass");
             var target = renderingData.cameraData.renderer.cameraColorTargetHandle;
             var flipped = renderingData.cameraData.IsHandleYFlipped(target);
             OnFrameProvided?.Invoke(renderingData.cameraData.camera,

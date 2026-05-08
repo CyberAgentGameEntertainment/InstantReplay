@@ -14,6 +14,8 @@ namespace UniEnc.Unity
 
         private static CommandBuffer _sharedCommandBuffer;
 
+        private static readonly ConcurrentQueue<GraphicsEventArguments> PendingEvents = new();
+
         public static nint OnIssueGraphicsEventPtr =>
             _onIssueGraphicsEventPtr ??=
                 Marshal.GetFunctionPointerForDelegate(_onIssueGraphicsEvent ??= OnIssueGraphicsEvent);
@@ -34,63 +36,75 @@ namespace UniEnc.Unity
         [MonoPInvokeCallback(typeof(IssueGraphicsEventDelegate))]
         private static void OnIssueGraphicsEvent(nint eventFuncPtr, int eventId, nint context, nuint textureToken)
         {
-            try
+            // Always queue and drain at PostLateUpdate. Posting via SynchronizationContext
+            // would resume in EarlyUpdate, where GetNativeTexturePtr stalls the main thread
+            // waiting for the previous frame's GPU work to complete.
+            if (!GraphicsEventArguments.Pool.TryDequeue(out var args))
+                args = new GraphicsEventArguments();
+
+            args.EventFuncPtr = eventFuncPtr;
+            args.EventId = eventId;
+            args.Context = context;
+            args.TextureToken = textureToken;
+
+            PendingEvents.Enqueue(args);
+        }
+
+        internal static void FlushPendingEvents()
+        {
+            while (PendingEvents.TryDequeue(out var args))
             {
-                if (!PlayerLoopEntryPoint.IsMainThread)
+                try
                 {
-                    // not on main thread — marshal to main thread
-                    if (!GraphicsEventArguments.Pool.TryDequeue(out var dequeued))
-                        dequeued = new GraphicsEventArguments();
-
-                    dequeued.EventFuncPtr = eventFuncPtr;
-                    dequeued.EventId = eventId;
-                    dequeued.Context = context;
-                    dequeued.TextureToken = textureToken;
-
-                    PlayerLoopEntryPoint.MainThreadContext.Post(static ctx =>
-                    {
-                        if (ctx is not GraphicsEventArguments args) return;
-                        OnIssueGraphicsEvent(args.EventFuncPtr, args.EventId, args.Context, args.TextureToken);
-                        GraphicsEventArguments.Pool.Enqueue(args);
-                    }, dequeued);
+                    ProcessEvent(args.EventFuncPtr, args.EventId, args.Context, args.TextureToken);
                 }
-                else
+                catch (Exception ex)
                 {
-                    // Resolve the texture token to get the current native texture pointer.
-                    var texture = ResolveAndFreeTextureToken(textureToken);
-
-                    if (!texture)
-                    {
-                        // Texture was destroyed — skip and clean up native context.
-                        VideoEncoder.UnsafeReleaseGraphicsEventContext(context);
-                        return;
-                    }
-
-                    var nativePtr = texture.GetNativeTexturePtr();
-                    if (nativePtr == IntPtr.Zero)
-                    {
-                        VideoEncoder.UnsafeReleaseGraphicsEventContext(context);
-                        return;
-                    }
-
-                    // Write the resolved native pointer directly into the shared repr(C) context
-                    // so the render-thread trampoline on the Rust side can read it.
-                    unsafe
-                    {
-                        ((GraphicsEventContext*)context)->NativeTexturePtr = nativePtr;
-                    }
-
-                    _sharedCommandBuffer ??= new CommandBuffer();
-                    _sharedCommandBuffer.Clear();
-                    _sharedCommandBuffer.IssuePluginEventAndData(eventFuncPtr, eventId, context);
-                    Graphics.ExecuteCommandBuffer(_sharedCommandBuffer);
+                    Debug.LogException(ex);
+                    VideoEncoder.UnsafeReleaseGraphicsEventContext(args.Context);
+                }
+                finally
+                {
+                    args.EventFuncPtr = default;
+                    args.EventId = default;
+                    args.Context = default;
+                    args.TextureToken = default;
+                    GraphicsEventArguments.Pool.Enqueue(args);
                 }
             }
-            catch (Exception ex)
+        }
+
+        private static void ProcessEvent(nint eventFuncPtr, int eventId, nint context, nuint textureToken)
+        {
+            var texture = ResolveAndFreeTextureToken(textureToken);
+
+            if (!texture)
             {
-                Debug.LogException(ex);
                 VideoEncoder.UnsafeReleaseGraphicsEventContext(context);
+                return;
             }
+
+            var nativePtr = texture.GetNativeTexturePtr();
+            if (nativePtr == IntPtr.Zero)
+            {
+                VideoEncoder.UnsafeReleaseGraphicsEventContext(context);
+                return;
+            }
+
+            // Write the resolved native pointer directly into the shared repr(C) context
+            // so the render-thread trampoline on the Rust side can read it.
+            unsafe
+            {
+                ((GraphicsEventContext*)context)->NativeTexturePtr = nativePtr;
+            }
+
+            _sharedCommandBuffer ??= new CommandBuffer
+            {
+                name = "UniEnc.Unity.GraphicsEventIssuer"
+            };
+            _sharedCommandBuffer.Clear();
+            _sharedCommandBuffer.IssuePluginEventAndData(eventFuncPtr, eventId, context);
+            Graphics.ExecuteCommandBuffer(_sharedCommandBuffer);
         }
 
         [StructLayout(LayoutKind.Sequential)]

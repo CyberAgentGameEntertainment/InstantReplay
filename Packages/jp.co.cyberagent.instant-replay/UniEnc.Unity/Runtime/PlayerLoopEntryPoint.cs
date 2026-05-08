@@ -31,6 +31,17 @@ namespace UniEnc.Unity
                 },
                 ref system);
 
+            // Drain queued graphics events as late as possible in the update phase.
+            // GetNativeTexturePtr would otherwise stall on the previous frame's GPU work
+            // when called from EarlyUpdate (where SynchronizationContext continuations run).
+            InsertBefore<PostLateUpdate.PlayerSendFrameStarted>(
+                new PlayerLoopSystem
+                {
+                    type = typeof(BeforeRendering),
+                    updateDelegate = GraphicsEventIssuer.FlushPendingEvents
+                },
+                ref system);
+
             PlayerLoop.SetPlayerLoop(system);
         }
 
@@ -57,7 +68,34 @@ namespace UniEnc.Unity
             return false;
         }
 
+        private static bool InsertBefore<T>(in PlayerLoopSystem newSystem, ref PlayerLoopSystem target)
+            where T : struct
+        {
+            var subSystems = target.subSystemList;
+            if (subSystems == null) return false;
+
+            for (var i = 0; i < subSystems.Length; i++)
+            {
+                if (subSystems[i].type != typeof(T)) continue;
+
+                var list = subSystems.ToList();
+                list.Insert(i, newSystem);
+                target.subSystemList = list.ToArray();
+                return true;
+            }
+
+            for (var i = 0; i < subSystems.Length; i++)
+                if (InsertBefore<T>(newSystem, ref subSystems[i]))
+                    return true;
+
+            return false;
+        }
+
         private struct AfterUpdate
+        {
+        }
+
+        private struct BeforeRendering
         {
         }
     }

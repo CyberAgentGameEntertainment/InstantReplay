@@ -25,7 +25,7 @@ objc2-metal = "0.3.2"
 objc2-video-toolbox = "0.3.1"
 tokio = { version = "1.45.1", features = ["sync"] }
 unienc_common = { workspace = true, features = ["unity"] }
-unity-native-plugin = { workspace = true, features = ["metal"] }
+unity-native-plugin = { workspace = true, features = ["metal", "profiler"] }
 
 [features]
 default = []
