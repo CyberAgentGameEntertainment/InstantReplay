@@ -187,8 +187,8 @@ jobs:
         with:
           submodules: 'recursive'
       - run: |
-          cargo install cargo-about --locked
-          cargo about generate about.hbs > ../../THIRD-PARTY-NOTICES.md
+          cargo install cargo-about --locked --features cli
+          cargo about generate --features unity,mimalloc about.hbs > ../../THIRD-PARTY-NOTICES.md
         working-directory: InstantReplay.Externals/unienc
       - uses: actions/upload-artifact@v4
         with:
