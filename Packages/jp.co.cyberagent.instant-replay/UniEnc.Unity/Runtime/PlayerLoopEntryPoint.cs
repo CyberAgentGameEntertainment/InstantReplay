@@ -23,7 +23,7 @@ namespace UniEnc.Unity
             MainThreadContext = SynchronizationContext.Current;
 
             var system = PlayerLoop.GetCurrentPlayerLoop();
-            InsertAfter<Update.ScriptRunBehaviourUpdate>(
+            InsertAfter<Update, Update.ScriptRunBehaviourUpdate>(
                 new PlayerLoopSystem
                 {
                     type = typeof(AfterUpdate),
@@ -34,7 +34,7 @@ namespace UniEnc.Unity
             // Drain queued graphics events as late as possible in the update phase.
             // GetNativeTexturePtr would otherwise stall on the previous frame's GPU work
             // when called from EarlyUpdate (where SynchronizationContext continuations run).
-            InsertBefore<PostLateUpdate.FinishFrameRendering>(
+            InsertBefore<PostLateUpdate, PostLateUpdate.FinishFrameRendering>(
                 new PlayerLoopSystem
                 {
                     type = typeof(BeforeRendering),
@@ -45,48 +45,56 @@ namespace UniEnc.Unity
             PlayerLoop.SetPlayerLoop(system);
         }
 
-        private static bool InsertAfter<T>(in PlayerLoopSystem newSystem, ref PlayerLoopSystem target)
-            where T : struct
+        private static bool InsertAfter<TTop, TSub>(in PlayerLoopSystem newSystem, ref PlayerLoopSystem target)
+            where TTop : struct
+            where TSub : struct
         {
             var subSystems = target.subSystemList;
             if (subSystems == null) return false;
 
             for (var i = 0; i < subSystems.Length; i++)
             {
-                if (subSystems[i].type != typeof(T)) continue;
+                if (subSystems[i].type != typeof(TTop)) continue;
 
-                var list = subSystems.ToList();
-                list.Insert(i + 1, newSystem);
-                target.subSystemList = list.ToArray();
-                return true;
-            }
+                var subSubSystems = subSystems[i].subSystemList;
 
-            for (var i = 0; i < subSystems.Length; i++)
-                if (InsertAfter<T>(newSystem, ref subSystems[i]))
+                for (var j = 0; j < subSubSystems.Length; j++)
+                {
+                    if (subSubSystems[j].type != typeof(TSub)) continue;
+
+                    var list = subSubSystems.ToList();
+                    list.Insert(j + 1, newSystem);
+                    subSubSystems[j].subSystemList = list.ToArray();
                     return true;
+                }
+            }
 
             return false;
         }
 
-        private static bool InsertBefore<T>(in PlayerLoopSystem newSystem, ref PlayerLoopSystem target)
-            where T : struct
+        private static bool InsertBefore<TTop, TSub>(in PlayerLoopSystem newSystem, ref PlayerLoopSystem target)
+            where TTop : struct
+            where TSub : struct
         {
             var subSystems = target.subSystemList;
             if (subSystems == null) return false;
 
             for (var i = 0; i < subSystems.Length; i++)
             {
-                if (subSystems[i].type != typeof(T)) continue;
+                if (subSystems[i].type != typeof(TTop)) continue;
 
-                var list = subSystems.ToList();
-                list.Insert(i, newSystem);
-                target.subSystemList = list.ToArray();
-                return true;
-            }
+                var subSubSystems = subSystems[i].subSystemList;
 
-            for (var i = 0; i < subSystems.Length; i++)
-                if (InsertBefore<T>(newSystem, ref subSystems[i]))
+                for (var j = 0; j < subSubSystems.Length; j++)
+                {
+                    if (subSubSystems[j].type != typeof(TSub)) continue;
+
+                    var list = subSubSystems.ToList();
+                    list.Insert(j, newSystem);
+                    subSubSystems[j].subSystemList = list.ToArray();
                     return true;
+                }
+            }
 
             return false;
         }
