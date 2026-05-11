@@ -1,5 +1,5 @@
 [workspace]
-members = [ "./crates/*", "./external/unity-native-plugin-rs/Cargo.toml", "./external/muxide/Cargo.toml" ]
+members = [ "./crates/*", "./external/muxide/Cargo.toml" ]
 default-members = ["./crates/unienc_c"]
 resolver = "2"
 
@@ -15,12 +15,9 @@ unienc_windows_mf = { path = "./crates/unienc_windows_mf" }
 unienc_apple_vt = { path = "./crates/unienc_apple_vt" }
 unienc_ffmpeg = {  path = "./crates/unienc_ffmpeg" }
 unienc_webcodecs = {  path = "./crates/unienc_webcodecs" }
-unity-native-plugin = { path = "./external/unity-native-plugin-rs/unity-native-plugin" }
-unity-native-plugin-vulkan = { path = "./external/unity-native-plugin-rs/unity-native-plugin-vulkan" }
+unity-native-plugin = "0.9.0"
 
 [patch.crates-io]
-unity-native-plugin = { path = "./external/unity-native-plugin-rs/unity-native-plugin" }
-unity-native-plugin-vulkan = { path = "./external/unity-native-plugin-rs/unity-native-plugin-vulkan" }
 muxide = { path = "./external/muxide" }
 mimalloc = { path = "./external/mimalloc_rust"}
 

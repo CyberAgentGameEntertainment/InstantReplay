@@ -12,6 +12,7 @@ use crate::vulkan::{GlobalContext, ProfilerMarkerDescExt, MARKERS};
 use ash::vk;
 use std::future::Future;
 use std::sync::{Arc, Mutex};
+use unity_native_plugin::vulkan::IUnityGraphicsVulkan;
 
 const VERT: &[u8] = include_bytes!("preprocess.vert.glsl.spv");
 const FRAG: &[u8] = include_bytes!("preprocess.frag.glsl.spv");

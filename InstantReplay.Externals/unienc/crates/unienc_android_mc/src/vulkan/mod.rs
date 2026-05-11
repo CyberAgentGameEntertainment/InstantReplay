@@ -16,15 +16,9 @@ use std::{
     sync::{Mutex, OnceLock},
 };
 use crate::error::{AndroidError, Result, ResultExt};
-use unity_native_plugin::graphics::{GfxDeviceEventType, UnityGraphics};
-use unity_native_plugin::profiler::{
-    BuiltinProfilerCategory, ProfilerCategoryId, ProfilerMarkerDesc, ProfilerMarkerEventType,
-    ProfilerMarkerFlag, ProfilerMarkerFlags, UnityProfiler,
-};
-use unity_native_plugin_vulkan::vulkan::{
-    UnityGraphicsVulkanV2, VulkanEventRenderPassPreCondition, VulkanGraphicsQueueAccess,
-    VulkanPluginEventConfig,
-};
+use unity_native_plugin::graphics::{GfxDeviceEventType, IUnityGraphics, UnityGraphics};
+use unity_native_plugin::profiler::{BuiltinProfilerCategory, IUnityProfiler, ProfilerCategoryId, ProfilerMarkerDesc, ProfilerMarkerEventType, ProfilerMarkerFlag, ProfilerMarkerFlags, UnityProfiler};
+use unity_native_plugin::vulkan::{IUnityGraphicsVulkan, UnityGraphicsVulkanV2, VulkanEventRenderPassPreCondition, VulkanGraphicsQueueAccess, VulkanPluginEventConfig};
 
 use crate::vulkan::preprocess::PreprocessRenderPass;
 use crate::vulkan::utils::FencePool;
