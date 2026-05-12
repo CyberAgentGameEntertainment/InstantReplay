@@ -1,3 +1,17 @@
+## [1.5.5] - 2026/05/12
+
+### Added
+
+- Part of native memory allocated by InstantReplay is now visible in Unity's Memory Profiler, making it easier to investigate memory usage of recording.
+
+### Fixed
+
+- Fixed `InstantReplay.UniversalRP` assembly not being excluded when the `EXCLUDE_INSTANTREPLAY` scripting symbol is defined.
+
+### Changed
+
+- Improved performance of the readback-free encoding pipeline on Apple platforms (iOS/macOS) by optimizing Metal blit and PlayerLoop integration, reducing per-frame CPU overhead during recording.
+
 ## [1.5.4] - 2026/04/21
 
 ### Fixed
