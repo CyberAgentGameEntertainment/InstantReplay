@@ -3,7 +3,7 @@
 ## Overview
 
 - Apache License 2.0 (152)
-- MIT License (36)
+- MIT License (37)
 - BSD 3-Clause &quot;New&quot; or &quot;Revised&quot; License (1)
 - ISC License (1)
 - Unicode License v3 (1)
@@ -2972,6 +2972,40 @@ DEALINGS IN THE SOFTWARE.
 
 ### MIT License
 
+- [mimalloc 0.1.48](https://github.com/purpleprotocol/mimalloc_rust)
+- [libmimalloc-sys 0.1.44](https://github.com/purpleprotocol/mimalloc_rust/tree/master/libmimalloc-sys)
+
+```
+Copyright 2019 Octavian Oncescu
+
+Permission is hereby granted, free of charge, to any
+person obtaining a copy of this software and associated
+documentation files (the "Software"), to deal in the
+Software without restriction, including without
+limitation the rights to use, copy, modify, merge,
+publish, distribute, sublicense, and/or sell copies of
+the Software, and to permit persons to whom the Software
+is furnished to do so, subject to the following
+conditions:
+
+The above copyright notice and this permission notice
+shall be included in all copies or substantial portions
+of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF
+ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED
+TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT
+SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
+IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+DEALINGS IN THE SOFTWARE.
+```
+
+
+### MIT License
+
 - [tokio-macros 2.6.0](https://github.com/tokio-rs/tokio)
 
 ```
@@ -3011,15 +3045,14 @@ SOFTWARE.
 - [unienc_ffmpeg 1.4.1]( https://crates.io/crates/unienc_ffmpeg)
 - [unienc_webcodecs 1.4.1]( https://crates.io/crates/unienc_webcodecs)
 - [unienc_windows_mf 1.4.1]( https://crates.io/crates/unienc_windows_mf)
-- [unity-native-plugin 0.8.0](https://github.com/aosoft/unity-native-plugin-rs)
-- [unity-native-plugin-sys 0.8.0](https://github.com/aosoft/unity-native-plugin-rs)
-- [unity-native-plugin-vulkan 0.8.0](https://github.com/aosoft/unity-native-plugin-rs)
 - [block2 0.6.1](https://github.com/madsmtm/objc2)
 - [csbindgen 1.9.7](https://github.com/Cysharp/csbindgen/)
 - [number_prefix 0.4.0](https://github.com/ogham/rust-number-prefix)
 - [objc2-encode 4.1.0](https://github.com/madsmtm/objc2)
 - [objc2-foundation 0.3.2](https://github.com/madsmtm/objc2)
 - [objc2 0.6.3](https://github.com/madsmtm/objc2)
+- [unity-native-plugin-sys 0.9.0](https://github.com/aosoft/unity-native-plugin-rs)
+- [unity-native-plugin 0.9.0](https://github.com/aosoft/unity-native-plugin-rs)
 
 ```
 MIT License
