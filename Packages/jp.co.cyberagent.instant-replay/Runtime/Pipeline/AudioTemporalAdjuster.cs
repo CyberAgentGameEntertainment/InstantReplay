@@ -145,6 +145,7 @@ namespace InstantReplay
 
         public void Dispose()
         {
+            _disposed = true;
         }
     }
 }
