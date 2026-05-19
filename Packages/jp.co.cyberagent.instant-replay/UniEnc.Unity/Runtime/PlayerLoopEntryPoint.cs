@@ -64,7 +64,7 @@ namespace UniEnc.Unity
 
                     var list = subSubSystems.ToList();
                     list.Insert(j + 1, newSystem);
-                    subSubSystems[j].subSystemList = list.ToArray();
+                    subSystems[i].subSystemList = list.ToArray();
                     return true;
                 }
             }
@@ -91,7 +91,7 @@ namespace UniEnc.Unity
 
                     var list = subSubSystems.ToList();
                     list.Insert(j, newSystem);
-                    subSubSystems[j].subSystemList = list.ToArray();
+                    subSystems[i].subSystemList = list.ToArray();
                     return true;
                 }
             }
