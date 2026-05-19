@@ -122,13 +122,22 @@ namespace InstantReplay
             {
                 unprocessedVideoFrames = _videoQueue.ToArray();
                 unprocessedAudioFrames = _audioQueue.ToArray();
-                _videoQueue.Clear();
-                _audioQueue.Clear();
 
                 videoMetadata = _videoMetadata.ToArray();
                 audioMetadata = _audioMetadata.ToArray();
+
+                var drainedMemoryUsage = 0L;
+                foreach (var frame in unprocessedVideoFrames.Span) drainedMemoryUsage += frame.Data.Length;
+                foreach (var frame in unprocessedAudioFrames.Span) drainedMemoryUsage += frame.Data.Length;
+                foreach (var frame in videoMetadata.Span) drainedMemoryUsage += frame.Data.Length;
+                foreach (var frame in audioMetadata.Span) drainedMemoryUsage += frame.Data.Length;
+
+                _videoQueue.Clear();
+                _audioQueue.Clear();
                 _videoMetadata.Clear();
                 _audioMetadata.Clear();
+
+                Interlocked.Add(ref _currentMemoryUsage, -drainedMemoryUsage);
             }
 
             try
