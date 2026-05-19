@@ -1,4 +1,4 @@
 using System.Runtime.CompilerServices;
 
-[assembly: InternalsVisibleTo("InstantReplay.Cri")]
+// Tests need the internal EncodedFrame factory without widening UniEnc's public API.
 [assembly: InternalsVisibleTo("InstantReplay.Editor.Tests")]

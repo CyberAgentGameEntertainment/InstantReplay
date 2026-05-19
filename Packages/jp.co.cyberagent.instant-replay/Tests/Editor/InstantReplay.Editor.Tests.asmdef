@@ -1,0 +1,22 @@
+{
+    "name": "InstantReplay.Editor.Tests",
+    "rootNamespace": "InstantReplay.Editor.Tests",
+    "references": [
+        "GUID:1050604f2d3a84fcabcc4e9b9ff6745b",
+        "GUID:cbc5f87df9298458d9b3f2ed13ca9ba4"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": false,
+    "optionalUnityReferences": [
+        "TestAssemblies"
+    ],
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
