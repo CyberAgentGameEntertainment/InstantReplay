@@ -1,3 +1,10 @@
+## [1.5.6] - 2026/05/20
+
+### Fixed
+
+- Fixed PlayerLoop modification incorrectly overwriting unrelated sibling systems, which could break other packages that also customize the PlayerLoop.
+- Fixed obsolete API warnings (`FormatUsage` / `SystemInfo.IsFormatSupported`) on Unity 2023.2 or newer.
+
 ## [1.5.5] - 2026/05/12
 
 ### Added
