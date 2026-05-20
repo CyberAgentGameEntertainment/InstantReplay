@@ -14,6 +14,12 @@ using UnityEngine.Experimental.Rendering;
 using UnityEngine.Profiling;
 using UnityEngine.Rendering;
 
+#if UNITY_2023_2_OR_NEWER
+using GraphicsFormatUsage = UnityEngine.Experimental.Rendering.GraphicsFormatUsage;
+#else
+using GraphicsFormatUsage = UnityEngine.Experimental.Rendering.FormatUsage;
+#endif
+
 namespace InstantReplay
 {
     internal readonly struct FrameReadbackRequest<TContext>
@@ -48,7 +54,7 @@ namespace InstantReplay
 
             try
             {
-                if (!SystemInfo.IsFormatSupported(_format, FormatUsage.ReadPixels))
+                if (!SystemInfo.IsFormatSupported(_format, GraphicsFormatUsage.ReadPixels))
                     throw new ArgumentException($"GraphicsFormat {_format} not supported for readback");
 
                 var size = GraphicsFormatUtility.ComputeMipmapSize(source.width, source.height, source.graphicsFormat);
