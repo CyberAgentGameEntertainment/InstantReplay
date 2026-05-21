@@ -1,13 +1,15 @@
-use crate::error::{WindowsError, OptionExt, Result};
+use crate::error::{OptionExt, Result, WindowsError};
 use std::path::Path;
 use std::sync::Arc;
 use tokio::sync::mpsc;
 use tokio::sync::oneshot;
-use unienc_common::{AudioEncoderOptions, CompletionHandle, Muxer, MuxerInput, Runtime, VideoEncoderOptions};
-use windows::Win32::Media::MediaFoundation::*;
-use windows_core::IUnknown;
-use windows_core::HSTRING;
 use unienc_common::SpawnExt;
+use unienc_common::{
+    AudioEncoderOptions, CompletionHandle, Muxer, MuxerInput, Runtime, VideoEncoderOptions,
+};
+use windows::Win32::Media::MediaFoundation::*;
+use windows_core::HSTRING;
+use windows_core::IUnknown;
 
 use crate::audio::AudioEncodedData;
 use crate::common::{Payload, UnsafeSend};
@@ -32,15 +34,9 @@ impl LazyStream {
         }
     }
 
-    pub async fn get(
-        &mut self,
-        media_type: UnsafeSend<IMFMediaType>,
-    ) -> Result<()> {
+    pub async fn get(&mut self, media_type: UnsafeSend<IMFMediaType>) -> Result<()> {
         let result = async {
-            match std::mem::replace(
-                self,
-                LazyStream::Some(Err(WindowsError::StreamGetFailed)),
-            ) {
+            match std::mem::replace(self, LazyStream::Some(Err(WindowsError::StreamGetFailed))) {
                 LazyStream::None { tx, rx } => {
                     tx.send(Ok(media_type))
                         .map_err(|_| WindowsError::MediaTypeSendFailed)?;
@@ -175,7 +171,10 @@ struct Stream {
 }
 
 impl Stream {
-    pub fn new(stream: IMFStreamSink, runtime: &impl Runtime) -> Result<(Self, oneshot::Receiver<()>)> {
+    pub fn new(
+        stream: IMFStreamSink,
+        runtime: &impl Runtime,
+    ) -> Result<(Self, oneshot::Receiver<()>)> {
         let stream = UnsafeSend(stream);
         let stream_cap = UnsafeSend(stream.clone());
 
@@ -256,11 +255,17 @@ impl MuxerInput for VideoMuxerInputImpl {
     async fn push(&mut self, data: Self::Data) -> unienc_common::Result<()> {
         match data.payload {
             Payload::Format(media_type) => {
-                self.stream.get(media_type).await.map_err(|e| WindowsError::Other(e.to_string()))?;
+                self.stream
+                    .get(media_type)
+                    .await
+                    .map_err(|e| WindowsError::Other(e.to_string()))?;
                 Ok(())
             }
             Payload::Sample(sample) => {
-                let stream = self.stream.some().ok_or(WindowsError::StreamNotInitialized)?;
+                let stream = self
+                    .stream
+                    .some()
+                    .ok_or(WindowsError::StreamNotInitialized)?;
                 stream
                     .sample_tx
                     .send(sample)
@@ -287,11 +292,17 @@ impl MuxerInput for AudioMuxerInputImpl {
     async fn push(&mut self, data: Self::Data) -> unienc_common::Result<()> {
         match data.payload {
             Payload::Format(media_type) => {
-                self.stream.get(media_type).await.map_err(|e| WindowsError::Other(e.to_string()))?;
+                self.stream
+                    .get(media_type)
+                    .await
+                    .map_err(|e| WindowsError::Other(e.to_string()))?;
                 Ok(())
             }
             Payload::Sample(sample) => {
-                let stream = self.stream.some().ok_or(WindowsError::StreamNotInitialized)?;
+                let stream = self
+                    .stream
+                    .some()
+                    .ok_or(WindowsError::StreamNotInitialized)?;
                 stream
                     .sample_tx
                     .send(sample)
@@ -316,6 +327,7 @@ impl CompletionHandle for MuxerCompletionHandleImpl {
     async fn finish(self) -> unienc_common::Result<()> {
         self.receiver
             .await
-            .map_err(|e| WindowsError::MuxerCompletionWaitFailed(e.to_string()))?.map_err(|e| e.into())
+            .map_err(|e| WindowsError::MuxerCompletionWaitFailed(e.to_string()))?
+            .map_err(|e| e.into())
     }
 }

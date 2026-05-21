@@ -5,8 +5,12 @@ use unienc::unity::UnityPlugin;
 use unienc::{EncodingSystem, GraphicsEventIssuer};
 use unity_native_plugin::graphics::RenderingEventAndData;
 
-pub type UniencIssueGraphicsEventCallback =
-unsafe extern "C" fn(func: RenderingEventAndData, event_id: i32, user_data: *mut c_void, texture_token: usize);
+pub type UniencIssueGraphicsEventCallback = unsafe extern "C" fn(
+    func: RenderingEventAndData,
+    event_id: i32,
+    user_data: *mut c_void,
+    texture_token: usize,
+);
 
 pub struct UniencGraphicsEventIssuer {
     func: UniencIssueGraphicsEventCallback,
@@ -32,7 +36,9 @@ impl GraphicsEventContext {
     /// Must only be called once. Frees the inner `RustGraphicsEventData`.
     pub(crate) unsafe fn drop_rust_context(self) {
         if !self.rust_context.is_null() {
-            unsafe { let _ = Box::from_raw(self.rust_context); }
+            unsafe {
+                let _ = Box::from_raw(self.rust_context);
+            }
         }
     }
 }
@@ -43,8 +49,12 @@ struct RustGraphicsEventData {
 }
 
 impl GraphicsEventIssuer for UniencGraphicsEventIssuer {
-    fn issue_graphics_event(&self, callback: Box<dyn FnOnce(*mut c_void) + Send>, event_id: c_int, texture_token: usize) {
-
+    fn issue_graphics_event(
+        &self,
+        callback: Box<dyn FnOnce(*mut c_void) + Send>,
+        event_id: c_int,
+        texture_token: usize,
+    ) {
         let rust_data = Box::into_raw(Box::new(RustGraphicsEventData {
             callback,
             weak_runtime: self.weak_runtime.clone(),
@@ -94,7 +104,13 @@ mod entry_points {
     extern "system" fn UnityPluginLoad(interfaces: *mut unity_native_plugin::IUnityInterfaces) {
         #[cfg(feature = "mimalloc")]
         {
-            unsafe { mimalloc::unity::init(interfaces as *mut c_void, Some(c"UniEnc"), Some(c"mimalloc")) };
+            unsafe {
+                mimalloc::unity::init(
+                    interfaces as *mut c_void,
+                    Some(c"UniEnc"),
+                    Some(c"mimalloc"),
+                )
+            };
         }
         unity_native_plugin::interface::UnityInterfaces::set_native_unity_interfaces(interfaces);
         super::unity_plugin_load(unity_native_plugin::interface::UnityInterfaces::get());
@@ -114,8 +130,8 @@ mod entry_points {
 // we add `unienc_` prefix to avoid name collision with other plugins
 #[cfg(target_os = "ios")]
 mod entry_points {
-    use std::ffi::c_void;
     use crate::platform::PlatformEncodingSystem;
+    use std::ffi::c_void;
     #[unsafe(no_mangle)]
     #[allow(non_snake_case)]
     extern "system" fn unienc_UnityPluginLoad(
@@ -123,7 +139,13 @@ mod entry_points {
     ) {
         #[cfg(feature = "mimalloc")]
         {
-            unsafe { mimalloc::unity::init(interfaces as *mut c_void, Some(c"UniEnc"), Some(c"mimalloc")) };
+            unsafe {
+                mimalloc::unity::init(
+                    interfaces as *mut c_void,
+                    Some(c"UniEnc"),
+                    Some(c"mimalloc"),
+                )
+            };
         }
         unity_native_plugin::interface::UnityInterfaces::set_native_unity_interfaces(interfaces);
         super::unity_plugin_load(unity_native_plugin::interface::UnityInterfaces::get());

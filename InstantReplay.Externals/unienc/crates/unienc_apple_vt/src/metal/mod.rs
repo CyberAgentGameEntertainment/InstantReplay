@@ -1,4 +1,5 @@
 use crate::allocator;
+use crate::error::{AppleError, OsStatusExt, Result};
 use block2::RcBlock;
 use objc2::{rc::Retained, runtime::ProtocolObject};
 use objc2_core_foundation::{CFDictionary, CFNumber, CFString, CFType, kCFBooleanTrue};
@@ -28,18 +29,15 @@ use std::{
     sync::{Arc, Mutex, OnceLock},
 };
 use tokio::sync::oneshot;
+use unity_native_plugin::profiler::IUnityProfiler;
 use unity_native_plugin::{
-    graphics::{GfxDeviceEventType, UnityGraphics, IUnityGraphics},
-    metal::{
-        UnityGraphicsMetalV1Interface, UnityGraphicsMetalV2, UnityGraphicsMetalV2Interface,
-    },
+    graphics::{GfxDeviceEventType, IUnityGraphics, UnityGraphics},
+    metal::{UnityGraphicsMetalV1Interface, UnityGraphicsMetalV2, UnityGraphicsMetalV2Interface},
     profiler::{
         BuiltinProfilerCategory, ProfilerCategoryId, ProfilerMarkerDesc, ProfilerMarkerEventType,
         ProfilerMarkerFlag, ProfilerMarkerFlags, UnityProfiler,
     },
 };
-use unity_native_plugin::profiler::IUnityProfiler;
-use crate::error::{AppleError, OsStatusExt, Result};
 
 use crate::common::UnsafeSendRetained;
 

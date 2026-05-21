@@ -179,7 +179,9 @@ impl CategorizedError for AndroidError {
             AndroidError::NullVulkanTexture => ErrorCategory::ResourceAllocation,
             AndroidError::NoAvailableDescriptorSets => ErrorCategory::ResourceAllocation,
             AndroidError::NoSuitableMemoryType => ErrorCategory::ResourceAllocation,
-            AndroidError::HardwareBufferMemoryAllocationFailed(_) => ErrorCategory::ResourceAllocation,
+            AndroidError::HardwareBufferMemoryAllocationFailed(_) => {
+                ErrorCategory::ResourceAllocation
+            }
 
             // Encoding errors (Vulkan pipeline errors)
             AndroidError::MutexPoisoned => ErrorCategory::Encoding,

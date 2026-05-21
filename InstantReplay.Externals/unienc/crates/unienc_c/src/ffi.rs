@@ -1,15 +1,14 @@
-use std::ffi::{c_char, CString};
+use crate::*;
+use std::ffi::{CString, c_char};
 use std::ops::Deref;
 use std::os::raw::c_void;
 use std::sync::Arc;
 use unienc::{CategorizedError, EncodedData, ErrorCategory, UniencSampleKind};
-use crate::*;
-
 
 // Callback types for async operations
 pub type UniencCallback = unsafe extern "C" fn(user_data: *mut c_void, error: UniencErrorNative);
 pub type UniencDataCallback<Data> =
-unsafe extern "C" fn(data: Data, user_data: *mut c_void, error: UniencErrorNative);
+    unsafe extern "C" fn(data: Data, user_data: *mut c_void, error: UniencErrorNative);
 
 // Send-safe wrappers for raw pointers
 #[repr(transparent)]
@@ -228,7 +227,7 @@ impl<Data: Default> ApplyCallback<UniencDataCallback<Data>> for UniencError {
     }
 }
 impl<T: EncodedData> ApplyCallback<UniencDataCallback<UniencSampleData>>
-for Result<Option<T>, UniencError>
+    for Result<Option<T>, UniencError>
 {
     fn apply_callback(
         &self,
@@ -266,11 +265,7 @@ for Result<Option<T>, UniencError>
                 )
             },
             Err(err) => err.with_native(|native| unsafe {
-                callback(
-                    UniencSampleData::default(),
-                    user_data.into(),
-                    *native,
-                )
+                callback(UniencSampleData::default(), user_data.into(), *native)
             }),
         }
     }
@@ -278,6 +273,9 @@ for Result<Option<T>, UniencError>
 
 // These are unused but required to let csbindgen generate the binding for specific types.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn unienc_dummy(_error_kind: UniencErrorKind, _error_native: UniencErrorNative, _sample: UniencSampleData) {
-
+pub unsafe extern "C" fn unienc_dummy(
+    _error_kind: UniencErrorKind,
+    _error_native: UniencErrorNative,
+    _sample: UniencSampleData,
+) {
 }

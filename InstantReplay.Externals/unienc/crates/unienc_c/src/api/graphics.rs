@@ -1,9 +1,7 @@
 use std::os::raw::c_void;
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn unienc_free_graphics_event_context(
-    context: *mut c_void,
-) {
+pub unsafe extern "C" fn unienc_free_graphics_event_context(context: *mut c_void) {
     #[cfg(feature = "unity")]
     if !context.is_null() {
         unsafe {

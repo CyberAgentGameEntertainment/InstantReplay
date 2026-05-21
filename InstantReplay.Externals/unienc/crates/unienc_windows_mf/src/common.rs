@@ -1,11 +1,11 @@
 use std::collections::HashMap;
 use std::{fmt::Display, ops::Deref};
 
-use bincode::{BorrowDecode, Decode, Encode};
-use windows::core::GUID;
-use windows::core::{Interface, BSTR};
-use windows::Win32::Media::MediaFoundation::*;
 use crate::WindowsError;
+use bincode::{BorrowDecode, Decode, Encode};
+use windows::Win32::Media::MediaFoundation::*;
+use windows::core::GUID;
+use windows::core::{BSTR, Interface};
 
 #[derive(Debug)]
 
@@ -56,7 +56,10 @@ impl std::fmt::Debug for Payload {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let serializable: SerializablePayload = self
             .try_into()
-            .map_err(|e: crate::error::WindowsError| bincode::error::EncodeError::OtherString(e.to_string())).unwrap();
+            .map_err(|e: crate::error::WindowsError| {
+                bincode::error::EncodeError::OtherString(e.to_string())
+            })
+            .unwrap();
         serializable.fmt(f)
     }
 }
@@ -66,9 +69,10 @@ impl Encode for Payload {
         &self,
         encoder: &mut E,
     ) -> std::result::Result<(), bincode::error::EncodeError> {
-        let serializable: SerializablePayload = self
-            .try_into()
-            .map_err(|e: crate::error::WindowsError| bincode::error::EncodeError::OtherString(e.to_string()))?;
+        let serializable: SerializablePayload =
+            self.try_into().map_err(|e: crate::error::WindowsError| {
+                bincode::error::EncodeError::OtherString(e.to_string())
+            })?;
         serializable.encode(encoder)
     }
 }
@@ -80,7 +84,9 @@ impl<Context> Decode<Context> for Payload {
         let serializable = &SerializablePayload::decode(decoder)?;
         serializable
             .try_into()
-            .map_err(|e: crate::error::WindowsError| bincode::error::DecodeError::OtherString(e.to_string()))
+            .map_err(|e: crate::error::WindowsError| {
+                bincode::error::DecodeError::OtherString(e.to_string())
+            })
     }
 }
 
@@ -91,7 +97,9 @@ impl<'de, Context> BorrowDecode<'de, Context> for Payload {
         let serializable = &SerializablePayload::borrow_decode(decoder)?;
         serializable
             .try_into()
-            .map_err(|e: crate::error::WindowsError| bincode::error::DecodeError::OtherString(e.to_string()))
+            .map_err(|e: crate::error::WindowsError| {
+                bincode::error::DecodeError::OtherString(e.to_string())
+            })
     }
 }
 
@@ -214,8 +222,7 @@ impl TryInto<IMFSample> for &SerializableMFSample {
 
     fn try_into(self) -> std::result::Result<IMFSample, Self::Error> {
         let sample = unsafe { MFCreateSample()? };
-        self.attributes
-            .apply(&sample.cast::<IMFAttributes>()?)?;
+        self.attributes.apply(&sample.cast::<IMFAttributes>()?)?;
         unsafe { sample.SetSampleTime(self.time)? };
         unsafe { sample.SetSampleDuration(self.duration)? };
         unsafe { sample.SetSampleFlags(self.flags)? };
@@ -259,7 +266,9 @@ impl TryFrom<&IMFAttributes> for SerializableMFAttributes {
 
                     unsafe { from.GetString(&guid, &mut buffer, Some(&mut length))? };
 
-                    let value: String = BSTR::from_wide(&buffer[..length as usize]).try_into().map_err(|_| WindowsError::Utf16ToStringConversionFailed)?;
+                    let value: String = BSTR::from_wide(&buffer[..length as usize])
+                        .try_into()
+                        .map_err(|_| WindowsError::Utf16ToStringConversionFailed)?;
                     AttributeValue::String(value)
                 }
                 MF_ATTRIBUTE_BLOB => {
@@ -282,7 +291,10 @@ impl TryFrom<&IMFAttributes> for SerializableMFAttributes {
 }
 
 impl SerializableMFAttributes {
-    pub fn apply(&self, target: &IMFAttributes) -> std::result::Result<(), crate::error::WindowsError> {
+    pub fn apply(
+        &self,
+        target: &IMFAttributes,
+    ) -> std::result::Result<(), crate::error::WindowsError> {
         for (guid, value) in &self.attributes {
             let guid = GUID::from_u128(guid.0);
             match value {

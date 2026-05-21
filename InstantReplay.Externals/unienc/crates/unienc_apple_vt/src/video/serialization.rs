@@ -3,20 +3,18 @@ use std::{
     ptr::NonNull,
 };
 
+use crate::allocator;
 use bincode::{Decode, Encode};
 use objc2::rc::Retained;
-use crate::allocator;
-use objc2_core_foundation::{
-    kCFBooleanTrue, CFMutableDictionary, CFString, CFType,
-};
+use objc2_core_foundation::{CFMutableDictionary, CFString, CFType, kCFBooleanTrue};
 use objc2_core_media::{
-    kCMBlockBufferAssureMemoryNowFlag, kCMSampleAttachmentKey_NotSync, kCMVideoCodecType_H264,
     CMBlockBuffer, CMFormatDescription, CMSampleBuffer, CMSampleTimingInfo, CMTime, CMTimeFlags,
     CMVideoFormatDescription, CMVideoFormatDescriptionCreateFromH264ParameterSets,
-    CMVideoFormatDescriptionGetH264ParameterSetAtIndex,
+    CMVideoFormatDescriptionGetH264ParameterSetAtIndex, kCMBlockBufferAssureMemoryNowFlag,
+    kCMSampleAttachmentKey_NotSync, kCMVideoCodecType_H264,
 };
 
-use crate::{video::VideoEncodedData, error::OsStatusExt};
+use crate::{error::OsStatusExt, video::VideoEncodedData};
 
 #[derive(Encode, Decode, Clone, Copy, Debug, PartialEq)]
 struct CMTimeForSerialization {

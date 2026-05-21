@@ -1,3 +1,4 @@
+use blocking::unblock;
 use futures::executor::LocalPool;
 use futures::task::{SpawnExt, noop_waker_ref};
 use std::cell::RefCell;
@@ -6,7 +7,6 @@ use std::marker::PhantomData;
 use std::pin::Pin;
 use std::sync::{Arc, Mutex, Weak};
 use std::task::{Context, Poll};
-use blocking::unblock;
 use thiserror::Error;
 
 thread_local! {
@@ -87,12 +87,18 @@ impl Runtime {
             if let Some(runtime) = local {
                 #[cfg(feature = "multi-thread")]
                 {
-                    runtime.executor.spawn(fut)
+                    runtime
+                        .executor
+                        .spawn(fut)
                         .expect("Failed to spawn task on threaded executor");
                 }
                 #[cfg(not(feature = "multi-thread"))]
                 {
-                    let pool = runtime.executor.pool.lock().expect("Failed to lock local executor");
+                    let pool = runtime
+                        .executor
+                        .pool
+                        .lock()
+                        .expect("Failed to lock local executor");
                     let spawner = pool.spawner();
                     spawner
                         .spawn(fut)
@@ -121,7 +127,8 @@ impl Runtime {
     pub fn tick(&self) {
         #[cfg(not(feature = "multi-thread"))]
         {
-            let mut pool = self.executor
+            let mut pool = self
+                .executor
                 .pool
                 .lock()
                 .expect("Failed to local local executor");
@@ -195,7 +202,10 @@ impl unienc::Spawn for RuntimeSpawner {
 }
 
 impl unienc::SpawnBlocking for RuntimeSpawner {
-    fn spawn_blocking<Result: Send + 'static>(&self, f: impl FnOnce() -> Result + Send + 'static) -> Pin<Box<dyn Future<Output = Result> + Send + 'static>> {
+    fn spawn_blocking<Result: Send + 'static>(
+        &self,
+        f: impl FnOnce() -> Result + Send + 'static,
+    ) -> Pin<Box<dyn Future<Output = Result> + Send + 'static>> {
         Box::pin(unblock(f))
     }
 }

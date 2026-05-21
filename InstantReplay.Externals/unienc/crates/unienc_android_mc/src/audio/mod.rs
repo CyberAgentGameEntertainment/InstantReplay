@@ -1,4 +1,4 @@
-use jni::{objects::JValue, signature::ReturnType, sys::jint, JNIEnv};
+use jni::{JNIEnv, objects::JValue, signature::ReturnType, sys::jint};
 use std::time::Duration;
 use unienc_common::{AudioSample, Encoder, EncoderInput, EncoderOutput};
 
@@ -108,10 +108,7 @@ impl EncoderInput for MediaCodecAudioEncoderInput {
     }
 }
 
-async fn push_impl(
-    this: &mut MediaCodecAudioEncoderInput,
-    data: AudioSample,
-) -> Result<()> {
+async fn push_impl(this: &mut MediaCodecAudioEncoderInput, data: AudioSample) -> Result<()> {
     // Convert i16 samples to byte array
     let byte_data_vec = i16_to_bytes(&data.data);
     let mut byte_data = byte_data_vec.as_slice();
@@ -129,11 +126,7 @@ async fn push_impl(
                     get_direct_buffer_info(env, input_buffer.as_obj())?;
 
                 let bytes_to_write = std::cmp::min(byte_data.len(), capacity - position);
-                crate::common::write_to_buffer(
-                    env,
-                    &input_buffer,
-                    &byte_data[..bytes_to_write],
-                )?;
+                crate::common::write_to_buffer(env, &input_buffer, &byte_data[..bytes_to_write])?;
                 byte_data = &byte_data[bytes_to_write..];
 
                 // Calculate timestamp in microseconds
@@ -143,13 +136,8 @@ async fn push_impl(
                 this.last_timestamp = timestamp_us;
 
                 // Queue input buffer
-                this.codec.queue_input_buffer(
-                    buffer_index,
-                    0,
-                    bytes_to_write,
-                    timestamp_us,
-                    0,
-                )?;
+                this.codec
+                    .queue_input_buffer(buffer_index, 0, bytes_to_write, timestamp_us, 0)?;
             }
         } else if buffer_index == media_codec_errors::INFO_TRY_AGAIN_LATER {
             std::thread::sleep(Duration::from_millis(10));

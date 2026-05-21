@@ -2,7 +2,7 @@ use crate::audio::AudioEncodedData;
 use crate::js::make_download;
 use crate::video::VideoEncodedData;
 use futures::channel::oneshot;
-use futures::{join, StreamExt};
+use futures::{StreamExt, join};
 use muxide::api::{AacProfile, AudioCodec, MuxerBuilder, VideoCodec};
 use std::io::Write;
 use std::sync::{Arc, Mutex};
