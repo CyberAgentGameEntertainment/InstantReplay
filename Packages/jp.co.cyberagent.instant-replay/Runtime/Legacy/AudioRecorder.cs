@@ -75,8 +75,8 @@ namespace InstantReplay
 
             if (!SampleRate.HasValue)
             {
-                if (sampleRate != 41000 && sampleRate != 48000)
-                    // NOTE: encoder may fail if sample rate is not 41000 nor 48000
+                if (sampleRate != 44100 && sampleRate != 48000)
+                    // NOTE: encoder may fail if sample rate is not 44100 nor 48000
                     SampleRate = 48000;
                 else
                     SampleRate = sampleRate;
