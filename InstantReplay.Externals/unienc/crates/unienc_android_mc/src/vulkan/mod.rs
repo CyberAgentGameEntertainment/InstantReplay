@@ -1,11 +1,12 @@
+mod format;
 pub mod hardware_buffer;
 pub mod hardware_buffer_surface;
 mod preprocess;
 #[allow(dead_code)]
 pub mod types;
 mod utils;
-mod format;
 
+use crate::error::{AndroidError, Result, ResultExt};
 use ash::vk;
 use std::fmt::Debug;
 use std::future::Future;
@@ -15,10 +16,15 @@ use std::{
     os::raw::c_void,
     sync::{Mutex, OnceLock},
 };
-use crate::error::{AndroidError, Result, ResultExt};
 use unity_native_plugin::graphics::{GfxDeviceEventType, IUnityGraphics, UnityGraphics};
-use unity_native_plugin::profiler::{BuiltinProfilerCategory, IUnityProfiler, ProfilerCategoryId, ProfilerMarkerDesc, ProfilerMarkerEventType, ProfilerMarkerFlag, ProfilerMarkerFlags, UnityProfiler};
-use unity_native_plugin::vulkan::{IUnityGraphicsVulkan, UnityGraphicsVulkanV2, VulkanEventRenderPassPreCondition, VulkanGraphicsQueueAccess, VulkanPluginEventConfig};
+use unity_native_plugin::profiler::{
+    BuiltinProfilerCategory, IUnityProfiler, ProfilerCategoryId, ProfilerMarkerDesc,
+    ProfilerMarkerEventType, ProfilerMarkerFlag, ProfilerMarkerFlags, UnityProfiler,
+};
+use unity_native_plugin::vulkan::{
+    IUnityGraphicsVulkan, UnityGraphicsVulkanV2, VulkanEventRenderPassPreCondition,
+    VulkanGraphicsQueueAccess, VulkanPluginEventConfig,
+};
 
 use crate::vulkan::preprocess::PreprocessRenderPass;
 use crate::vulkan::utils::FencePool;
@@ -222,5 +228,15 @@ pub fn blit_to_hardware_buffer<R: unienc_common::Runtime + 'static>(
         .lock()
         .map_err(|_| AndroidError::MutexPoisoned)?;
 
-    preprocess::blit_to_hardware_buffer(&cx, src, src_width, src_height, src_graphics_format, flip_vertically, is_gamma_workflow, frame, runtime)
+    preprocess::blit_to_hardware_buffer(
+        &cx,
+        src,
+        src_width,
+        src_height,
+        src_graphics_format,
+        flip_vertically,
+        is_gamma_workflow,
+        frame,
+        runtime,
+    )
 }

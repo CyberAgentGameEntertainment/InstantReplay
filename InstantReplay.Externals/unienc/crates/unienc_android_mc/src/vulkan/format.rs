@@ -1,62 +1,60 @@
 pub const GRAPHICS_FORMAT_TO_VULKAN: [Option<ash::vk::Format>; 152] = [
-    Some(ash::vk::Format::UNDEFINED),                 // None
-    Some(ash::vk::Format::R8_SRGB),                   // R8_SRGB
-    Some(ash::vk::Format::R8G8_SRGB),                 // R8G8_SRGB
-    Some(ash::vk::Format::R8G8B8_SRGB),               // R8G8B8_SRGB
-    Some(ash::vk::Format::R8G8B8A8_SRGB),             // R8G8B8A8_SRGB
-    Some(ash::vk::Format::R8_UNORM),                  // R8_UNorm
-    Some(ash::vk::Format::R8G8_UNORM),                // R8G8_UNorm
-    Some(ash::vk::Format::R8G8B8_UNORM),              // R8G8B8_UNorm
-    Some(ash::vk::Format::R8G8B8A8_UNORM),            // R8G8B8A8_UNorm
-    Some(ash::vk::Format::R8_SNORM),                  // R8_SNorm
-    Some(ash::vk::Format::R8G8_SNORM),                // R8G8_SNorm
-    Some(ash::vk::Format::R8G8B8_SNORM),              // R8G8B8_SNorm
-    Some(ash::vk::Format::R8G8B8A8_SNORM),            // R8G8B8A8_SNorm
-    Some(ash::vk::Format::R8_UINT),                   // R8_UInt
-    Some(ash::vk::Format::R8G8_UINT),                 // R8G8_UInt
-    Some(ash::vk::Format::R8G8B8_UINT),               // R8G8B8_UInt
-    Some(ash::vk::Format::R8G8B8A8_UINT),             // R8G8B8A8_UInt
-    Some(ash::vk::Format::R8_SINT),                   // R8_SInt
-    Some(ash::vk::Format::R8G8_SINT),                 // R8G8_SInt
-    Some(ash::vk::Format::R8G8B8_SINT),               // R8G8B8_SInt
-    Some(ash::vk::Format::R8G8B8A8_SINT),             // R8G8B8A8_SInt
-    Some(ash::vk::Format::R16_UNORM),                 // R16_UNorm
-    Some(ash::vk::Format::R16G16_UNORM),              // R16G16_UNorm
-    Some(ash::vk::Format::R16G16B16_UNORM),           // R16G16B16_UNorm
-    Some(ash::vk::Format::R16G16B16A16_UNORM),        // R16G16B16A16_UNorm
-    Some(ash::vk::Format::R16_SNORM),                 // R16_SNorm
-    Some(ash::vk::Format::R16G16_SNORM),              // R16G16_SNorm
-    Some(ash::vk::Format::R16G16B16_SNORM),           // R16G16B16_SNorm
-    Some(ash::vk::Format::R16G16B16A16_SNORM),        // R16G16B16A16_SNorm
-    Some(ash::vk::Format::R16_UINT),                  // R16_UInt
-    Some(ash::vk::Format::R16G16_UINT),               // R16G16_UInt
-    Some(ash::vk::Format::R16G16B16_UINT),            // R16G16B16_UInt
-    Some(ash::vk::Format::R16G16B16A16_UINT),         // R16G16B16A16_UInt
-    Some(ash::vk::Format::R16_SINT),                  // R16_SInt
-    Some(ash::vk::Format::R16G16_SINT),               // R16G16_SInt
-    Some(ash::vk::Format::R16G16B16_SINT),            // R16G16B16_SInt
-    Some(ash::vk::Format::R16G16B16A16_SINT),         // R16G16B16A16_SInt
-    Some(ash::vk::Format::R32_UINT),                  // R32_UInt
-    Some(ash::vk::Format::R32G32_UINT),               // R32G32_UInt
-    Some(ash::vk::Format::R32G32B32_UINT),            // R32G32B32_UInt
-    Some(ash::vk::Format::R32G32B32A32_UINT),         // R32G32B32A32_UInt
-    Some(ash::vk::Format::R32_SINT),                  // R32_SInt
-    Some(ash::vk::Format::R32G32_SINT),               // R32G32_SInt
-    Some(ash::vk::Format::R32G32B32_SINT),            // R32G32B32_SInt
-    Some(ash::vk::Format::R32G32B32A32_SINT),         // R32G32B32A32_SInt
-    Some(ash::vk::Format::R16_SFLOAT),                // R16_SFloat
-    Some(ash::vk::Format::R16G16_SFLOAT),             // R16G16_SFloat
-    Some(ash::vk::Format::R16G16B16_SFLOAT),          // R16G16B16_SFloat
-    Some(ash::vk::Format::R16G16B16A16_SFLOAT),       // R16G16B16A16_SFloat
-    Some(ash::vk::Format::R32_SFLOAT),                // R32_SFloat
-    Some(ash::vk::Format::R32G32_SFLOAT),             // R32G32_SFloat
-    Some(ash::vk::Format::R32G32B32_SFLOAT),          // R32G32B32_SFloat
-
+    Some(ash::vk::Format::UNDEFINED),           // None
+    Some(ash::vk::Format::R8_SRGB),             // R8_SRGB
+    Some(ash::vk::Format::R8G8_SRGB),           // R8G8_SRGB
+    Some(ash::vk::Format::R8G8B8_SRGB),         // R8G8B8_SRGB
+    Some(ash::vk::Format::R8G8B8A8_SRGB),       // R8G8B8A8_SRGB
+    Some(ash::vk::Format::R8_UNORM),            // R8_UNorm
+    Some(ash::vk::Format::R8G8_UNORM),          // R8G8_UNorm
+    Some(ash::vk::Format::R8G8B8_UNORM),        // R8G8B8_UNorm
+    Some(ash::vk::Format::R8G8B8A8_UNORM),      // R8G8B8A8_UNorm
+    Some(ash::vk::Format::R8_SNORM),            // R8_SNorm
+    Some(ash::vk::Format::R8G8_SNORM),          // R8G8_SNorm
+    Some(ash::vk::Format::R8G8B8_SNORM),        // R8G8B8_SNorm
+    Some(ash::vk::Format::R8G8B8A8_SNORM),      // R8G8B8A8_SNorm
+    Some(ash::vk::Format::R8_UINT),             // R8_UInt
+    Some(ash::vk::Format::R8G8_UINT),           // R8G8_UInt
+    Some(ash::vk::Format::R8G8B8_UINT),         // R8G8B8_UInt
+    Some(ash::vk::Format::R8G8B8A8_UINT),       // R8G8B8A8_UInt
+    Some(ash::vk::Format::R8_SINT),             // R8_SInt
+    Some(ash::vk::Format::R8G8_SINT),           // R8G8_SInt
+    Some(ash::vk::Format::R8G8B8_SINT),         // R8G8B8_SInt
+    Some(ash::vk::Format::R8G8B8A8_SINT),       // R8G8B8A8_SInt
+    Some(ash::vk::Format::R16_UNORM),           // R16_UNorm
+    Some(ash::vk::Format::R16G16_UNORM),        // R16G16_UNorm
+    Some(ash::vk::Format::R16G16B16_UNORM),     // R16G16B16_UNorm
+    Some(ash::vk::Format::R16G16B16A16_UNORM),  // R16G16B16A16_UNorm
+    Some(ash::vk::Format::R16_SNORM),           // R16_SNorm
+    Some(ash::vk::Format::R16G16_SNORM),        // R16G16_SNorm
+    Some(ash::vk::Format::R16G16B16_SNORM),     // R16G16B16_SNorm
+    Some(ash::vk::Format::R16G16B16A16_SNORM),  // R16G16B16A16_SNorm
+    Some(ash::vk::Format::R16_UINT),            // R16_UInt
+    Some(ash::vk::Format::R16G16_UINT),         // R16G16_UInt
+    Some(ash::vk::Format::R16G16B16_UINT),      // R16G16B16_UInt
+    Some(ash::vk::Format::R16G16B16A16_UINT),   // R16G16B16A16_UInt
+    Some(ash::vk::Format::R16_SINT),            // R16_SInt
+    Some(ash::vk::Format::R16G16_SINT),         // R16G16_SInt
+    Some(ash::vk::Format::R16G16B16_SINT),      // R16G16B16_SInt
+    Some(ash::vk::Format::R16G16B16A16_SINT),   // R16G16B16A16_SInt
+    Some(ash::vk::Format::R32_UINT),            // R32_UInt
+    Some(ash::vk::Format::R32G32_UINT),         // R32G32_UInt
+    Some(ash::vk::Format::R32G32B32_UINT),      // R32G32B32_UInt
+    Some(ash::vk::Format::R32G32B32A32_UINT),   // R32G32B32A32_UInt
+    Some(ash::vk::Format::R32_SINT),            // R32_SInt
+    Some(ash::vk::Format::R32G32_SINT),         // R32G32_SInt
+    Some(ash::vk::Format::R32G32B32_SINT),      // R32G32B32_SInt
+    Some(ash::vk::Format::R32G32B32A32_SINT),   // R32G32B32A32_SInt
+    Some(ash::vk::Format::R16_SFLOAT),          // R16_SFloat
+    Some(ash::vk::Format::R16G16_SFLOAT),       // R16G16_SFloat
+    Some(ash::vk::Format::R16G16B16_SFLOAT),    // R16G16B16_SFloat
+    Some(ash::vk::Format::R16G16B16A16_SFLOAT), // R16G16B16A16_SFloat
+    Some(ash::vk::Format::R32_SFLOAT),          // R32_SFloat
+    Some(ash::vk::Format::R32G32_SFLOAT),       // R32G32_SFloat
+    Some(ash::vk::Format::R32G32B32_SFLOAT),    // R32G32B32_SFloat
     None,
     None,
     None,
     None,
-
     Some(ash::vk::Format::B8G8R8_SRGB),               // B8G8R8_SRGB,
     Some(ash::vk::Format::B8G8R8A8_SRGB),             // B8G8R8A8_SRGB,
     Some(ash::vk::Format::B8G8R8_UNORM),              // B8G8R8_UNorm,
@@ -88,11 +86,9 @@ pub const GRAPHICS_FORMAT_TO_VULKAN: [Option<ash::vk::Format>; 152] = [
     Some(ash::vk::Format::UNDEFINED),                 // R10G10B10_XRUNormPack32,
     Some(ash::vk::Format::UNDEFINED),                 // A10R10G10B10_XRSRGBPack32,
     Some(ash::vk::Format::UNDEFINED),                 // A10R10G10B10_XRUNormPack32,
-
     None,
     None,
     None,
-
     Some(ash::vk::Format::D16_UNORM),                 // D16_UNorm
     Some(ash::vk::Format::X8_D24_UNORM_PACK32),       // D24_UNorm
     Some(ash::vk::Format::D24_UNORM_S8_UINT),         // D24_UNorm_S8_UInt

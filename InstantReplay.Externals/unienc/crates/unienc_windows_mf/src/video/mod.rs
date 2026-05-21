@@ -1,7 +1,10 @@
-use crate::error::{WindowsError, Result};
+use crate::error::{Result, WindowsError};
 use bincode::{Decode, Encode};
 use tokio::sync::mpsc;
-use unienc_common::{EncodedData, Encoder, EncoderInput, EncoderOutput, Runtime, UniencSampleKind, UnsupportedBlitData, VideoEncoderOptions, VideoFrame, VideoSample};
+use unienc_common::{
+    EncodedData, Encoder, EncoderInput, EncoderOutput, Runtime, UniencSampleKind,
+    UnsupportedBlitData, VideoEncoderOptions, VideoFrame, VideoSample,
+};
 use windows::Win32::Media::MediaFoundation::*;
 
 use crate::common::*;
@@ -115,7 +118,11 @@ impl EncoderInput for VideoEncoderInputImpl {
             unsafe { sample.AddBuffer(&buffer).map_err(WindowsError::from)? };
 
             let mut buffer_ptr: *mut u8 = std::ptr::null_mut();
-            unsafe { buffer.Lock(&mut buffer_ptr, None, None).map_err(WindowsError::from)? };
+            unsafe {
+                buffer
+                    .Lock(&mut buffer_ptr, None, None)
+                    .map_err(WindowsError::from)?
+            };
 
             unsafe {
                 std::ptr::copy_nonoverlapping(y.as_ptr(), buffer_ptr, y.len());
@@ -128,13 +135,25 @@ impl EncoderInput for VideoEncoderInputImpl {
                 }
             }
 
-            unsafe { buffer.SetCurrentLength(length).map_err(WindowsError::from)? }
+            unsafe {
+                buffer
+                    .SetCurrentLength(length)
+                    .map_err(WindowsError::from)?
+            }
 
             unsafe { buffer.Unlock().map_err(WindowsError::from)? };
         }
 
-        unsafe { sample.SetSampleTime((data.timestamp * 10_000_000_f64) as i64).map_err(WindowsError::from)? };
-        unsafe { sample.SetSampleDuration((1.0_f64 / self.fps_hint * 10_000_000_f64) as i64).map_err(WindowsError::from)? };
+        unsafe {
+            sample
+                .SetSampleTime((data.timestamp * 10_000_000_f64) as i64)
+                .map_err(WindowsError::from)?
+        };
+        unsafe {
+            sample
+                .SetSampleDuration((1.0_f64 / self.fps_hint * 10_000_000_f64) as i64)
+                .map_err(WindowsError::from)?
+        };
         Ok(self.transform.push(sample).await?)
     }
 }

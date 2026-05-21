@@ -1,10 +1,10 @@
-use std::ffi::{c_char, CStr};
+use crate::*;
+use std::ffi::{CStr, c_char};
 use std::os::raw::c_void;
 use std::path::Path;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use unienc::{Encoder, EncodingSystem, Muxer, ResultExt};
-use crate::*;
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn unienc_new_encoding_system(
@@ -165,5 +165,5 @@ pub unsafe extern "C" fn unienc_new_muxer(
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn unienc_is_blit_supported(system: *const PlatformEncodingSystem) -> bool {
-    unsafe {&*system}.is_blit_supported()
+    unsafe { &*system }.is_blit_supported()
 }

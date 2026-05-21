@@ -24,8 +24,11 @@ pub struct FFmpegEncodingSystem<
     _runtime: std::marker::PhantomData<R>,
 }
 
-impl<V: unienc_common::VideoEncoderOptions, A: unienc_common::AudioEncoderOptions, R: unienc_common::Runtime> EncodingSystem
-    for FFmpegEncodingSystem<V, A, R>
+impl<
+    V: unienc_common::VideoEncoderOptions,
+    A: unienc_common::AudioEncoderOptions,
+    R: unienc_common::Runtime,
+> EncodingSystem for FFmpegEncodingSystem<V, A, R>
 {
     type VideoEncoderOptionsType = V;
     type AudioEncoderOptionsType = A;
@@ -52,6 +55,7 @@ impl<V: unienc_common::VideoEncoderOptions, A: unienc_common::AudioEncoderOption
     }
 
     fn new_muxer(&self, output_path: &Path) -> unienc_common::Result<Self::MuxerType> {
-        FFmpegMuxer::new(output_path, &self.video_options, &self.audio_options).map_err(|e| e.into())
+        FFmpegMuxer::new(output_path, &self.video_options, &self.audio_options)
+            .map_err(|e| e.into())
     }
 }

@@ -1,7 +1,10 @@
 use std::sync::Arc;
 
-use jni::{objects::{GlobalRef, JObject, JString}, AttachGuard, JNIEnv, JavaVM};
 use crate::error::{AndroidError, Result};
+use jni::{
+    AttachGuard, JNIEnv, JavaVM,
+    objects::{GlobalRef, JObject, JString},
+};
 
 /// Get the global JavaVM instance
 pub fn get_java_vm() -> Result<&'static JavaVM> {
@@ -85,7 +88,9 @@ pub fn call_int_method(
         .call_method(obj, name, sig, args)
         .map_err(|_| AndroidError::JniMethodCallFailed(name.to_string()))?;
     check_jni_exception(env)?;
-    result.i().map_err(|_| AndroidError::JniUnexpectedReturnValue { expected: "int" })
+    result
+        .i()
+        .map_err(|_| AndroidError::JniUnexpectedReturnValue { expected: "int" })
 }
 
 /// Helper to call Java methods returning object
@@ -100,7 +105,9 @@ pub fn call_object_method<'a>(
         .call_method(obj, name, sig, args)
         .map_err(|_| AndroidError::JniMethodCallFailed(name.to_string()))?;
     check_jni_exception(env)?;
-    result.l().map_err(|_| AndroidError::JniUnexpectedReturnValue { expected: "object" })
+    result
+        .l()
+        .map_err(|_| AndroidError::JniUnexpectedReturnValue { expected: "object" })
 }
 
 /// Helper to get int field
@@ -109,7 +116,9 @@ pub fn get_int_field(env: &mut JNIEnv, obj: &JObject, name: &str) -> Result<jni:
         .get_field(obj, name, "I")
         .map_err(|_| AndroidError::JniFieldGetFailed(name.to_string()))?;
     check_jni_exception(env)?;
-    result.i().map_err(|_| AndroidError::JniUnexpectedReturnValue { expected: "int" })
+    result
+        .i()
+        .map_err(|_| AndroidError::JniUnexpectedReturnValue { expected: "int" })
 }
 
 /// Helper to get long field
@@ -118,12 +127,15 @@ pub fn get_long_field(env: &mut JNIEnv, obj: &JObject, name: &str) -> Result<jni
         .get_field(obj, name, "J")
         .map_err(|_| AndroidError::JniFieldGetFailed(name.to_string()))?;
     check_jni_exception(env)?;
-    result.j().map_err(|_| AndroidError::JniUnexpectedReturnValue { expected: "long" })
+    result
+        .j()
+        .map_err(|_| AndroidError::JniUnexpectedReturnValue { expected: "long" })
 }
 
 /// Convert Rust string to Java string
 pub fn to_java_string<'a>(env: &JNIEnv<'a>, s: &str) -> Result<JString<'a>> {
-    env.new_string(s).map_err(|_| AndroidError::JniStringCreationFailed)
+    env.new_string(s)
+        .map_err(|_| AndroidError::JniStringCreationFailed)
 }
 
 /// Get direct buffer address, capacity and position from DirectByteBuffer

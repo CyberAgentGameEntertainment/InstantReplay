@@ -13,7 +13,7 @@ pub mod format_keys {
     pub const KEY_BITRATE: &str = "bitrate";
     pub const KEY_DURATION: &str = "durationUs";
     pub const KEY_MAX_INPUT_SIZE: &str = "max-input-size";
-    
+
     // Video keys
     pub const KEY_WIDTH: &str = "width";
     pub const KEY_HEIGHT: &str = "height";
@@ -24,7 +24,7 @@ pub mod format_keys {
     pub const KEY_LEVEL: &str = "level";
     pub const KEY_PRIORITY: &str = "priority";
     pub const KEY_OPERATING_RATE: &str = "operating-rate";
-    
+
     // Audio keys
     pub const KEY_SAMPLE_RATE: &str = "sample-rate";
     pub const KEY_CHANNEL_COUNT: &str = "channel-count";

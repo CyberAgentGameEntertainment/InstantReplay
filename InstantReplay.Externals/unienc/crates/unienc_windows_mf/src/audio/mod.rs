@@ -1,12 +1,15 @@
 use crate::error::Result;
 use bincode::{Decode, Encode};
 use tokio::sync::mpsc;
-use unienc_common::{AudioEncoderOptions, AudioSample, EncodedData, Encoder, EncoderInput, EncoderOutput, Runtime, UniencSampleKind};
+use unienc_common::{
+    AudioEncoderOptions, AudioSample, EncodedData, Encoder, EncoderInput, EncoderOutput, Runtime,
+    UniencSampleKind,
+};
 use windows::Win32::Media::MediaFoundation::*;
 
+use crate::WindowsError;
 use crate::common::*;
 use crate::mft::Transform;
-use crate::WindowsError;
 
 pub struct MediaFoundationAudioEncoder {
     transform: Transform,
@@ -107,7 +110,11 @@ impl EncoderInput for AudioEncoderInputImpl {
             unsafe { sample.AddBuffer(&buffer).map_err(WindowsError::from)? };
 
             let mut buffer_ptr: *mut u8 = std::ptr::null_mut();
-            unsafe { buffer.Lock(&mut buffer_ptr, None, None).map_err(WindowsError::from)? };
+            unsafe {
+                buffer
+                    .Lock(&mut buffer_ptr, None, None)
+                    .map_err(WindowsError::from)?
+            };
 
             unsafe {
                 std::ptr::copy_nonoverlapping(
@@ -117,22 +124,30 @@ impl EncoderInput for AudioEncoderInputImpl {
                 );
             }
 
-            unsafe { buffer.SetCurrentLength(length).map_err(WindowsError::from)? }
+            unsafe {
+                buffer
+                    .SetCurrentLength(length)
+                    .map_err(WindowsError::from)?
+            }
 
             unsafe { buffer.Unlock().map_err(WindowsError::from)? };
         }
 
         unsafe {
-            sample.SetSampleTime(
-                (data.timestamp_in_samples as f64 / self.sample_rate as f64 * 10_000_000_f64)
-                    as i64,
-            ).map_err(WindowsError::from)?
+            sample
+                .SetSampleTime(
+                    (data.timestamp_in_samples as f64 / self.sample_rate as f64 * 10_000_000_f64)
+                        as i64,
+                )
+                .map_err(WindowsError::from)?
         };
         unsafe {
-            sample.SetSampleDuration(
-                ((data.data.len() / self.channels as usize) as f64 / self.sample_rate as f64
-                    * 10_000_000_f64) as i64,
-            ).map_err(WindowsError::from)?
+            sample
+                .SetSampleDuration(
+                    ((data.data.len() / self.channels as usize) as f64 / self.sample_rate as f64
+                        * 10_000_000_f64) as i64,
+                )
+                .map_err(WindowsError::from)?
         };
         Ok(self.transform.push(sample).await?)
     }

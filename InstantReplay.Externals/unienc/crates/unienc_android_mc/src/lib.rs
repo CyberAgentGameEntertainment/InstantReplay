@@ -1,5 +1,5 @@
-use jni::sys::JNI_VERSION_1_6;
 use jni::JavaVM;
+use jni::sys::JNI_VERSION_1_6;
 use std::ffi::{c_int, c_void};
 use std::path::Path;
 use std::sync::OnceLock;
@@ -23,11 +23,13 @@ use video::MediaCodecVideoEncoder;
 
 static JAVA_VM: OnceLock<jni::JavaVM> = OnceLock::new();
 
-pub unsafe fn set_java_vm(vm: *mut jni::sys::JavaVM, _reserved: *mut c_void) -> c_int { unsafe {
-    JAVA_VM.set(JavaVM::from_raw(vm).unwrap()).unwrap();
-    println!("JNI_OnLoad: {:?}", vm);
-    JNI_VERSION_1_6
-}}
+pub unsafe fn set_java_vm(vm: *mut jni::sys::JavaVM, _reserved: *mut c_void) -> c_int {
+    unsafe {
+        JAVA_VM.set(JavaVM::from_raw(vm).unwrap()).unwrap();
+        println!("JNI_OnLoad: {:?}", vm);
+        JNI_VERSION_1_6
+    }
+}
 
 pub struct MediaCodecEncodingSystem<
     V: unienc_common::VideoEncoderOptions,
@@ -39,8 +41,11 @@ pub struct MediaCodecEncodingSystem<
     runtime: R,
 }
 
-impl<V: unienc_common::VideoEncoderOptions, A: unienc_common::AudioEncoderOptions, R: unienc_common::Runtime + 'static> EncodingSystem
-    for MediaCodecEncodingSystem<V, A, R>
+impl<
+    V: unienc_common::VideoEncoderOptions,
+    A: unienc_common::AudioEncoderOptions,
+    R: unienc_common::Runtime + 'static,
+> EncodingSystem for MediaCodecEncodingSystem<V, A, R>
 {
     type VideoEncoderOptionsType = V;
     type AudioEncoderOptionsType = A;
@@ -59,7 +64,8 @@ impl<V: unienc_common::VideoEncoderOptions, A: unienc_common::AudioEncoderOption
     }
 
     fn new_video_encoder(&self) -> unienc_common::Result<Self::VideoEncoderType> {
-        MediaCodecVideoEncoder::<R>::new(&self.video_options, self.runtime.clone()).map_err(Into::into)
+        MediaCodecVideoEncoder::<R>::new(&self.video_options, self.runtime.clone())
+            .map_err(Into::into)
     }
 
     fn new_audio_encoder(&self) -> unienc_common::Result<Self::AudioEncoderType> {
@@ -79,7 +85,12 @@ impl<V: unienc_common::VideoEncoderOptions, A: unienc_common::AudioEncoderOption
     }
 }
 
-impl<V: unienc_common::VideoEncoderOptions, A: unienc_common::AudioEncoderOptions, R: unienc_common::Runtime + 'static> UnityPlugin for MediaCodecEncodingSystem<V, A, R> {
+impl<
+    V: unienc_common::VideoEncoderOptions,
+    A: unienc_common::AudioEncoderOptions,
+    R: unienc_common::Runtime + 'static,
+> UnityPlugin for MediaCodecEncodingSystem<V, A, R>
+{
     fn unity_plugin_load(interfaces: &unity_native_plugin::interface::UnityInterfaces) {
         vulkan::unity_plugin_load(interfaces);
     }
@@ -91,9 +102,7 @@ pub struct VulkanTexture {
 }
 
 impl TryFromUnityNativeTexturePointer for VulkanTexture {
-    fn try_from_unity_native_texture_ptr(
-        ptr: *mut c_void,
-    ) -> unienc_common::Result<Self> {
+    fn try_from_unity_native_texture_ptr(ptr: *mut c_void) -> unienc_common::Result<Self> {
         // ptr is VkImage*
         let ptr = ptr as *mut ash::vk::Image;
         if ptr.is_null() {

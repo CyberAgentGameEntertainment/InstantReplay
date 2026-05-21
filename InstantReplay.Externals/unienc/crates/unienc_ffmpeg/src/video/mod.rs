@@ -11,7 +11,8 @@ use tokio::{
     process::ChildStdout,
 };
 use unienc_common::{
-    EncodedData, Encoder, EncoderInput, EncoderOutput, UniencSampleKind, UnsupportedBlitData, VideoEncoderOptions, VideoFrame, VideoFrameBgra32, VideoSample, buffer::SharedBuffer
+    EncodedData, Encoder, EncoderInput, EncoderOutput, UniencSampleKind, UnsupportedBlitData,
+    VideoEncoderOptions, VideoFrame, VideoFrameBgra32, VideoSample, buffer::SharedBuffer,
 };
 
 use crate::{
@@ -166,7 +167,10 @@ impl FFmpegVideoEncoder {
             .take()
             .ok_or(FFmpegError::InputNotAvailable)?
             .remove(0);
-        let output = ffmpeg.stdout.take().ok_or(FFmpegError::OutputNotAvailable)?;
+        let output = ffmpeg
+            .stdout
+            .take()
+            .ok_or(FFmpegError::OutputNotAvailable)?;
 
         let (buffer_tx, buffer_rx) = std::sync::mpsc::channel();
 
@@ -246,7 +250,10 @@ impl EncoderInput for FFmpegVideoEncoderInput {
         };
 
         for _i in 0..count {
-            self.input.write_all(frame.buffer.data()).await.map_err(FFmpegError::from)?;
+            self.input
+                .write_all(frame.buffer.data())
+                .await
+                .map_err(FFmpegError::from)?;
         }
         drop(frame);
 
@@ -277,7 +284,11 @@ impl EncoderOutput for FFmpegVideoEncoderOutput {
             // H.264 byte stream is sequence of NAL units and each frame is a NAL unit
             let mut buf = vec![0; 65536];
 
-            let read = self.output.read(&mut buf).await.map_err(FFmpegError::from)?;
+            let read = self
+                .output
+                .read(&mut buf)
+                .await
+                .map_err(FFmpegError::from)?;
 
             fn create_emit<'a>(state: &'a mut ReaderState, cfr: u32) -> impl FnMut(&NalUnit) + 'a {
                 move |nalu: &NalUnit| {

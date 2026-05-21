@@ -67,7 +67,7 @@ pub enum WindowsError {
 
     #[error(transparent)]
     OneshotRecv(#[from] tokio::sync::oneshot::error::RecvError),
-    
+
     #[error("Failed to convert UTF-16 into String")]
     Utf16ToStringConversionFailed,
 

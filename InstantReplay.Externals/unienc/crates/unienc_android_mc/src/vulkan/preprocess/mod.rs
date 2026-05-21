@@ -7,8 +7,8 @@ use crate::vulkan::types::{
     VulkanPipelineLayoutHandle, VulkanRenderPassHandle, VulkanSamplerHandle,
     VulkanShaderModuleHandle,
 };
-use crate::vulkan::utils::{create_shader_module, FenceGuard};
-use crate::vulkan::{GlobalContext, ProfilerMarkerDescExt, MARKERS};
+use crate::vulkan::utils::{FenceGuard, create_shader_module};
+use crate::vulkan::{GlobalContext, MARKERS, ProfilerMarkerDescExt};
 use ash::vk;
 use std::future::Future;
 use std::sync::{Arc, Mutex};
@@ -48,9 +48,9 @@ impl DescriptorSetPool {
     pub fn pop(self: &Arc<Self>) -> Option<DescriptorSetGuard> {
         let mut sets = self.sets.lock().unwrap();
         sets.pop().map(|desc_set| DescriptorSetGuard {
-                desc_set: Some(desc_set),
-                pool: self.clone(),
-            })
+            desc_set: Some(desc_set),
+            pool: self.clone(),
+        })
     }
 
     pub fn push(&self, desc_set: VulkanDescriptorSet) {

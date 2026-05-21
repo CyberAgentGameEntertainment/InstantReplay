@@ -1,8 +1,8 @@
 use std::ffi::c_void;
 
+use crate::*;
 use tokio::sync::Mutex;
 use unienc::{CompletionHandle, EncodedData, MuxerInput, ResultExt};
-use crate::*;
 
 // Muxer input functions
 #[unsafe(no_mangle)]
@@ -16,7 +16,7 @@ pub unsafe extern "C" fn unienc_muxer_push_video(
     user_data: SendPtr<c_void>,
 ) {
     let callback: UniencCallback = unsafe { std::mem::transmute(callback) };
-    let Some(runtime) = (unsafe { runtime.as_ref() }) else  {
+    let Some(runtime) = (unsafe { runtime.as_ref() }) else {
         UniencError::invalid_input_error("Invalid input parameters")
             .apply_callback(callback, user_data);
         return;
@@ -75,7 +75,7 @@ pub unsafe extern "C" fn unienc_muxer_push_audio(
     user_data: SendPtr<c_void>,
 ) {
     let callback: UniencCallback = unsafe { std::mem::transmute(callback) };
-    let Some(runtime) = (unsafe { runtime.as_ref() }) else  {
+    let Some(runtime) = (unsafe { runtime.as_ref() }) else {
         UniencError::invalid_input_error("Invalid input parameters")
             .apply_callback(callback, user_data);
         return;
@@ -131,7 +131,7 @@ pub unsafe extern "C" fn unienc_muxer_finish_video(
     user_data: SendPtr<c_void>,
 ) {
     let callback: UniencCallback = unsafe { std::mem::transmute(callback) };
-    let Some(runtime) = (unsafe { runtime.as_ref() }) else  {
+    let Some(runtime) = (unsafe { runtime.as_ref() }) else {
         UniencError::invalid_input_error("Invalid input parameters")
             .apply_callback(callback, user_data);
         return;
@@ -170,7 +170,7 @@ pub unsafe extern "C" fn unienc_muxer_finish_audio(
     user_data: SendPtr<c_void>,
 ) {
     let callback: UniencCallback = unsafe { std::mem::transmute(callback) };
-    let Some(runtime) = (unsafe { runtime.as_ref() }) else  {
+    let Some(runtime) = (unsafe { runtime.as_ref() }) else {
         UniencError::invalid_input_error("Invalid input parameters")
             .apply_callback(callback, user_data);
         return;
@@ -190,7 +190,11 @@ pub unsafe extern "C" fn unienc_muxer_finish_audio(
             .take()
             .ok_or(UniencError::resource_allocation_error("Resource is None"))
         {
-            Ok(audio_input) => audio_input.finish().await.context("Failed to finish audio of muxer").map_err(UniencError::from_common),
+            Ok(audio_input) => audio_input
+                .finish()
+                .await
+                .context("Failed to finish audio of muxer")
+                .map_err(UniencError::from_common),
             Err(err) => Err(err),
         };
         result.apply_callback(callback, user_data);
@@ -205,7 +209,7 @@ pub unsafe extern "C" fn unienc_muxer_complete(
     user_data: SendPtr<c_void>,
 ) {
     let callback: UniencCallback = unsafe { std::mem::transmute(callback) };
-    let Some(runtime) = (unsafe { runtime.as_ref() }) else  {
+    let Some(runtime) = (unsafe { runtime.as_ref() }) else {
         UniencError::invalid_input_error("Invalid input parameters")
             .apply_callback(callback, user_data);
         return;
@@ -226,7 +230,11 @@ pub unsafe extern "C" fn unienc_muxer_complete(
             .take()
             .ok_or(UniencError::resource_allocation_error("Resource is None"))
         {
-            Ok(handle) => handle.finish().await.context("Failed to complete muxer").map_err(UniencError::from_common),
+            Ok(handle) => handle
+                .finish()
+                .await
+                .context("Failed to complete muxer")
+                .map_err(UniencError::from_common),
             Err(err) => Err(err),
         };
         result.apply_callback(callback, user_data);

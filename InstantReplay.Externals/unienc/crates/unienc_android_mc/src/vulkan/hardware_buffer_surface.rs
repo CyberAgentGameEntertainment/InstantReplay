@@ -1,9 +1,9 @@
 use crate::common::{ImageWriter, ImageWriterImage};
 use crate::error::{AndroidError, Result};
 use crate::java::SafeGlobalRef;
+use crate::vulkan::CONTEXT;
 use crate::vulkan::hardware_buffer::HardwareBufferImage;
 use crate::vulkan::types::VulkanFramebufferHandle;
-use crate::vulkan::CONTEXT;
 use ash::vk;
 
 /// A surface backed by ImageWriter and HardwareBuffer
@@ -48,11 +48,7 @@ impl HardwareBufferSurface {
             .map_err(|_| AndroidError::MutexPoisoned)?;
 
         // Import the hardware buffer as a Vulkan image
-        let vk_image = HardwareBufferImage::from_hardware_buffer(
-            &cx.device,
-            &cx.instance,
-            ahb,
-        )?;
+        let vk_image = HardwareBufferImage::from_hardware_buffer(&cx.device, &cx.instance, ahb)?;
 
         // Create framebuffer for the image
         let framebuffer = VulkanFramebufferHandle::new(

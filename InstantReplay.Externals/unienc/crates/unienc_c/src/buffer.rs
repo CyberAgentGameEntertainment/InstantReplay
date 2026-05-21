@@ -3,8 +3,8 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use unienc::buffer::{SharedBuffer, SharedBufferPool};
 use crate::*;
+use unienc::buffer::{SharedBuffer, SharedBufferPool};
 
 #[unsafe(no_mangle)]
 pub extern "C" fn unienc_new_shared_buffer_pool(

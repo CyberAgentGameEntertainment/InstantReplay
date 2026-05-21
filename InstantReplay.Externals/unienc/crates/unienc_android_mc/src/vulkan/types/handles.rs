@@ -1,5 +1,5 @@
-use ash::vk;
 use super::*;
+use ash::vk;
 
 // Macro to define Vulkan handle wrapper structs with automatic resource cleanup
 macro_rules! define_handle {
@@ -8,7 +8,9 @@ macro_rules! define_handle {
         impl Drop for $name {
             fn drop(&mut self) {
                 unsafe {
-                    if let Some(device) = &self.1 {device.$destroy_fn(self.0, None); }
+                    if let Some(device) = &self.1 {
+                        device.$destroy_fn(self.0, None);
+                    }
                 }
             }
         }
@@ -34,19 +36,89 @@ macro_rules! define_handle {
 }
 
 define_handle!(VulkanImageHandle, vk::Image, destroy_image, ash::Device);
-define_handle!(VulkanMemoryHandle, vk::DeviceMemory, free_memory, ash::Device);
-define_handle!(VulkanPipelineLayoutHandle, vk::PipelineLayout, destroy_pipeline_layout, ash::Device);
-define_handle!(VulkanPipelineHandle, vk::Pipeline, destroy_pipeline, ash::Device);
-define_handle!(VulkanShaderModuleHandle, vk::ShaderModule, destroy_shader_module, ash::Device);
-define_handle!(VulkanDescriptorSetLayoutHandle, vk::DescriptorSetLayout, destroy_descriptor_set_layout, ash::Device);
-define_handle!(VulkanRenderPassHandle, vk::RenderPass, destroy_render_pass, ash::Device);
+define_handle!(
+    VulkanMemoryHandle,
+    vk::DeviceMemory,
+    free_memory,
+    ash::Device
+);
+define_handle!(
+    VulkanPipelineLayoutHandle,
+    vk::PipelineLayout,
+    destroy_pipeline_layout,
+    ash::Device
+);
+define_handle!(
+    VulkanPipelineHandle,
+    vk::Pipeline,
+    destroy_pipeline,
+    ash::Device
+);
+define_handle!(
+    VulkanShaderModuleHandle,
+    vk::ShaderModule,
+    destroy_shader_module,
+    ash::Device
+);
+define_handle!(
+    VulkanDescriptorSetLayoutHandle,
+    vk::DescriptorSetLayout,
+    destroy_descriptor_set_layout,
+    ash::Device
+);
+define_handle!(
+    VulkanRenderPassHandle,
+    vk::RenderPass,
+    destroy_render_pass,
+    ash::Device
+);
 define_handle!(VulkanBufferHandle, vk::Buffer, destroy_buffer, ash::Device);
-define_handle!(VulkanImageViewHandle, vk::ImageView, destroy_image_view, ash::Device);
-define_handle!(VulkanFramebufferHandle, vk::Framebuffer, destroy_framebuffer, ash::Device);
-define_handle!(VulkanSamplerHandle, vk::Sampler, destroy_sampler, ash::Device);
-define_handle!(VulkanCommandPoolHandle, vk::CommandPool, destroy_command_pool, ash::Device);
+define_handle!(
+    VulkanImageViewHandle,
+    vk::ImageView,
+    destroy_image_view,
+    ash::Device
+);
+define_handle!(
+    VulkanFramebufferHandle,
+    vk::Framebuffer,
+    destroy_framebuffer,
+    ash::Device
+);
+define_handle!(
+    VulkanSamplerHandle,
+    vk::Sampler,
+    destroy_sampler,
+    ash::Device
+);
+define_handle!(
+    VulkanCommandPoolHandle,
+    vk::CommandPool,
+    destroy_command_pool,
+    ash::Device
+);
 define_handle!(VulkanFenceHandle, vk::Fence, destroy_fence, ash::Device);
-define_handle!(VulkanSemaphoreHandle, vk::Semaphore, destroy_semaphore, ash::Device);
-define_handle!(VulkanSurfaceHandle, vk::SurfaceKHR, destroy_surface, ash::khr::surface::Instance);
-define_handle!(VulkanSwapchainHandle, vk::SwapchainKHR, destroy_swapchain, ash::khr::swapchain::Device);
-define_handle!(VulkanDescriptorPoolHandle, vk::DescriptorPool, destroy_descriptor_pool, ash::Device);
+define_handle!(
+    VulkanSemaphoreHandle,
+    vk::Semaphore,
+    destroy_semaphore,
+    ash::Device
+);
+define_handle!(
+    VulkanSurfaceHandle,
+    vk::SurfaceKHR,
+    destroy_surface,
+    ash::khr::surface::Instance
+);
+define_handle!(
+    VulkanSwapchainHandle,
+    vk::SwapchainKHR,
+    destroy_swapchain,
+    ash::khr::swapchain::Device
+);
+define_handle!(
+    VulkanDescriptorPoolHandle,
+    vk::DescriptorPool,
+    destroy_descriptor_pool,
+    ash::Device
+);

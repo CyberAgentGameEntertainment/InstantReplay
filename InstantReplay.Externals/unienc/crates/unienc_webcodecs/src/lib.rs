@@ -1,8 +1,8 @@
 mod audio;
 mod emscripten;
+mod js;
 mod mux;
 mod video;
-mod js;
 
 use crate::audio::WebCodecsAudioEncoder;
 use crate::mux::WebCodecsMuxer;
@@ -20,8 +20,11 @@ pub struct WebCodecsEncodingSystem<
     runtime: R,
 }
 
-impl<V: unienc_common::VideoEncoderOptions, A: unienc_common::AudioEncoderOptions, R: unienc_common::Runtime + 'static> EncodingSystem
-    for WebCodecsEncodingSystem<V, A, R>
+impl<
+    V: unienc_common::VideoEncoderOptions,
+    A: unienc_common::AudioEncoderOptions,
+    R: unienc_common::Runtime + 'static,
+> EncodingSystem for WebCodecsEncodingSystem<V, A, R>
 {
     type VideoEncoderOptionsType = V;
     type AudioEncoderOptionsType = A;

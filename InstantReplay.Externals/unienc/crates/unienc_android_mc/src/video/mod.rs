@@ -1,10 +1,12 @@
-use jni::{objects::JValue, signature::ReturnType, sys::jint, JNIEnv};
+use jni::{JNIEnv, objects::JValue, signature::ReturnType, sys::jint};
 use std::sync::Arc;
 use std::time::Duration;
-use unienc_common::{Encoder, EncoderInput, EncoderOutput, TryFromUnityNativeTexturePointer, VideoFrame, VideoSample};
+use unienc_common::{
+    Encoder, EncoderInput, EncoderOutput, TryFromUnityNativeTexturePointer, VideoFrame, VideoSample,
+};
 
 use crate::error::{AndroidError, OptionExt, Result};
-use crate::{java::*, VulkanTexture};
+use crate::{VulkanTexture, java::*};
 
 use crate::vulkan::hardware_buffer_surface::HardwareBufferSurface;
 use crate::{
@@ -125,11 +127,13 @@ impl<R: unienc_common::Runtime + 'static> MediaCodecVideoEncoder<R> {
                 padded_width,
                 padded_height,
                 last_timestamp: 0,
-                processor: MediaCodecVideoEncoderInputProcessor::Uninitialized(UninitializedState {
-                    tx,
-                    bitrate: options.bitrate(),
-                    fps_hint: options.fps_hint(),
-                }),
+                processor: MediaCodecVideoEncoderInputProcessor::Uninitialized(
+                    UninitializedState {
+                        tx,
+                        bitrate: options.bitrate(),
+                        fps_hint: options.fps_hint(),
+                    },
+                ),
                 runtime,
             },
             output: MediaCodecVideoEncoderOutput {
@@ -252,12 +256,10 @@ async fn push_video_impl<R: unienc_common::Runtime + 'static>(
         } => {
             // Use HardwareBuffer mode for better compatibility with Tensor/Exynos SoCs
             if let MediaCodecVideoEncoderInputProcessor::Uninitialized(_) = &this.processor {
-                let MediaCodecVideoEncoderInputProcessor::Uninitialized(state) =
-                    std::mem::replace(
-                        &mut this.processor,
-                        MediaCodecVideoEncoderInputProcessor::Buffer(), // temporary placeholder
-                    )
-                else {
+                let MediaCodecVideoEncoderInputProcessor::Uninitialized(state) = std::mem::replace(
+                    &mut this.processor,
+                    MediaCodecVideoEncoderInputProcessor::Buffer(), // temporary placeholder
+                ) else {
                     unreachable!();
                 };
 
@@ -291,8 +293,7 @@ async fn push_video_impl<R: unienc_common::Runtime + 'static>(
                 _ = state.tx.send(());
             }
 
-            let MediaCodecVideoEncoderInputProcessor::HardwareBuffer(hb_surface) =
-                &this.processor
+            let MediaCodecVideoEncoderInputProcessor::HardwareBuffer(hb_surface) = &this.processor
             else {
                 return Err(AndroidError::EncoderInputMismatch);
             };
@@ -305,21 +306,22 @@ async fn push_video_impl<R: unienc_common::Runtime + 'static>(
 
             event_issuer.issue_graphics_event(
                 Box::new(move |native_texture_ptr| {
-                    let result = crate::VulkanTexture::try_from_unity_native_texture_ptr(native_texture_ptr)
-                        .map_err(|_| AndroidError::NullVulkanTexture)
-                        .and_then(|texture| {
-                            let image = texture.tex;
-                            crate::vulkan::blit_to_hardware_buffer(
-                                &image,
-                                width,
-                                height,
-                                graphics_format,
-                                flip_vertically,
-                                is_gamma_workflow,
-                                &frame,
-                                runtime,
-                            )
-                        });
+                    let result =
+                        crate::VulkanTexture::try_from_unity_native_texture_ptr(native_texture_ptr)
+                            .map_err(|_| AndroidError::NullVulkanTexture)
+                            .and_then(|texture| {
+                                let image = texture.tex;
+                                crate::vulkan::blit_to_hardware_buffer(
+                                    &image,
+                                    width,
+                                    height,
+                                    graphics_format,
+                                    flip_vertically,
+                                    is_gamma_workflow,
+                                    &frame,
+                                    runtime,
+                                )
+                            });
                     tx.send((result, frame))
                         .map_err(|_| AndroidError::RenderThreadSendFailed)
                         .unwrap();
@@ -335,8 +337,7 @@ async fn push_video_impl<R: unienc_common::Runtime + 'static>(
             future.await?;
 
             // Queue the frame to MediaCodec
-            hb_surface
-                .queue_frame(frame, (data.timestamp * 1000.0 * 1000.0 * 1000.0) as i64)?;
+            hb_surface.queue_frame(frame, (data.timestamp * 1000.0 * 1000.0 * 1000.0) as i64)?;
 
             Ok(())
         }
@@ -412,12 +413,7 @@ fn create_video_format_raw(
     set_format_integer(env, &format_obj, KEY_I_FRAME_INTERVAL, 1)?;
 
     set_format_integer(env, &format_obj, KEY_PRIORITY, 0)?;
-    set_format_integer(
-        env,
-        &format_obj,
-        KEY_OPERATING_RATE,
-        fps_hint as jint,
-    )?;
+    set_format_integer(env, &format_obj, KEY_OPERATING_RATE, fps_hint as jint)?;
 
     SafeGlobalRef::new(env, format_obj)
 }

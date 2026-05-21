@@ -79,9 +79,7 @@ pub trait ResultExt<T> {
         F: FnOnce() -> C;
 }
 
-impl<T, E: std::error::Error + Send + Sync + 'static> ResultExt<T>
-    for std::result::Result<T, E>
-{
+impl<T, E: std::error::Error + Send + Sync + 'static> ResultExt<T> for std::result::Result<T, E> {
     fn context<C: Into<String>>(self, context: C) -> Result<T> {
         self.map_err(|e| CommonError::Other(format!("{}: {}", context.into(), e)))
     }

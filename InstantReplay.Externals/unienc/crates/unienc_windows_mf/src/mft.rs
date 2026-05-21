@@ -3,15 +3,15 @@ use windows::Win32::Media::MediaFoundation::{IMFSample, IMFTransform, MFT_OUTPUT
 use windows::Win32::System::Com::CoTaskMemFree;
 
 use crate::common::UnsafeSend;
-use crate::error::{WindowsError, Result};
+use crate::error::{Result, WindowsError};
 use std::cell::Cell;
 use std::future::Future;
 use std::mem::ManuallyDrop;
 use std::ptr;
-use windows::core::*;
+use unienc_common::{Runtime, SpawnExt};
 use windows::Win32::Foundation::E_NOTIMPL;
 use windows::Win32::Media::MediaFoundation::*;
-use unienc_common::{Runtime, SpawnExt};
+use windows::core::*;
 
 pub trait MediaEventGeneratorCustom {
     fn get_event(&self) -> impl Future<Output = Result<UnsafeSend<IMFMediaEvent>>>;
@@ -262,7 +262,7 @@ impl Transform {
             match Self::try_activate(activate, &mut input_type, &mut output_type, runtime) {
                 Ok(r) => {
                     result = Some(r);
-                },
+                }
                 Err(err) => {
                     println!("Failed to activate MFT: {:?}", err);
                 }
@@ -280,7 +280,9 @@ impl Transform {
             activate.GetString(&MFT_FRIENDLY_NAME_Attribute, &mut buffer, Some(&mut length))?
         };
 
-        let value: String = BSTR::from_wide(&buffer[..length as usize]).try_into().map_err(|_| WindowsError::Utf16ToStringConversionFailed)?;
+        let value: String = BSTR::from_wide(&buffer[..length as usize])
+            .try_into()
+            .map_err(|_| WindowsError::Utf16ToStringConversionFailed)?;
         Ok(value)
     }
 
@@ -406,7 +408,9 @@ impl Transform {
                 Self {
                     pipeline: Pipeline::Async { sample_tx },
                     input_type: UnsafeSend(input_type.take().ok_or(WindowsError::InputTypeNone)?),
-                    output_type: UnsafeSend(output_type.take().ok_or(WindowsError::OutputTypeNone)?),
+                    output_type: UnsafeSend(
+                        output_type.take().ok_or(WindowsError::OutputTypeNone)?,
+                    ),
                 },
                 output_rx,
             ))
@@ -423,7 +427,9 @@ impl Transform {
                         output_info,
                     },
                     input_type: UnsafeSend(input_type.take().ok_or(WindowsError::InputTypeNone)?),
-                    output_type: UnsafeSend(output_type.take().ok_or(WindowsError::OutputTypeNone)?),
+                    output_type: UnsafeSend(
+                        output_type.take().ok_or(WindowsError::OutputTypeNone)?,
+                    ),
                 },
                 output_rx,
             ))

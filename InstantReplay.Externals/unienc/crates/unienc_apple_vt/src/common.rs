@@ -17,7 +17,10 @@ impl<T: Message> Clone for UnsafeSendRetained<T> {
 unsafe impl<T> Send for UnsafeSendRetained<T> {}
 // unsafe impl<T> Sync for UnsafeSendRetained<T> {}
 
-impl<T> Debug for UnsafeSendRetained<T> where T: Debug {
+impl<T> Debug for UnsafeSendRetained<T>
+where
+    T: Debug,
+{
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("UnsafeSendRetained")
             .field("inner", &self.inner)

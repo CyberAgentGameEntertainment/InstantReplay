@@ -1,8 +1,8 @@
 use std::ffi::c_void;
 
+use crate::*;
 use tokio::sync::Mutex;
 use unienc::{AudioSample, EncoderInput, EncoderOutput, ResultExt};
-use crate::*;
 
 // Audio encoder input/output functions
 #[unsafe(no_mangle)]
@@ -16,7 +16,7 @@ pub unsafe extern "C" fn unienc_audio_encoder_push(
     user_data: SendPtr<c_void>,
 ) {
     let callback: UniencCallback = unsafe { std::mem::transmute(callback) };
-    let Some(runtime) = (unsafe { runtime.as_ref() }) else  {
+    let Some(runtime) = (unsafe { runtime.as_ref() }) else {
         UniencError::invalid_input_error("Invalid input parameters")
             .apply_callback(callback, user_data);
         return;
@@ -61,7 +61,7 @@ pub unsafe extern "C" fn unienc_audio_encoder_pull(
     user_data: SendPtr<c_void>,
 ) {
     let callback: UniencDataCallback<UniencSampleData> = unsafe { std::mem::transmute(callback) };
-    let Some(runtime) = (unsafe { runtime.as_ref() }) else  {
+    let Some(runtime) = (unsafe { runtime.as_ref() }) else {
         UniencError::invalid_input_error("Invalid input parameters")
             .apply_callback(callback, user_data);
         return;

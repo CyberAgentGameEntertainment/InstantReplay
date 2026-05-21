@@ -1,6 +1,6 @@
-use jni::{objects::JValue, sys::jint, JNIEnv};
+use jni::{JNIEnv, objects::JValue, sys::jint};
 use std::{path::Path, sync::Arc};
-use tokio::sync::{oneshot, RwLock};
+use tokio::sync::{RwLock, oneshot};
 use unienc_common::{CompletionHandle, Muxer, MuxerInput};
 
 use crate::common::*;
@@ -191,9 +191,9 @@ impl MuxerInput for MediaMuxerVideoInput {
     }
 
     async fn finish(self) -> unienc_common::Result<()> {
-        self.finish_tx
-            .send(Ok(()))
-            .map_err(|_| unienc_common::CommonError::from(AndroidError::ChannelSendFailed("finish")))?;
+        self.finish_tx.send(Ok(())).map_err(|_| {
+            unienc_common::CommonError::from(AndroidError::ChannelSendFailed("finish"))
+        })?;
         Ok(())
     }
 }
@@ -215,22 +215,22 @@ impl MuxerInput for MediaMuxerAudioInput {
     }
 
     async fn finish(self) -> unienc_common::Result<()> {
-        self.finish_tx
-            .send(Ok(()))
-            .map_err(|_| unienc_common::CommonError::from(AndroidError::ChannelSendFailed("finish")))?;
+        self.finish_tx.send(Ok(())).map_err(|_| {
+            unienc_common::CommonError::from(AndroidError::ChannelSendFailed("finish"))
+        })?;
         Ok(())
     }
 }
 
 impl CompletionHandle for MediaMuxerCompletionHandle {
     async fn finish(self) -> unienc_common::Result<()> {
-        finish_completion_handle_impl(self).await.map_err(Into::into)
+        finish_completion_handle_impl(self)
+            .await
+            .map_err(Into::into)
     }
 }
 
-async fn finish_completion_handle_impl(
-    handle: MediaMuxerCompletionHandle,
-) -> Result<()> {
+async fn finish_completion_handle_impl(handle: MediaMuxerCompletionHandle) -> Result<()> {
     println!("waiting for all tracks to finish");
 
     handle.video_finish_rx.await??;

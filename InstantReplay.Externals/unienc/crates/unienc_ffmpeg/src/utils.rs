@@ -26,6 +26,9 @@ impl<T> Cfr<T> {
             return Ok(None);
         };
 
-        Ok(Some((prev, (self.last_frame_index - prev_frame_index) as i32)))
+        Ok(Some((
+            prev,
+            (self.last_frame_index - prev_frame_index) as i32,
+        )))
     }
 }
