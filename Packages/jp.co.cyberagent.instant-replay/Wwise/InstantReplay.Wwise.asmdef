@@ -1,0 +1,19 @@
+{
+    "name": "InstantReplay.Wwise",
+    "rootNamespace": "",
+    "references": [
+        "GUID:1050604f2d3a84fcabcc4e9b9ff6745b",
+        "GUID:ecd9f69847c334f18aeaa435fde6d2f7"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [
+        "INSTANTREPLAY_WWISE"
+    ],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
