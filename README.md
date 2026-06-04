@@ -38,6 +38,7 @@ When a bug occurs, you can export the recent gameplay leading up to the bug as a
       * [Custom `IFrameProvider` Implementation](#custom-iframeprovider-implementation)
     * [Setting the Audio Source](#setting-the-audio-source)
       * [CRI Support](#cri-support)
+      * [Wwise Support](#wwise-support)
     * [Getting the Recording State](#getting-the-recording-state)
   * [Unbounded Recording](#unbounded-recording)
   * [Legacy Mode](#legacy-mode)
@@ -264,6 +265,15 @@ InstantReplay provides `CriAudioSampleProvider`, an `IAudioSampleProvider` imple
 2. Add scripting define symbol `INSTANTREPLAY_CRI` in Player Settings
 3. Add `InstantReplay.Cri` assembly reference if necessary
 4. Use `InstantReplay.Cri.CriAudioSampleProvider` as `audioSampleProvider` in `RealtimeInstantReplaySession` constructor
+
+#### Wwise Support
+
+Wwise is also supported via `InstantReplay.Wwise.WwiseAudioSampleProvider`.
+
+1. Install Wwise Unity Integration
+2. Add scripting define symbol `INSTANTREPLAY_WWISE` in Player Settings
+3. Add `InstantReplay.Wwise` assembly reference if necessary
+4. Use `InstantReplay.Wwise.WwiseAudioSampleProvider` as `audioSampleProvider` in `RealtimeInstantReplaySession` constructor
 
 ### Getting the Recording State
 
