@@ -14,6 +14,7 @@ namespace InstantReplay
         private readonly IAsyncPipelineInput<EncodedFrame> _next;
         private readonly Task _transferTask;
         private readonly VideoEncoder _videoEncoder;
+        private bool _disposed;
 
         internal VideoEncoderInput(VideoEncoder videoEncoder, IAsyncPipelineInput<EncodedFrame> next)
         {
@@ -35,6 +36,8 @@ namespace InstantReplay
 
         public void Dispose()
         {
+            if (_disposed) return;
+            _disposed = true;
             _videoEncoder?.Dispose();
             _next?.Dispose();
         }
@@ -116,7 +119,7 @@ namespace InstantReplay
                         encodedFrame.Dispose();
                         throw;
                     }
-                } while (true);
+                } while (!_disposed);
             }
             finally
             {

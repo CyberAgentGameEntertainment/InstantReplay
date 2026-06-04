@@ -4,6 +4,7 @@
 
 using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using AOT;
 using UniEnc.Native;
@@ -187,6 +188,7 @@ namespace UniEnc
 
             protected override void Reset()
             {
+                if (EqualityComparer<T>.Default.Equals(_value, default)) return;
                 _value.Dispose();
                 _value = default;
             }

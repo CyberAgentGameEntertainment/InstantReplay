@@ -1,12 +1,11 @@
 use crate::js::VideoEncoderHandle;
 use bincode::{Decode, Encode};
+use futures::StreamExt;
 use futures::channel::mpsc;
-use futures::{SinkExt, StreamExt};
-use std::rc::Rc;
 use std::sync::Arc;
 use unienc_common::{
-    EncodedData, Encoder, EncoderInput, EncoderOutput, OptionExt, ResultExt, Runtime,
-    UnsupportedBlitData, VideoFrame, VideoSample,
+    EncodedData, Encoder, EncoderInput, EncoderOutput, ResultExt, Runtime, UnsupportedBlitData,
+    VideoFrame, VideoSample,
 };
 
 pub struct WebCodecsVideoEncoder<R: Runtime> {
