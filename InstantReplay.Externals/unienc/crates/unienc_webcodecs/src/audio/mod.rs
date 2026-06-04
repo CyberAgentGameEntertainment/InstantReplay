@@ -1,13 +1,11 @@
-use crate::js::{AudioEncoderHandle, VideoEncoderHandle};
-use crate::video::{VideoEncodedData, WebCodecsVideoEncoderInput};
+use crate::js::AudioEncoderHandle;
 use bincode::{Decode, Encode};
 use futures::StreamExt;
 use futures::channel::mpsc;
-use std::rc::Rc;
 use std::sync::Arc;
 use unienc_common::{
-    AudioSample, EncodedData, Encoder, EncoderInput, EncoderOutput, OptionExt, ResultExt, Runtime,
-    UniencSampleKind, UnsupportedBlitData,
+    AudioSample, EncodedData, Encoder, EncoderInput, EncoderOutput, ResultExt, Runtime,
+    UniencSampleKind,
 };
 
 pub struct WebCodecsAudioEncoder<R: Runtime> {
