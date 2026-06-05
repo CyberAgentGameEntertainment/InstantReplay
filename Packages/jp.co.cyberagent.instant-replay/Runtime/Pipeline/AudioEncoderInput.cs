@@ -26,7 +26,7 @@ namespace InstantReplay
 
         public ValueTask PushAsync(PcmAudioFrame value)
         {
-            return ValueTaskUtils.WhenAny(PushCoreAsync(value), new ValueTask(_transferTask));
+            return ValueTaskUtils.WhenAny(PushCoreAsync(value).AsValueTask(), new ValueTask(_transferTask));
         }
 
         public ValueTask CompleteAsync(Exception exception = null)
@@ -41,7 +41,7 @@ namespace InstantReplay
             _next.Dispose();
         }
 
-        public async ValueTask PushCoreAsync(PcmAudioFrame value)
+        public async PooledValueTask PushCoreAsync(PcmAudioFrame value)
         {
             using var _ = value;
 

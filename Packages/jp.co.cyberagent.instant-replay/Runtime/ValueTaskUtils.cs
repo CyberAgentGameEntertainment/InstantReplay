@@ -72,7 +72,7 @@ namespace InstantReplay
                     }
                 }, (source, selfVersion, awaiter1));
 
-                awaiter1.OnCompleted(action1.Wrapper);
+                awaiter1.UnsafeOnCompleted(action1.Wrapper);
 
                 var awaiter2 = task2.GetAwaiter();
 
@@ -96,7 +96,7 @@ namespace InstantReplay
                     }
                 }, (source, selfVersion, awaiter2));
 
-                awaiter2.OnCompleted(action2.Wrapper);
+                awaiter2.UnsafeOnCompleted(action2.Wrapper);
 
                 return new ValueTask(source, version);
             }

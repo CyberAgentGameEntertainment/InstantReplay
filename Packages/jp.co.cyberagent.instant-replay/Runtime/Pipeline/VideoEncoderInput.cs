@@ -3,6 +3,7 @@
 // --------------------------------------------------------------
 
 using System;
+using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
 using UniEnc;
 using UniEnc.Unity;
@@ -25,7 +26,7 @@ namespace InstantReplay
 
         public ValueTask PushAsync(LazyVideoFrameData value)
         {
-            return ValueTaskUtils.WhenAny(PushCoreAsync(value), new ValueTask(_transferTask));
+            return ValueTaskUtils.WhenAny(PushCoreAsync(value).AsValueTask(), new ValueTask(_transferTask));
         }
 
         public ValueTask CompleteAsync(Exception exception = null)
@@ -42,7 +43,7 @@ namespace InstantReplay
             _next?.Dispose();
         }
 
-        public async ValueTask PushCoreAsync(LazyVideoFrameData value)
+        public async PooledValueTask PushCoreAsync(LazyVideoFrameData value)
         {
             switch (value.Kind)
             {
