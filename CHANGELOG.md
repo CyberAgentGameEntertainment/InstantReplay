@@ -1,3 +1,19 @@
+## [1.6.0] - 2026/06/10
+
+### Added
+
+- Added `WwiseAudioSampleProvider` to capture audio from Wwise.
+
+### Fixed
+
+- Fixed `ObjectDisposedException` and "The Handle has already been released" errors that could occur during shutdown or rapid recording start/stop cycles.
+- Fixed incorrect `sampleRate` condition in legacy mode.
+- Fixed compilation errors with Unity 6.4 (URP 17.4) or newer, caused by the removal of RenderGraph Compatibility Mode.
+
+### Changed
+
+- Reduced per-frame GC allocations on the main thread during recording.
+
 ## [1.5.6] - 2026/05/20
 
 ### Fixed
