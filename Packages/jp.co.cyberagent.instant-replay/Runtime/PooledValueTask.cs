@@ -1,5 +1,5 @@
 // --------------------------------------------------------------
-// Copyright 2025 CyberAgent, Inc.
+// Copyright 2026 CyberAgent, Inc.
 // --------------------------------------------------------------
 
 using System;
@@ -22,7 +22,7 @@ namespace InstantReplay
     ///     C# 9 / Unity 2022.3 without requiring the C# 10 per-method builder feature.
     ///     The backing box is rented on the first suspension and returned to the pool when the resulting
     ///     <see cref="ValueTask" /> is awaited (i.e. <c>GetResult</c> is called exactly once), matching
-    ///     single-consumption ValueTask semantics — the same contract <see cref="ValueTaskUtils" /> relies on.
+    ///     single-consumption ValueTask semantics — the same contract <see cref="SharedTaskRaceGuard" /> relies on.
     /// </remarks>
     [AsyncMethodBuilder(typeof(PooledValueTaskMethodBuilder))]
     internal readonly struct PooledValueTask
@@ -123,7 +123,8 @@ namespace InstantReplay
             awaiter.OnCompleted(GetBox(ref stateMachine).MoveNextAction);
         }
 
-        public void AwaitUnsafeOnCompleted<TAwaiter, TStateMachine>(ref TAwaiter awaiter, ref TStateMachine stateMachine)
+        public void AwaitUnsafeOnCompleted<TAwaiter, TStateMachine>(ref TAwaiter awaiter,
+            ref TStateMachine stateMachine)
             where TAwaiter : ICriticalNotifyCompletion where TStateMachine : IAsyncStateMachine
         {
             awaiter.UnsafeOnCompleted(GetBox(ref stateMachine).MoveNextAction);
@@ -141,40 +142,40 @@ namespace InstantReplay
             // into the state machine *before* we copy it into the box below. From then on SetResult /
             // SetException / further suspensions route through this box.
             _box = box;
-            box.StateMachine = stateMachine;
+            box.stateMachine = stateMachine;
             return box;
         }
 
         private abstract class StateMachineBox : IValueTaskSource
         {
             // Continuations run inline (RunContinuationsAsynchronously stays false), matching WhenAnySource.
-            protected ManualResetValueTaskSourceCore<bool> Core;
+            protected ManualResetValueTaskSourceCore<bool> core;
 
             public Action MoveNextAction { get; protected set; }
 
-            public short Version => Core.Version;
+            public short Version => core.Version;
 
             public abstract void GetResult(short token);
 
             public ValueTaskSourceStatus GetStatus(short token)
             {
-                return Core.GetStatus(token);
+                return core.GetStatus(token);
             }
 
             public void OnCompleted(Action<object> continuation, object state, short token,
                 ValueTaskSourceOnCompletedFlags flags)
             {
-                Core.OnCompleted(continuation, state, token, flags);
+                core.OnCompleted(continuation, state, token, flags);
             }
 
             public void SetResult()
             {
-                Core.SetResult(true);
+                core.SetResult(true);
             }
 
             public void SetException(Exception exception)
             {
-                Core.SetException(exception);
+                core.SetException(exception);
             }
         }
 
@@ -183,7 +184,7 @@ namespace InstantReplay
         {
             private static readonly ConcurrentQueue<StateMachineBox<TStateMachine>> Pool = new();
 
-            public TStateMachine StateMachine;
+            public TStateMachine stateMachine;
 
             private StateMachineBox()
             {
@@ -197,19 +198,19 @@ namespace InstantReplay
 
             private void MoveNext()
             {
-                StateMachine.MoveNext();
+                stateMachine.MoveNext();
             }
 
             public override void GetResult(short token)
             {
                 try
                 {
-                    Core.GetResult(token);
+                    core.GetResult(token);
                 }
                 finally
                 {
-                    Core.Reset();
-                    StateMachine = default;
+                    core.Reset();
+                    stateMachine = default;
                     Pool.Enqueue(this);
                 }
             }
