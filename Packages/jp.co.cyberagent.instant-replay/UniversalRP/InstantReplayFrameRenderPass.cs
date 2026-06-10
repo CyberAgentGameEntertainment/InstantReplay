@@ -47,6 +47,7 @@ namespace InstantReplay.UniversalRP
         }
 #endif
 
+#if !INSTANTREPLAY_URP_17_4_OR_NEWER
 #if INSTANTREPLAY_URP_17_0_OR_NEWER
         [Obsolete]
 #endif
@@ -60,5 +61,6 @@ namespace InstantReplay.UniversalRP
                     SystemInfo.graphicsUVStartsAtTop ^ flipped, commandBuffer));
             context.ExecuteCommandBuffer(commandBuffer);
         }
+#endif
     }
 }
