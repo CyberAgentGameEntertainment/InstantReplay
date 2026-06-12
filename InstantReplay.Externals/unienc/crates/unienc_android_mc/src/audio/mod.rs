@@ -109,9 +109,9 @@ impl EncoderInput for MediaCodecAudioEncoderInput {
 }
 
 async fn push_impl(this: &mut MediaCodecAudioEncoderInput, data: AudioSample) -> Result<()> {
-    // Convert i16 samples to byte array
-    let byte_data_vec = i16_to_bytes(&data.data);
-    let mut byte_data = byte_data_vec.as_slice();
+    // Convert i16 samples to signed 16-bit little-endian PCM bytes.
+    let byte_data = data.data_as_s16le_bytes();
+    let mut byte_data = byte_data.as_slice();
 
     while !byte_data.is_empty() {
         // Get input buffer
@@ -200,13 +200,4 @@ fn create_audio_format<A: unienc_common::AudioEncoderOptions>(
     )?;
 
     SafeGlobalRef::new(env, format_obj)
-}
-
-// Convert i16 samples to byte array (little-endian)
-fn i16_to_bytes(samples: &[i16]) -> Vec<u8> {
-    let mut bytes = Vec::with_capacity(samples.len() * 2);
-    for &sample in samples {
-        bytes.extend_from_slice(&sample.to_le_bytes());
-    }
-    bytes
 }

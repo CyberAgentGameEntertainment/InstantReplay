@@ -89,10 +89,11 @@ impl<R: Runtime + 'static> EncoderInput for WebCodecsAudioEncoderInput<R> {
         }
 
         let encoder_handle = self.encoder_handle.as_ref().unwrap();
+        let audio_data = data.data_as_s16le_bytes();
 
         encoder_handle
             .push_audio_frame(
-                unsafe { data.data.align_to::<u8>() }.1,
+                audio_data.as_ref(),
                 self.channels,
                 self.sample_rate,
                 data.timestamp_in_samples as f64 / self.sample_rate as f64,
