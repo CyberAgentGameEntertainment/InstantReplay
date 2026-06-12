@@ -1,6 +1,7 @@
 use std::ffi::c_void;
 use std::fmt::Debug;
 use std::future::Future;
+use std::mem::size_of;
 use std::path::Path;
 
 use crate::buffer::SharedBuffer;
@@ -181,6 +182,17 @@ pub struct AudioSample {
     pub timestamp_in_samples: u64,
 }
 
+impl AudioSample {
+    /// Returns the sample data as signed 16-bit little-endian PCM bytes.
+    pub fn data_as_s16le_bytes(&self) -> Vec<u8> {
+        let mut bytes = Vec::with_capacity(self.data.len() * size_of::<i16>());
+        for &sample in &self.data {
+            bytes.extend_from_slice(&sample.to_le_bytes());
+        }
+        bytes
+    }
+}
+
 pub trait EncodedData: Encode + Decode<()> {
     fn timestamp(&self) -> f64;
     fn set_timestamp(&mut self, timestamp: f64);
@@ -212,4 +224,22 @@ pub trait GraphicsEventIssuer: Send + 'static {
 pub trait EncoderOutput: Send {
     type Data: EncodedData + Send;
     fn pull(&mut self) -> impl Future<Output = Result<Option<Self::Data>>> + Send;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn audio_sample_data_as_s16le_bytes_uses_little_endian_order() {
+        let sample = AudioSample {
+            data: vec![0x1234, -2, i16::MIN],
+            timestamp_in_samples: 0,
+        };
+
+        assert_eq!(
+            sample.data_as_s16le_bytes(),
+            vec![0x34, 0x12, 0xfe, 0xff, 0x00, 0x80]
+        );
+    }
 }
