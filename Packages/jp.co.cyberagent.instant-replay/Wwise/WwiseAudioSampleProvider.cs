@@ -1,6 +1,13 @@
 using System;
 using System.Buffers;
 using System.Threading;
+using AkUnitySoundEngineAlias =
+#if WWISE_2024_OR_LATER
+    AkUnitySoundEngine
+#else
+    AkSoundEngine
+#endif
+    ;
 
 namespace InstantReplay.Wwise
 {
@@ -15,81 +22,27 @@ namespace InstantReplay.Wwise
         public WwiseAudioSampleProvider(ulong? outputDeviceId = null)
         {
             _outputDeviceId = outputDeviceId ??
-
-#if WWISE_2024_OR_LATER
-                              AkUnitySoundEngine
-#else
-                              AkSoundEngine
-#endif
-                                  .GetOutputID(
-#if WWISE_2024_OR_LATER
-                                      AkUnitySoundEngine
-#else
-                                      AkSoundEngine
-#endif
-                                          .AK_INVALID_UNIQUE_ID, 0);
-            if (!
-#if WWISE_2024_OR_LATER
-                AkUnitySoundEngine
-#else
-                AkSoundEngine
-#endif
-                    .IsInitialized())
+                              AkUnitySoundEngineAlias.GetOutputID(AkUnitySoundEngineAlias.AK_INVALID_UNIQUE_ID, 0);
+            if (!AkUnitySoundEngineAlias.IsInitialized())
                 throw new InvalidOperationException("Wwise sound engine is not initialized.");
 
-            SampleRate =
-#if WWISE_2024_OR_LATER
-                AkUnitySoundEngine
-#else
-                AkSoundEngine
-#endif
-                    .GetSampleRate();
+            SampleRate = AkUnitySoundEngineAlias.GetSampleRate();
             using var channelConfig = new AkChannelConfig();
             using var audioSinkCapabilities = new Ak3DAudioSinkCapabilities();
-
-#if WWISE_2024_OR_LATER
-            AkUnitySoundEngine
-#else
-            AkSoundEngine
-#endif
-                .GetOutputDeviceConfiguration(_outputDeviceId, channelConfig, audioSinkCapabilities);
+            AkUnitySoundEngineAlias.GetOutputDeviceConfiguration(_outputDeviceId, channelConfig, audioSinkCapabilities);
             Channels = channelConfig.uNumChannels;
 
-
-#if WWISE_2024_OR_LATER
-            AkUnitySoundEngine
-#else
-            AkSoundEngine
-#endif
-                .ClearCaptureData();
-
-#if WWISE_2024_OR_LATER
-            AkUnitySoundEngine
-#else
-            AkSoundEngine
-#endif
-                .StartDeviceCapture(_outputDeviceId);
+            AkUnitySoundEngineAlias.ClearCaptureData();
+            AkUnitySoundEngineAlias.StartDeviceCapture(_outputDeviceId);
 
             PlayerLoopEntryPoint.OnAfterUpdate += _updateDelegate = () =>
             {
-                var sampleCount =
-#if WWISE_2024_OR_LATER
-                    AkUnitySoundEngine
-#else
-                    AkSoundEngine
-#endif
-                        .UpdateCaptureSampleCount(_outputDeviceId);
+                var sampleCount = AkUnitySoundEngineAlias.UpdateCaptureSampleCount(_outputDeviceId);
 
                 var array = ArrayPool<float>.Shared.Rent(checked((int)sampleCount));
                 try
                 {
-                    var count =
-#if WWISE_2024_OR_LATER
-                        AkUnitySoundEngine
-#else
-                        AkSoundEngine
-#endif
-                            .GetCaptureSamples(_outputDeviceId, array, (uint)array.Length);
+                    var count = AkUnitySoundEngineAlias.GetCaptureSamples(_outputDeviceId, array, (uint)array.Length);
 
                     var time = (double)_captureSamples / SampleRate;
                     _captureSamples += count / Channels;
@@ -122,13 +75,7 @@ namespace InstantReplay.Wwise
         private bool DisposeCore()
         {
             if (Interlocked.CompareExchange(ref _isDisposed, 1, 0) != 0) return false;
-
-#if WWISE_2024_OR_LATER
-            AkUnitySoundEngine
-#else
-            AkSoundEngine
-#endif
-                .StopDeviceCapture(_outputDeviceId);
+            AkUnitySoundEngineAlias.StopDeviceCapture(_outputDeviceId);
             return true;
         }
     }
