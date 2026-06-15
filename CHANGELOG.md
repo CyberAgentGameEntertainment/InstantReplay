@@ -1,3 +1,9 @@
+## [1.6.1] - 2026/06/15
+
+### Fixed
+
+- Fixed `WwiseAudioSampleProvider` failing to compile with Wwise SDK 2023 or earlier. It now supports both Wwise 2023 or earlier (using `AkSoundEngine`) and Wwise 2024 or later (using `AkUnitySoundEngine`).
+
 ## [1.6.0] - 2026/06/10
 
 ### Added
