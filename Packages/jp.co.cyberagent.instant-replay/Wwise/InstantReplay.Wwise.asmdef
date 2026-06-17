@@ -12,7 +12,8 @@
     "precompiledReferences": [],
     "autoReferenced": true,
     "defineConstraints": [
-        "INSTANTREPLAY_WWISE"
+        "INSTANTREPLAY_WWISE",
+        "!EXCLUDE_INSTANTREPLAY"
     ],
     "versionDefines": [],
     "noEngineReferences": false
