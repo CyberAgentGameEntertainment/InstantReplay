@@ -1,3 +1,10 @@
+## [1.6.2] - 2026/06/19
+
+### Fixed
+
+- Fixed `InstantReplay.Wwise` assembly not being excluded when the `EXCLUDE_INSTANTREPLAY` scripting symbol is defined.
+- Fixed `InstantReplay.Wwise` assembly references using GUIDs instead of names, which could cause reference resolution failures across different environments.
+
 ## [1.6.1] - 2026/06/15
 
 ### Fixed
