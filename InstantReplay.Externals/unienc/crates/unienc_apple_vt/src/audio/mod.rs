@@ -1,23 +1,22 @@
 use std::{ffi::c_void, ptr::NonNull};
 
-use crate::error::{AppleError, Result, OsStatusExt};
+use crate::error::{AppleError, OsStatusExt, Result};
 use bincode::{Decode, Encode};
 use objc2_audio_toolbox::{
-    kAudioConverterCompressionMagicCookie, kAudioConverterEncodeBitRate,
-    kAudioConverterPropertyMaximumOutputPacketSize, AudioConverterDispose,
-    AudioConverterFillComplexBuffer, AudioConverterGetProperty, AudioConverterGetPropertyInfo,
-    AudioConverterNew, AudioConverterPropertyID, AudioConverterRef, AudioConverterSetProperty,
+    AudioConverterDispose, AudioConverterFillComplexBuffer, AudioConverterGetProperty,
+    AudioConverterGetPropertyInfo, AudioConverterNew, AudioConverterPropertyID, AudioConverterRef,
+    AudioConverterSetProperty, kAudioConverterCompressionMagicCookie, kAudioConverterEncodeBitRate,
+    kAudioConverterPropertyMaximumOutputPacketSize,
 };
 use objc2_core_audio_types::{
-    kAudioFormatFlagIsPacked, kAudioFormatFlagIsSignedInteger, kAudioFormatLinearPCM,
-    kAudioFormatMPEG4AAC, AudioBuffer, AudioBufferList, AudioStreamBasicDescription,
-    AudioStreamPacketDescription, MPEG4ObjectID,
+    AudioBuffer, AudioBufferList, AudioStreamBasicDescription, AudioStreamPacketDescription,
+    MPEG4ObjectID, kAudioFormatFlagIsPacked, kAudioFormatFlagIsSignedInteger,
+    kAudioFormatLinearPCM, kAudioFormatMPEG4AAC,
 };
 use tokio::sync::mpsc;
 use unienc_common::{
     AudioSample, EncodedData, Encoder, EncoderInput, EncoderOutput, UniencSampleKind,
 };
-
 
 pub struct AudioToolboxEncoder {
     input: AudioToolboxEncoderInput,

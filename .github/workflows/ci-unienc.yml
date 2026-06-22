@@ -1,0 +1,26 @@
+name: CI unienc
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/ci-unienc.yml'
+      - 'InstantReplay.Externals/unienc/**'
+  push:
+    paths:
+      - '.github/workflows/ci-unienc.yml'
+      - 'InstantReplay.Externals/unienc/**'
+
+jobs:
+  fmt:
+    name: Format
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: InstantReplay.Externals/unienc
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          submodules: 'recursive'
+      - run: rustup default stable
+      - run: rustup component add rustfmt
+      - run: cargo fmt --all -- --check

@@ -6,4 +6,3 @@ fn main() {
         .status()
         .expect("failed to execute tsc");
 }
-

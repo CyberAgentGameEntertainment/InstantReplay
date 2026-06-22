@@ -1,4 +1,3 @@
-
 #[cfg(not(any(target_os = "windows")))]
 compile_error!("This crate can only be compiled for Windows platforms.");
 
@@ -12,7 +11,7 @@ pub(crate) mod mft;
 pub mod mux;
 pub mod video;
 
-pub use error::{WindowsError, Result};
+pub use error::{Result, WindowsError};
 
 use audio::MediaFoundationAudioEncoder;
 use mux::MediaFoundationMuxer;
@@ -28,8 +27,11 @@ pub struct MediaFoundationEncodingSystem<
     runtime: R,
 }
 
-impl<V: unienc_common::VideoEncoderOptions, A: unienc_common::AudioEncoderOptions, R: Runtime + 'static> EncodingSystem
-    for MediaFoundationEncodingSystem<V, A, R>
+impl<
+    V: unienc_common::VideoEncoderOptions,
+    A: unienc_common::AudioEncoderOptions,
+    R: Runtime + 'static,
+> EncodingSystem for MediaFoundationEncodingSystem<V, A, R>
 {
     type VideoEncoderOptionsType = V;
     type AudioEncoderOptionsType = A;
@@ -64,7 +66,13 @@ impl<V: unienc_common::VideoEncoderOptions, A: unienc_common::AudioEncoderOption
     }
 
     fn new_muxer(&self, output_path: &Path) -> unienc_common::Result<Self::MuxerType> {
-        MediaFoundationMuxer::new(output_path, &self.video_options, &self.audio_options, &self.runtime).map_err(|e| e.into())
+        MediaFoundationMuxer::new(
+            output_path,
+            &self.video_options,
+            &self.audio_options,
+            &self.runtime,
+        )
+        .map_err(|e| e.into())
     }
 }
 

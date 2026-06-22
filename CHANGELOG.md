@@ -1,3 +1,53 @@
+## [1.6.2] - 2026/06/19
+
+### Fixed
+
+- Fixed `InstantReplay.Wwise` assembly not being excluded when the `EXCLUDE_INSTANTREPLAY` scripting symbol is defined.
+- Fixed `InstantReplay.Wwise` assembly references using GUIDs instead of names, which could cause reference resolution failures across different environments.
+
+## [1.6.1] - 2026/06/15
+
+### Fixed
+
+- Fixed `WwiseAudioSampleProvider` failing to compile with Wwise SDK 2023 or earlier. It now supports both Wwise 2023 or earlier (using `AkSoundEngine`) and Wwise 2024 or later (using `AkUnitySoundEngine`).
+
+## [1.6.0] - 2026/06/10
+
+### Added
+
+- Added `WwiseAudioSampleProvider` to capture audio from Wwise.
+
+### Fixed
+
+- Fixed `ObjectDisposedException` and "The Handle has already been released" errors that could occur during shutdown or rapid recording start/stop cycles.
+- Fixed incorrect `sampleRate` condition in legacy mode.
+- Fixed compilation errors with Unity 6.4 (URP 17.4) or newer, caused by the removal of RenderGraph Compatibility Mode.
+
+### Changed
+
+- Reduced per-frame GC allocations on the main thread during recording.
+
+## [1.5.6] - 2026/05/20
+
+### Fixed
+
+- Fixed PlayerLoop modification incorrectly overwriting unrelated sibling systems, which could break other packages that also customize the PlayerLoop.
+- Fixed obsolete API warnings (`FormatUsage` / `SystemInfo.IsFormatSupported`) on Unity 2023.2 or newer.
+
+## [1.5.5] - 2026/05/12
+
+### Added
+
+- Part of native memory allocated by InstantReplay is now visible in Unity's Memory Profiler, making it easier to investigate memory usage of recording.
+
+### Fixed
+
+- Fixed `InstantReplay.UniversalRP` assembly not being excluded when the `EXCLUDE_INSTANTREPLAY` scripting symbol is defined.
+
+### Changed
+
+- Improved performance of the readback-free encoding pipeline on Apple platforms (iOS/macOS) by optimizing Metal blit and PlayerLoop integration, reducing per-frame CPU overhead during recording.
+
 ## [1.5.4] - 2026/04/21
 
 ### Fixed

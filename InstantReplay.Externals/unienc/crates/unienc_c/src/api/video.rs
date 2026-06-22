@@ -3,8 +3,8 @@ use std::ffi::c_void;
 use crate::*;
 use tokio::sync::Mutex;
 use unienc::{
-    buffer::SharedBuffer, EncoderInput, EncoderOutput, ResultExt,
-    VideoFrame, VideoFrameBgra32, VideoSample,
+    EncoderInput, EncoderOutput, ResultExt, VideoFrame, VideoFrameBgra32, VideoSample,
+    buffer::SharedBuffer,
 };
 
 // Video encoder input/output functions
@@ -25,7 +25,7 @@ pub unsafe extern "C" fn unienc_video_encoder_push_shared_buffer(
             .apply_callback(callback, user_data);
         return;
     }
-    let Some(runtime) = (unsafe { runtime.as_ref() }) else  {
+    let Some(runtime) = (unsafe { runtime.as_ref() }) else {
         UniencError::invalid_input_error("Invalid input parameters")
             .apply_callback(callback, user_data);
         return;
@@ -76,8 +76,7 @@ pub unsafe extern "C" fn unienc_video_encoder_push_blit_source(
 
     #[cfg(not(feature = "unity"))]
     {
-        UniencError::platform_error("Not supported")
-            .apply_callback(callback, user_data);
+        UniencError::platform_error("Not supported").apply_callback(callback, user_data);
     }
 
     #[cfg(feature = "unity")]
@@ -98,7 +97,7 @@ pub unsafe extern "C" fn unienc_video_encoder_push_blit_source(
                 is_gamma_workflow,
                 event_issuer: Box::new(crate::unity::UniencGraphicsEventIssuer::new(
                     unienc_issue_graphics_event_callback,
-                    weak
+                    weak,
                 )),
                 _phantom: std::marker::PhantomData,
             },
@@ -145,7 +144,7 @@ pub unsafe extern "C" fn unienc_video_encoder_pull(
     user_data: SendPtr<c_void>,
 ) {
     let callback: UniencDataCallback<UniencSampleData> = unsafe { std::mem::transmute(callback) };
-    let Some(runtime) = (unsafe { runtime.as_ref() }) else  {
+    let Some(runtime) = (unsafe { runtime.as_ref() }) else {
         UniencError::invalid_input_error("Invalid input parameters")
             .apply_callback(callback, user_data);
         return;
@@ -165,14 +164,11 @@ pub unsafe extern "C" fn unienc_video_encoder_pull(
             .as_mut()
             .ok_or(UniencError::resource_allocation_error("Resource is None"))
         {
-            Ok(output) => {
-                
-                output
-                    .pull()
-                    .await
-                    .context("Failed to pull video sample")
-                    .map_err(UniencError::from_common)
-            }
+            Ok(output) => output
+                .pull()
+                .await
+                .context("Failed to pull video sample")
+                .map_err(UniencError::from_common),
             Err(err) => Err(err),
         };
         result.apply_callback(callback, user_data);

@@ -3,6 +3,7 @@
 // --------------------------------------------------------------
 
 using System;
+using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
 using UniEnc;
 using UniEnc.Unity;
@@ -12,19 +13,22 @@ namespace InstantReplay
     internal class VideoEncoderInput : IAsyncPipelineInput<LazyVideoFrameData>
     {
         private readonly IAsyncPipelineInput<EncodedFrame> _next;
+        private readonly SharedTaskRaceGuard _raceGuard;
         private readonly Task _transferTask;
         private readonly VideoEncoder _videoEncoder;
+        private bool _disposed;
 
         internal VideoEncoderInput(VideoEncoder videoEncoder, IAsyncPipelineInput<EncodedFrame> next)
         {
             _videoEncoder = videoEncoder ?? throw new ArgumentNullException(nameof(videoEncoder));
             _next = next;
             _transferTask = TransferAsync(next);
+            _raceGuard = new SharedTaskRaceGuard(_transferTask);
         }
 
         public ValueTask PushAsync(LazyVideoFrameData value)
         {
-            return ValueTaskUtils.WhenAny(PushCoreAsync(value), new ValueTask(_transferTask));
+            return _raceGuard.Race(PushCoreAsync(value).AsValueTask());
         }
 
         public ValueTask CompleteAsync(Exception exception = null)
@@ -35,11 +39,13 @@ namespace InstantReplay
 
         public void Dispose()
         {
+            if (_disposed) return;
+            _disposed = true;
             _videoEncoder?.Dispose();
             _next?.Dispose();
         }
 
-        public async ValueTask PushCoreAsync(LazyVideoFrameData value)
+        public async PooledValueTask PushCoreAsync(LazyVideoFrameData value)
         {
             switch (value.Kind)
             {
@@ -116,7 +122,7 @@ namespace InstantReplay
                         encodedFrame.Dispose();
                         throw;
                     }
-                } while (true);
+                } while (!_disposed);
             }
             finally
             {

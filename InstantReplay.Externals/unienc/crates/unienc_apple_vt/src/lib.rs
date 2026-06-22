@@ -1,4 +1,3 @@
-
 #[cfg(not(any(target_vendor = "apple")))]
 compile_error!("This crate can only be compiled for Apple platforms.");
 
@@ -12,6 +11,7 @@ use crate::{
     audio::AudioToolboxEncoder, common::UnsafeSendRetained, mux::AVFMuxer,
     video::VideoToolboxEncoder,
 };
+mod allocator;
 pub mod audio;
 mod common;
 pub mod error;
@@ -31,8 +31,11 @@ pub struct VideoToolboxEncodingSystem<
     runtime: R,
 }
 
-impl<V: unienc_common::VideoEncoderOptions, A: unienc_common::AudioEncoderOptions, R: unienc_common::Runtime + 'static> EncodingSystem
-    for VideoToolboxEncodingSystem<V, A, R>
+impl<
+    V: unienc_common::VideoEncoderOptions,
+    A: unienc_common::AudioEncoderOptions,
+    R: unienc_common::Runtime + 'static,
+> EncodingSystem for VideoToolboxEncodingSystem<V, A, R>
 {
     type VideoEncoderOptionsType = V;
     type AudioEncoderOptionsType = A;
@@ -71,7 +74,12 @@ impl<V: unienc_common::VideoEncoderOptions, A: unienc_common::AudioEncoderOption
     }
 }
 
-impl<V: unienc_common::VideoEncoderOptions, A: unienc_common::AudioEncoderOptions, R: unienc_common::Runtime + 'static> unienc_common::unity::UnityPlugin for VideoToolboxEncodingSystem<V, A, R> {
+impl<
+    V: unienc_common::VideoEncoderOptions,
+    A: unienc_common::AudioEncoderOptions,
+    R: unienc_common::Runtime + 'static,
+> unienc_common::unity::UnityPlugin for VideoToolboxEncodingSystem<V, A, R>
+{
     fn unity_plugin_load(interfaces: &unity_native_plugin::interface::UnityInterfaces) {
         metal::unity_plugin_load(interfaces);
     }

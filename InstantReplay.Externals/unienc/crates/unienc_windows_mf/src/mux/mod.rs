@@ -1,6 +1,5 @@
 use crate::error::{OptionExt, Result, WindowsError};
 use std::path::Path;
-use std::sync::Arc;
 use tokio::sync::mpsc;
 use tokio::sync::oneshot;
 use unienc_common::SpawnExt;

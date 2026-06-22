@@ -5,11 +5,13 @@ pub trait Spawn {
 }
 
 pub trait SpawnBlocking {
-    fn spawn_blocking<Result: Send + 'static>(&self, f: impl FnOnce() -> Result + Send + 'static) -> Pin<Box<dyn Future<Output = Result> + Send + 'static>>;
+    fn spawn_blocking<Result: Send + 'static>(
+        &self,
+        f: impl FnOnce() -> Result + Send + 'static,
+    ) -> Pin<Box<dyn Future<Output = Result> + Send + 'static>>;
 }
 
 pub trait Runtime: Spawn + SpawnBlocking + Send + Clone {}
-
 
 pub trait SpawnExt: Spawn {
     fn spawn_ret<F, R>(&self, f: F)

@@ -11,8 +11,7 @@ pub fn create_shader_module(
     info.code_size = code.len();
     info.p_code = code.as_ptr() as *const u32;
     Ok(VulkanShaderModuleHandle::new(
-        unsafe { device.create_shader_module(&info, None) }
-            .map_err(AndroidError::Vulkan)?,
+        unsafe { device.create_shader_module(&info, None) }.map_err(AndroidError::Vulkan)?,
         device.clone(),
     ))
 }
@@ -75,7 +74,11 @@ impl FencePool {
 
     pub fn push(&self, fence: VulkanFenceHandle) -> Result<()> {
         let mut pool = self.pool.lock().map_err(|_| AndroidError::MutexPoisoned)?;
-        unsafe { self.device.reset_fences(&[*fence]).map_err(AndroidError::Vulkan)? };
+        unsafe {
+            self.device
+                .reset_fences(&[*fence])
+                .map_err(AndroidError::Vulkan)?
+        };
         pool.push_back(fence);
         Ok(())
     }

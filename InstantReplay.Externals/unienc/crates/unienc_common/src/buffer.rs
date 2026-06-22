@@ -49,14 +49,15 @@ impl SharedBufferPool {
 impl SharedBuffer {
     pub fn new_unmanaged(vec: Vec<u8>) -> Self {
         let len = Arc::new(vec.len());
-        SharedBuffer {
-            data: vec,
-            len,
-        }
+        SharedBuffer { data: vec, len }
     }
 
     pub fn len(&self) -> usize {
         *self.len
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
     }
 
     pub fn data(&self) -> &[u8] {

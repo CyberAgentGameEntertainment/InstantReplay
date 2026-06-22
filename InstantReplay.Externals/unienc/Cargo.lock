@@ -534,6 +534,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "libmimalloc-sys"
+version = "0.1.44"
+dependencies = [
+ "cc",
+ "libc",
+]
+
+[[package]]
 name = "log"
 version = "0.4.27"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -544,6 +552,14 @@ name = "memchr"
 version = "2.7.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "78ca9ab1a0babb1e7d5695e3530886289c18cf2f87ec19a575a0abdce112e3a3"
+
+[[package]]
+name = "mimalloc"
+version = "0.1.48"
+dependencies = [
+ "libc",
+ "libmimalloc-sys",
+]
 
 [[package]]
 name = "mio"
@@ -1204,7 +1220,6 @@ dependencies = [
  "tokio",
  "unienc_common",
  "unity-native-plugin",
- "unity-native-plugin-vulkan",
 ]
 
 [[package]]
@@ -1215,6 +1230,7 @@ dependencies = [
  "bitflags",
  "block2",
  "dispatch2",
+ "mimalloc",
  "objc2",
  "objc2-audio-toolbox",
  "objc2-av-foundation",
@@ -1241,6 +1257,7 @@ dependencies = [
  "csbindgen",
  "futures",
  "libc",
+ "mimalloc",
  "ndk-sys",
  "thiserror 2.0.17",
  "tokio",
@@ -1294,8 +1311,11 @@ dependencies = [
 
 [[package]]
 name = "unity-native-plugin"
-version = "0.8.0"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2b87595f1063af99a3bd106e3ab6d99c38ccf68d9ead7ef61f7f2388d07a357e"
 dependencies = [
+ "ash",
  "objc2",
  "objc2-foundation",
  "objc2-metal",
@@ -1304,16 +1324,9 @@ dependencies = [
 
 [[package]]
 name = "unity-native-plugin-sys"
-version = "0.8.0"
-
-[[package]]
-name = "unity-native-plugin-vulkan"
-version = "0.8.0"
-dependencies = [
- "ash",
- "unity-native-plugin",
- "unity-native-plugin-sys",
-]
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "179c8a544cb30336ccb9e65fe1b88dc916efbf1c85698548ab5f4d61e4e5be2e"
 
 [[package]]
 name = "unty"

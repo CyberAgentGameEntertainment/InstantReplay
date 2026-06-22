@@ -47,12 +47,13 @@ namespace InstantReplay.UniversalRP
         }
 #endif
 
+#if !INSTANTREPLAY_URP_17_4_OR_NEWER
 #if INSTANTREPLAY_URP_17_0_OR_NEWER
         [Obsolete]
 #endif
         public override void Execute(ScriptableRenderContext context, ref RenderingData renderingData)
         {
-            var commandBuffer = CommandBufferPool.Get();
+            var commandBuffer = CommandBufferPool.Get("InstantReplay.UniversalRP.InstantReplayFrameRenderPass");
             var target = renderingData.cameraData.renderer.cameraColorTargetHandle;
             var flipped = renderingData.cameraData.IsHandleYFlipped(target);
             OnFrameProvided?.Invoke(renderingData.cameraData.camera,
@@ -60,5 +61,6 @@ namespace InstantReplay.UniversalRP
                     SystemInfo.graphicsUVStartsAtTop ^ flipped, commandBuffer));
             context.ExecuteCommandBuffer(commandBuffer);
         }
+#endif
     }
 }

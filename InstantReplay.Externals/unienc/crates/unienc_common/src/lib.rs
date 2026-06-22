@@ -8,12 +8,12 @@ use bincode::{Decode, Encode};
 
 pub mod buffer;
 pub mod error;
+mod runtime;
 #[cfg(feature = "unity")]
 pub mod unity;
-mod runtime;
 
-pub use error::{CategorizedError, CommonError, ErrorCategory, OptionExt, Result, ResultExt};
 pub use crate::runtime::*;
+pub use error::{CategorizedError, CommonError, ErrorCategory, OptionExt, Result, ResultExt};
 
 pub trait Encoder {
     type InputType: EncoderInput + 'static;
@@ -53,13 +53,13 @@ pub trait EncodingSystem {
     >;
     type AudioEncoderType: Encoder<InputType: EncoderInput<Data = AudioSample>>;
     type MuxerType: Muxer<
-        VideoInputType: MuxerInput<
-            Data = <<Self::VideoEncoderType as Encoder>::OutputType as EncoderOutput>::Data,
-        >,
-        AudioInputType: MuxerInput<
-            Data = <<Self::AudioEncoderType as Encoder>::OutputType as EncoderOutput>::Data,
-        >,
-    >;
+            VideoInputType: MuxerInput<
+                Data = <<Self::VideoEncoderType as Encoder>::OutputType as EncoderOutput>::Data,
+            >,
+            AudioInputType: MuxerInput<
+                Data = <<Self::AudioEncoderType as Encoder>::OutputType as EncoderOutput>::Data,
+            >,
+        >;
     type BlitSourceType: TryFromUnityNativeTexturePointer + Send;
     type RuntimeType: Runtime;
 
@@ -110,7 +110,7 @@ pub struct VideoSample<BlitSourceType> {
 
 pub enum VideoFrame<BlitSourceType> {
     Bgra32(VideoFrameBgra32),
-    BlitSource{
+    BlitSource {
         texture_token: usize,
         width: u32,
         height: u32,
@@ -197,11 +197,16 @@ pub enum UniencSampleKind {
 
 pub trait EncoderInput: Send + 'static {
     type Data: Send;
-    fn push(&mut self, data: Self::Data) -> impl Future<Output=Result<()>> + Send;
+    fn push(&mut self, data: Self::Data) -> impl Future<Output = Result<()>> + Send;
 }
 
 pub trait GraphicsEventIssuer: Send + 'static {
-    fn issue_graphics_event(&self, callback: Box<dyn FnOnce(*mut c_void) + Send + 'static>, event_id: i32, texture_token: usize);
+    fn issue_graphics_event(
+        &self,
+        callback: Box<dyn FnOnce(*mut c_void) + Send + 'static>,
+        event_id: i32,
+        texture_token: usize,
+    );
 }
 
 pub trait EncoderOutput: Send {

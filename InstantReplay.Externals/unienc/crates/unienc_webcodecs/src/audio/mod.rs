@@ -1,11 +1,12 @@
-use std::rc::Rc;
-use std::sync::Arc;
+use crate::js::AudioEncoderHandle;
 use bincode::{Decode, Encode};
-use futures::channel::mpsc;
 use futures::StreamExt;
-use unienc_common::{AudioSample, EncodedData, Encoder, EncoderInput, EncoderOutput, OptionExt, ResultExt, Runtime, UniencSampleKind, UnsupportedBlitData};
-use crate::js::{AudioEncoderHandle, VideoEncoderHandle};
-use crate::video::{VideoEncodedData, WebCodecsVideoEncoderInput};
+use futures::channel::mpsc;
+use std::sync::Arc;
+use unienc_common::{
+    AudioSample, EncodedData, Encoder, EncoderInput, EncoderOutput, ResultExt, Runtime,
+    UniencSampleKind,
+};
 
 pub struct WebCodecsAudioEncoder<R: Runtime> {
     input: WebCodecsAudioEncoderInput<R>,
@@ -29,7 +30,10 @@ pub struct AudioEncodedData {
 }
 
 impl<R: Runtime> WebCodecsAudioEncoder<R> {
-    pub fn new<A: unienc_common::AudioEncoderOptions>(options: &A, runtime: &R) -> unienc_common::Result<Self> {
+    pub fn new<A: unienc_common::AudioEncoderOptions>(
+        options: &A,
+        runtime: &R,
+    ) -> unienc_common::Result<Self> {
         let (tx, rx) = mpsc::channel(16);
         Ok(Self {
             input: WebCodecsAudioEncoderInput {
@@ -40,9 +44,7 @@ impl<R: Runtime> WebCodecsAudioEncoder<R> {
                 tx,
                 runtime: runtime.clone(),
             },
-            output: WebCodecsAudioEncoderOutput {
-                rx,
-            },
+            output: WebCodecsAudioEncoderOutput { rx },
         })
     }
 }
@@ -60,37 +62,42 @@ impl<R: Runtime + 'static> EncoderInput for WebCodecsAudioEncoderInput<R> {
     type Data = AudioSample;
 
     async fn push(&mut self, data: Self::Data) -> unienc_common::Result<()> {
-
         if self.encoder_handle.is_none() {
             let tx = self.tx.clone();
-            self.encoder_handle = Some(AudioEncoderHandle::new(
-                self.bitrate,
-                self.channels,
-                self.sample_rate,
-                move |data, timestamp| {
-                    let mut tx = tx.clone();
-                    let encoded_data = AudioEncodedData {
-                        data: data.to_vec(),
-                        timestamp,
-                    };
-                    if let Err(err) = tx.try_send(encoded_data) {
-                        println!(
-                            "WebCodecsAudioEncoder: Failed to send encoded data: {}",
-                            err
-                        );
-                    };
-                },
-            ).await.context("Failed to create WebCodecs EncoderHandle")?)
+            self.encoder_handle = Some(
+                AudioEncoderHandle::new(
+                    self.bitrate,
+                    self.channels,
+                    self.sample_rate,
+                    move |data, timestamp| {
+                        let mut tx = tx.clone();
+                        let encoded_data = AudioEncodedData {
+                            data: data.to_vec(),
+                            timestamp,
+                        };
+                        if let Err(err) = tx.try_send(encoded_data) {
+                            println!(
+                                "WebCodecsAudioEncoder: Failed to send encoded data: {}",
+                                err
+                            );
+                        };
+                    },
+                )
+                .await
+                .context("Failed to create WebCodecs EncoderHandle")?,
+            )
         }
 
         let encoder_handle = self.encoder_handle.as_ref().unwrap();
 
-        encoder_handle.push_audio_frame(
-            unsafe { data.data.align_to::<u8>() }.1,
-            self.channels,
-            self.sample_rate,
-            data.timestamp_in_samples as f64 / self.sample_rate as f64,
-        ).context("Failed to push audio frame to WebCodecs EncoderHandle")?;
+        encoder_handle
+            .push_audio_frame(
+                unsafe { data.data.align_to::<u8>() }.1,
+                self.channels,
+                self.sample_rate,
+                data.timestamp_in_samples as f64 / self.sample_rate as f64,
+            )
+            .context("Failed to push audio frame to WebCodecs EncoderHandle")?;
 
         Ok(())
     }

@@ -1,4 +1,4 @@
-use crate::emscripten::{run_script, run_script_int};
+use crate::emscripten::run_script;
 use futures::channel::oneshot;
 use futures::channel::oneshot::Canceled;
 use std::ffi::{CString, c_char};

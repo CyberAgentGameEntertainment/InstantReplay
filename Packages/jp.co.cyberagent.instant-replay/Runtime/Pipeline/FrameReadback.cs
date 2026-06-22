@@ -12,6 +12,12 @@ using UnityEngine;
 using UnityEngine.Experimental.Rendering;
 using UnityEngine.Rendering;
 
+#if UNITY_2023_2_OR_NEWER
+using GraphicsFormatUsage = UnityEngine.Experimental.Rendering.GraphicsFormatUsage;
+#else
+using GraphicsFormatUsage = UnityEngine.Experimental.Rendering.FormatUsage;
+#endif
+
 namespace InstantReplay
 {
     /// <summary>
@@ -32,7 +38,7 @@ namespace InstantReplay
                 throw new ArgumentNullException(nameof(texture));
 
             // Check if format is supported
-            if (!SystemInfo.IsFormatSupported(texture.graphicsFormat, FormatUsage.ReadPixels))
+            if (!SystemInfo.IsFormatSupported(texture.graphicsFormat, GraphicsFormatUsage.ReadPixels))
                 throw new ArgumentException(
                     $"GraphicsFormat {texture.graphicsFormat} not supported for readback");
 

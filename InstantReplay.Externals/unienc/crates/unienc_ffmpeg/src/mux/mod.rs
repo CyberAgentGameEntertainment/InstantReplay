@@ -37,34 +37,29 @@ impl FFmpegMuxer {
         // raw H.264 frame cannot have timestamp, so we need to assume CFR (encoder also supports CFR)
         let mut ffmpeg = ffmpeg::Builder::new()
             .use_stdin(true)
-            .input([
-                "-f",
-                "h264",
-                "-r",
-                &format!("{}", video_options.fps_hint()),
-            ])
+            .input(["-f", "h264", "-r", &format!("{}", video_options.fps_hint())])
             .input(["-f", "aac"])
             .build(
                 [
-                    "-pix_fmt",
-                    "yuv420p",
-                    "-c:v",
-                    "copy",
-                    "-c:a",
-                    "copy",
-                    "-f",
-                    "mp4",
+                    "-pix_fmt", "yuv420p", "-c:v", "copy", "-c:a", "copy", "-f", "mp4",
                 ],
                 ffmpeg::Destination::Path(output_path.as_ref().as_os_str().to_owned()),
             )?;
 
-        let mut inputs = ffmpeg.inputs.take().ok_or(FFmpegError::InputsNotAvailable)?;
+        let mut inputs = ffmpeg
+            .inputs
+            .take()
+            .ok_or(FFmpegError::InputsNotAvailable)?;
         let audio_input = inputs.remove(1);
         let video_input = inputs.remove(0);
 
         Ok(FFmpegMuxer {
-            video: FFmpegMuxerVideoInput { input: Some(video_input) },
-            audio: FFmpegMuxerAudioInput { input: Some(audio_input) },
+            video: FFmpegMuxerVideoInput {
+                input: Some(video_input),
+            },
+            audio: FFmpegMuxerAudioInput {
+                input: Some(audio_input),
+            },
             completion: FFmpegCompletionHandle { child: ffmpeg },
         })
     }
@@ -107,7 +102,12 @@ impl MuxerInput for FFmpegMuxerVideoInput {
 
     async fn finish(mut self) -> unienc_common::Result<()> {
         // take input to drop it to ensure stdin / pipe is closed
-        self.input.take().ok_or(FFmpegError::InputNotAvailable)?.shutdown().await.map_err(FFmpegError::from)?;
+        self.input
+            .take()
+            .ok_or(FFmpegError::InputNotAvailable)?
+            .shutdown()
+            .await
+            .map_err(FFmpegError::from)?;
         Ok(())
     }
 }
@@ -117,8 +117,14 @@ impl MuxerInput for FFmpegMuxerAudioInput {
 
     async fn push(&mut self, data: Self::Data) -> unienc_common::Result<()> {
         let input = self.input.as_mut().ok_or(FFmpegError::InputNotAvailable)?;
-        input.write_all(&data.header).await.map_err(FFmpegError::from)?;
-        input.write_all(&data.payload).await.map_err(FFmpegError::from)?;
+        input
+            .write_all(&data.header)
+            .await
+            .map_err(FFmpegError::from)?;
+        input
+            .write_all(&data.payload)
+            .await
+            .map_err(FFmpegError::from)?;
 
         input.flush().await.map_err(FFmpegError::from)?;
 
@@ -127,7 +133,12 @@ impl MuxerInput for FFmpegMuxerAudioInput {
 
     async fn finish(mut self) -> unienc_common::Result<()> {
         // take input to drop it to ensure stdin / pipe is closed
-        self.input.take().ok_or(FFmpegError::InputNotAvailable)?.shutdown().await.map_err(FFmpegError::from)?;
+        self.input
+            .take()
+            .ok_or(FFmpegError::InputNotAvailable)?
+            .shutdown()
+            .await
+            .map_err(FFmpegError::from)?;
         Ok(())
     }
 }

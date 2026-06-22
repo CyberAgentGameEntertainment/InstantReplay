@@ -13,6 +13,7 @@ namespace InstantReplay
         private readonly AudioEncoder _audioEncoder;
         private readonly IAsyncPipelineInput<EncodedFrame> _next;
         private readonly double _sampleRateInOptions;
+        private readonly SharedTaskRaceGuard _raceGuard;
         private readonly Task _transferTask;
 
         internal AudioEncoderInput(AudioEncoder audioEncoder, double sampleRateInOptions,
@@ -22,11 +23,12 @@ namespace InstantReplay
             _sampleRateInOptions = sampleRateInOptions;
             _next = next;
             _transferTask = TransferAsync(next);
+            _raceGuard = new SharedTaskRaceGuard(_transferTask);
         }
 
         public ValueTask PushAsync(PcmAudioFrame value)
         {
-            return ValueTaskUtils.WhenAny(PushCoreAsync(value), new ValueTask(_transferTask));
+            return _raceGuard.Race(PushCoreAsync(value).AsValueTask());
         }
 
         public ValueTask CompleteAsync(Exception exception = null)
@@ -41,7 +43,7 @@ namespace InstantReplay
             _next.Dispose();
         }
 
-        public async ValueTask PushCoreAsync(PcmAudioFrame value)
+        public async PooledValueTask PushCoreAsync(PcmAudioFrame value)
         {
             using var _ = value;
 

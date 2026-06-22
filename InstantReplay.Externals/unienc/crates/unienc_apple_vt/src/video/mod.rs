@@ -1,25 +1,27 @@
 mod serialization;
 use std::{ffi::c_void, ptr::NonNull};
 
-use crate::error::{AppleError, Result, OsStatusExt};
+use crate::allocator;
+use crate::error::{AppleError, OsStatusExt, Result};
 use objc2::rc::Retained;
 use objc2_core_foundation::{
-    kCFAllocatorDefault, kCFBooleanFalse, kCFBooleanTrue, CFBoolean, CFDictionary, CFNumber,
-    CFString, CFType,
+    CFBoolean, CFDictionary, CFNumber, CFString, CFType, kCFBooleanFalse, kCFBooleanTrue,
 };
 use objc2_core_media::{
-    kCMSampleAttachmentKey_NotSync, kCMTimeInvalid, kCMVideoCodecType_H264, CMSampleBuffer, CMTime,
+    CMSampleBuffer, CMTime, kCMSampleAttachmentKey_NotSync, kCMTimeInvalid, kCMVideoCodecType_H264,
 };
-use objc2_core_video::{kCVPixelFormatType_32BGRA, CVPixelBuffer, CVPixelBufferCreateWithBytes};
+use objc2_core_video::{CVPixelBuffer, CVPixelBufferCreateWithBytes, kCVPixelFormatType_32BGRA};
 use objc2_video_toolbox::{
+    VTCompressionSession, VTEncodeInfoFlags, VTSessionSetProperty,
     kVTCompressionPropertyKey_AllowFrameReordering, kVTCompressionPropertyKey_AverageBitRate,
-    kVTCompressionPropertyKey_RealTime, kVTInvalidSessionErr, VTCompressionSession,
-    VTEncodeInfoFlags, VTSessionSetProperty,
+    kVTCompressionPropertyKey_RealTime, kVTInvalidSessionErr,
 };
 use tokio::sync::mpsc;
-use unienc_common::{buffer::SharedBuffer, EncodedData, Encoder, EncoderInput, EncoderOutput, VideoSample};
+use unienc_common::{
+    EncodedData, Encoder, EncoderInput, EncoderOutput, VideoSample, buffer::SharedBuffer,
+};
 
-use crate::{common::UnsafeSendRetained, metal, MetalTexture};
+use crate::{MetalTexture, common::UnsafeSendRetained, metal};
 use unienc_common::TryFromUnityNativeTexturePointer;
 
 pub struct VideoToolboxEncoder {
@@ -119,9 +121,11 @@ unsafe extern "C-unwind" fn handle_video_encode_output(
 unsafe extern "C-unwind" fn release_pixel_buffer(
     release_ref_con: *mut c_void,
     _base_address: *const c_void,
-) { unsafe {
-    drop(Box::<SharedBuffer>::from_raw(release_ref_con as *mut _));
-}}
+) {
+    unsafe {
+        drop(Box::<SharedBuffer>::from_raw(release_ref_con as *mut _));
+    }
+}
 
 impl Encoder for VideoToolboxEncoder {
     type InputType = VideoToolboxEncoderInput;
@@ -147,7 +151,7 @@ impl EncoderInput for VideoToolboxEncoderInput {
                 let mut buffer: *mut CVPixelBuffer = std::ptr::null_mut();
                 unsafe {
                     CVPixelBufferCreateWithBytes(
-                        kCFAllocatorDefault,
+                        allocator::default(),
                         bgra32.width as usize,
                         bgra32.height as usize,
                         kCVPixelFormatType_32BGRA,
@@ -182,22 +186,36 @@ impl EncoderInput for VideoToolboxEncoderInput {
                 let height = self.height;
 
                 let (tx, rx) = tokio::sync::oneshot::channel();
-                event_issuer
-                    .issue_graphics_event(Box::new(move |native_texture_ptr| {
+                event_issuer.issue_graphics_event(
+                    Box::new(move |native_texture_ptr| {
                         let r = MetalTexture::try_from_unity_native_texture_ptr(native_texture_ptr)
                             .map_err(|_| AppleError::MetalTextureRetainFailed)
-                            .and_then(|texture| metal::custom_blit(&texture.texture, width, height, flip_vertically, is_gamma_workflow));
-                        tx.send(r).map_err(|_e| AppleError::BlitFutureSendFailed).unwrap();
-                    }), *crate::metal::EVENT_ID
+                            .and_then(|texture| {
+                                metal::custom_blit(
+                                    &texture.texture,
+                                    width,
+                                    height,
+                                    flip_vertically,
+                                    is_gamma_workflow,
+                                )
+                            });
+                        tx.send(r)
+                            .map_err(|_e| AppleError::BlitFutureSendFailed)
+                            .unwrap();
+                    }),
+                    *crate::metal::EVENT_ID
                         .get()
                         .ok_or(AppleError::EventIdNotReserved)?,
-                    texture_token);
+                    texture_token,
+                );
 
-                let texture = rx.await.map_err(AppleError::from)? // failed to receive
-                    ? // failed to issue blit
+                let texture = rx
+                    .await
+                    .map_err(AppleError::from)?? // failed to receive
+                    // failed to issue blit
                     .await?; // blit failed
                 texture.pixel_buffer()
-            },
+            }
         };
 
         let mut retry = 0;
@@ -265,7 +283,7 @@ impl CompressionSession {
 
         unsafe {
             VTCompressionSession::create(
-                kCFAllocatorDefault,
+                allocator::default(),
                 width as i32,
                 height as i32,
                 kCMVideoCodecType_H264,
@@ -274,8 +292,7 @@ impl CompressionSession {
                 None,
                 Some(handle_video_encode_output),
                 tx as *mut c_void,
-                NonNull::new(&mut session)
-                    .ok_or(AppleError::NonNullCreationFailed)?,
+                NonNull::new(&mut session).ok_or(AppleError::NonNullCreationFailed)?,
             )
             .to_result()?;
         }

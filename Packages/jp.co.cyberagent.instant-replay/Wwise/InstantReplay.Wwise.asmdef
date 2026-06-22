@@ -1,0 +1,20 @@
+{
+    "name": "InstantReplay.Wwise",
+    "rootNamespace": "",
+    "references": [
+        "InstantReplay",
+        "AK.Wwise.Unity.API"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [
+        "INSTANTREPLAY_WWISE",
+        "!EXCLUDE_INSTANTREPLAY"
+    ],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

@@ -3,19 +3,18 @@ use std::{
     ptr::NonNull,
 };
 
+use crate::allocator;
 use bincode::{Decode, Encode};
 use objc2::rc::Retained;
-use objc2_core_foundation::{
-    kCFAllocatorDefault, kCFBooleanTrue, CFMutableDictionary, CFString, CFType,
-};
+use objc2_core_foundation::{CFMutableDictionary, CFString, CFType, kCFBooleanTrue};
 use objc2_core_media::{
-    kCMBlockBufferAssureMemoryNowFlag, kCMSampleAttachmentKey_NotSync, kCMVideoCodecType_H264,
     CMBlockBuffer, CMFormatDescription, CMSampleBuffer, CMSampleTimingInfo, CMTime, CMTimeFlags,
     CMVideoFormatDescription, CMVideoFormatDescriptionCreateFromH264ParameterSets,
-    CMVideoFormatDescriptionGetH264ParameterSetAtIndex,
+    CMVideoFormatDescriptionGetH264ParameterSetAtIndex, kCMBlockBufferAssureMemoryNowFlag,
+    kCMSampleAttachmentKey_NotSync, kCMVideoCodecType_H264,
 };
 
-use crate::{video::VideoEncodedData, error::OsStatusExt};
+use crate::{error::OsStatusExt, video::VideoEncodedData};
 
 #[derive(Encode, Decode, Clone, Copy, Debug, PartialEq)]
 struct CMTimeForSerialization {
@@ -239,10 +238,10 @@ impl Decode<()> for VideoEncodedData {
                         std::ptr::null_mut();
 
                     CMBlockBuffer::create_with_memory_block(
-                        kCFAllocatorDefault,
+                        allocator::default(),
                         std::ptr::null_mut(),
                         data_buffer.len(),
-                        kCFAllocatorDefault,
+                        allocator::default(),
                         std::ptr::null(),
                         0,
                         data_buffer.len(),
@@ -312,7 +311,7 @@ impl Decode<()> for VideoEncodedData {
 
             unsafe {
                 CMVideoFormatDescriptionCreateFromH264ParameterSets(
-                    kCFAllocatorDefault,
+                    allocator::default(),
                     parameter_set_pointers.len(),
                     NonNull::new(&mut parameter_set_pointers.as_mut_slice()[0]).unwrap(),
                     NonNull::new(&mut parameter_set_sizes.as_mut_slice()[0]).unwrap(),
@@ -343,7 +342,7 @@ impl Decode<()> for VideoEncodedData {
             };
 
             CMSampleBuffer::create_ready(
-                kCFAllocatorDefault,
+                allocator::default(),
                 data_buffer_ptr,
                 Some(&format_description),
                 1,

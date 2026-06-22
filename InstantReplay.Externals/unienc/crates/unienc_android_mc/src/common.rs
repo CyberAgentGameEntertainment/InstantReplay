@@ -1,12 +1,12 @@
 use bincode::{Decode, Encode};
 use jni::{
+    JNIEnv,
     objects::{JByteArray, JObject, JString, JValue},
     sys::{jboolean, jint, jlong},
-    JNIEnv,
 };
-use std::{collections::HashMap, fmt::Display, sync::Arc, time::Duration};
 use std::pin::Pin;
 use std::task::{Context, Poll};
+use std::{collections::HashMap, fmt::Display, sync::Arc, time::Duration};
 use unienc_common::{EncodedData, UniencSampleKind, VideoFrameBgra32};
 
 use crate::error::{AndroidError, Result};
@@ -748,7 +748,6 @@ pub async fn yield_now() {
         type Output = ();
 
         fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<()> {
-
             if self.yielded {
                 return Poll::Ready(());
             }
@@ -1213,9 +1212,7 @@ pub fn get_android_api_level() -> Result<i32> {
 
     let env = &mut attach_current_thread()?;
     let version_class = env.find_class("android/os/Build$VERSION")?;
-    let sdk_int = env
-        .get_static_field(&version_class, "SDK_INT", "I")?
-        .i()?;
+    let sdk_int = env.get_static_field(&version_class, "SDK_INT", "I")?.i()?;
 
     // Cache the result (ignore if already set by another thread)
     let _ = API_LEVEL_CACHE.set(sdk_int);

@@ -4,7 +4,8 @@ use std::fs;
 use std::sync::Mutex;
 use std::{path::Path, ptr::NonNull};
 
-use crate::error::{AppleError, Result, OsStatusExt};
+use crate::allocator;
+use crate::error::{AppleError, OsStatusExt, Result};
 use block2::RcBlock;
 use dispatch2::DispatchQueue;
 use objc2::rc::Retained;
@@ -13,13 +14,12 @@ use objc2_av_foundation::{
     AVMediaTypeVideo,
 };
 use objc2_core_audio_types::{
-    kAudioFormatMPEG4AAC, AudioStreamBasicDescription, AudioStreamPacketDescription, MPEG4ObjectID,
+    AudioStreamBasicDescription, AudioStreamPacketDescription, MPEG4ObjectID, kAudioFormatMPEG4AAC,
 };
-use objc2_core_foundation::kCFAllocatorDefault;
 use objc2_core_media::{
-    kCMBlockBufferAssureMemoryNowFlag, kCMTimeZero, kCMVideoCodecType_H264,
     CMAudioFormatDescriptionCreate, CMAudioSampleBufferCreateReadyWithPacketDescriptions,
     CMBlockBuffer, CMFormatDescription, CMSampleBuffer, CMTime, CMVideoFormatDescriptionCreate,
+    kCMBlockBufferAssureMemoryNowFlag, kCMTimeZero, kCMVideoCodecType_H264,
 };
 use objc2_foundation::{NSString, NSURL};
 use tokio::sync::{mpsc, oneshot};
@@ -50,7 +50,10 @@ impl MuxerInput for AVFMuxerVideoInput {
     type Data = VideoEncodedData;
 
     async fn push(&mut self, data: Self::Data) -> unienc_common::Result<()> {
-        self.tx.send(Mutex::new(data.sample_buffer)).await.map_err(AppleError::from)?;
+        self.tx
+            .send(Mutex::new(data.sample_buffer))
+            .await
+            .map_err(AppleError::from)?;
 
         Ok(())
     }
@@ -76,9 +79,11 @@ impl MuxerInput for AVFMuxerAudioInput {
                 fd
             }
         };
-        let sample_buffer =
-            create_audio_sample_buffer(&data, &format_desc)?;
-        self.tx.send(Mutex::new(sample_buffer.into())).await.map_err(AppleError::from)?;
+        let sample_buffer = create_audio_sample_buffer(&data, &format_desc)?;
+        self.tx
+            .send(Mutex::new(sample_buffer.into()))
+            .await
+            .map_err(AppleError::from)?;
 
         Ok(())
     }
@@ -162,7 +167,7 @@ impl AVFMuxer {
         let source_format_hint = unsafe {
             let mut format_desc: *const CMFormatDescription = std::ptr::null();
             CMVideoFormatDescriptionCreate(
-                kCFAllocatorDefault,
+                allocator::default(),
                 kCMVideoCodecType_H264,
                 video_options.width() as i32,
                 video_options.height() as i32,
@@ -194,7 +199,7 @@ impl AVFMuxer {
         let source_format_hint = unsafe {
             let mut format_desc: *const CMFormatDescription = std::ptr::null();
             CMAudioFormatDescriptionCreate(
-                kCFAllocatorDefault,
+                allocator::default(),
                 NonNull::new(&mut asbd).unwrap(),
                 0,
                 std::ptr::null(),
@@ -221,9 +226,10 @@ impl AVFMuxer {
 
         if !unsafe { writer.startWriting() } {
             if unsafe { writer.status() } == AVAssetWriterStatus::Failed
-                && let Some(err) = unsafe { writer.error() } {
-                    return Err(AppleError::AssetWriterStartFailed(err.to_string()));
-                }
+                && let Some(err) = unsafe { writer.error() }
+            {
+                return Err(AppleError::AssetWriterStartFailed(err.to_string()));
+            }
             return Err(AppleError::AssetWriterStartFailedUnknown);
         }
 
@@ -318,7 +324,7 @@ fn create_audio_format_desc(
     unsafe {
         let mut format_desc: *const CMFormatDescription = std::ptr::null();
         objc2_core_media::CMAudioFormatDescriptionCreate(
-            kCFAllocatorDefault,
+            allocator::default(),
             NonNull::new(asbd).unwrap(),
             0,
             std::ptr::null(),
@@ -340,10 +346,10 @@ fn create_audio_sample_buffer(
         let mut block_buffer: *mut objc2_core_media::CMBlockBuffer = std::ptr::null_mut();
 
         CMBlockBuffer::create_with_memory_block(
-            kCFAllocatorDefault,
+            allocator::default(),
             std::ptr::null_mut(),
             audio.data.len(),
-            kCFAllocatorDefault,
+            allocator::default(),
             std::ptr::null(),
             0,
             audio.data.len(),
@@ -390,7 +396,7 @@ fn create_audio_sample_buffer(
 
         let mut sample_buffer: *mut CMSampleBuffer = std::ptr::null_mut();
         CMAudioSampleBufferCreateReadyWithPacketDescriptions(
-            kCFAllocatorDefault,
+            allocator::default(),
             &block_buffer,
             format_desc,
             1_isize,

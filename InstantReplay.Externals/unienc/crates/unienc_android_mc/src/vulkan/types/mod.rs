@@ -1,5 +1,5 @@
-use std::ops::Deref;
 use ash::vk;
+use std::ops::Deref;
 use std::sync::Arc;
 
 pub use handles::*;
@@ -64,7 +64,8 @@ impl VulkanCommandBuffer {
 impl Drop for VulkanCommandBuffer {
     fn drop(&mut self) {
         unsafe {
-            self.device.free_command_buffers(**self.command_pool, &[self.command_buffer]);
+            self.device
+                .free_command_buffers(**self.command_pool, &[self.command_buffer]);
         }
     }
 }
@@ -94,10 +95,9 @@ impl Deref for VulkanDescriptorSet {
 impl Drop for VulkanDescriptorSet {
     fn drop(&mut self) {
         unsafe {
-            self.device.free_descriptor_sets(
-                **self.pool,
-                &[self.descriptor_set],
-            ).unwrap();
+            self.device
+                .free_descriptor_sets(**self.pool, &[self.descriptor_set])
+                .unwrap();
         }
     }
 }
