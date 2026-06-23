@@ -196,3 +196,24 @@ impl OsStatusExt for i32 {
         }
     }
 }
+
+pub(crate) trait NSErrorDisplay {
+    fn to_friendly_string(&self) -> String;
+}
+
+impl NSErrorDisplay for Retained<NSError> {
+    fn to_friendly_string(&self) -> String {
+        format!(
+            "domain: {}, code: {}\ndescription: {}\nreason: {}\nrecovery suggestion: {}",
+            self.domain(),
+            self.code(),
+            self.localizedDescription(),
+            self.localizedFailureReason()
+                .map(|s| s.to_string())
+                .unwrap_or_else(|| "unknown failure reason".to_string()),
+            self.localizedRecoverySuggestion()
+                .map(|s| s.to_string())
+                .unwrap_or_else(|| "unknown failure reason".to_string()),
+        )
+    }
+}

@@ -270,11 +270,14 @@ namespace InstantReplay
                     }
                 }
 
+                // Errors in the input to the muxer do not propagate as exceptions in PushVideoDataAsync;
+                // instead, a channel closed error occurs when attempting to input the next frame.
+                // Since the actual muxer error is returned in FinishVideoAsync,
+                // we should call FinishVideoAsync even if PushVideoDataAsync fails.
+                await muxer.FinishVideoAsync().ConfigureAwait(false);
+
                 if (exception != null)
                     throw exception;
-
-                await muxer.FinishVideoAsync().ConfigureAwait(false);
-                ILogger.LogCore("Finished muxing video segment.");
             }
 
             async ValueTask MuxAudioAsync()
@@ -297,10 +300,11 @@ namespace InstantReplay
                     }
                 }
 
+                // same as video
+                await muxer.FinishAudioAsync().ConfigureAwait(false);
+
                 if (exception != null)
                     throw exception;
-
-                await muxer.FinishAudioAsync().ConfigureAwait(false);
             }
 
             var video = MuxVideoAsync();

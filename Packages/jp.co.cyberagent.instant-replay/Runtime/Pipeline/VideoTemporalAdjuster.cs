@@ -3,6 +3,7 @@
 // --------------------------------------------------------------
 
 using System;
+using UnityEngine;
 
 namespace InstantReplay
 {
@@ -14,7 +15,8 @@ namespace InstantReplay
         private readonly IRecordingTimeProvider _recordingTimeProvider;
         private bool _disposed;
         private double _frameTimer;
-        private double _prevFrameTime;
+        private double? _prevFrameTime;
+        private double? _prevOutputTime;
         private double? _videoTimeDifference;
 
         public VideoTemporalAdjuster(IRecordingTimeProvider recordingTimeProvider, double? fixedFrameInterval,
@@ -46,18 +48,22 @@ namespace InstantReplay
 
             var time = input.Timestamp;
 
-            var deltaTime = time - _prevFrameTime;
+            if (_prevFrameTime is { } prevFrameTime)
+            {
+                var deltaTime = time - prevFrameTime;
 
-            if (deltaTime <= 0) return false;
+                if (deltaTime <= 0) return false;
 
-            _frameTimer += deltaTime;
-            _prevFrameTime = time;
+                _frameTimer += deltaTime;
+            }
 
             if (_fixedFrameInterval is { } fixedFrameInterval)
             {
-                if (_frameTimer < _fixedFrameInterval) return false;
+                if (_prevFrameTime.HasValue && _frameTimer < _fixedFrameInterval) return false;
                 _frameTimer %= fixedFrameInterval;
             }
+
+            _prevFrameTime = time;
 
             // adjust timestamp
             if (!_videoTimeDifference.HasValue)
@@ -83,6 +89,19 @@ namespace InstantReplay
             }
 
             time -= _recordingTimeProvider.TotalPausedDuration;
+
+            // Ensure the output timestamp is strictly monotonically increasing.
+            // The timestamp rebase above (time = realTime) is based on a different clock than the input
+            // timestamp, so under framerate jitter it can produce a value that is not greater than the
+            // previously emitted one. A non-monotonic PTS makes the downstream muxer
+            // reject the sample buffer, so drop such frames here.
+            if (_prevOutputTime is { } prevOutputTime && time <= prevOutputTime)
+            {
+                output = default;
+                return false;
+            }
+
+            _prevOutputTime = time;
             output = input;
             output.Timestamp = time;
             return true;

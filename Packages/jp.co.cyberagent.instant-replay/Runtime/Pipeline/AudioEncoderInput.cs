@@ -43,7 +43,7 @@ namespace InstantReplay
             _next.Dispose();
         }
 
-        public async PooledValueTask PushCoreAsync(PcmAudioFrame value)
+        private async PooledValueTask PushCoreAsync(PcmAudioFrame value)
         {
             using var _ = value;
 

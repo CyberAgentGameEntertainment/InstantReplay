@@ -38,11 +38,13 @@ namespace InstantReplay.Wwise
             PlayerLoopEntryPoint.OnAfterUpdate += _updateDelegate = () =>
             {
                 var sampleCount = AkUnitySoundEngineAlias.UpdateCaptureSampleCount(_outputDeviceId);
+                if (sampleCount <= 0) return;
 
                 var array = ArrayPool<float>.Shared.Rent(checked((int)sampleCount));
                 try
                 {
                     var count = AkUnitySoundEngineAlias.GetCaptureSamples(_outputDeviceId, array, (uint)array.Length);
+                    if (count <= 0) return;
 
                     var time = (double)_captureSamples / SampleRate;
                     _captureSamples += count / Channels;
