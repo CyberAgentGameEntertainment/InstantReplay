@@ -88,15 +88,10 @@ impl EncoderInput for FFmpegAudioEncoderInput {
     type Data = AudioSample;
 
     async fn push(&mut self, data: Self::Data) -> unienc_common::Result<()> {
-        let data = unsafe {
-            std::slice::from_raw_parts::<u8>(
-                data.data.as_ptr() as *const u8,
-                data.data.len() * std::mem::size_of::<i16>(),
-            )
-        };
+        let data = data.data_as_s16le_bytes();
 
         self.input
-            .write_all(data)
+            .write_all(data.as_ref())
             .await
             .map_err(FFmpegError::from)?;
         self.input.flush().await.map_err(FFmpegError::from)?;
