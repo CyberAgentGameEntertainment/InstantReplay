@@ -65,6 +65,9 @@ pub enum AppleError {
     #[error("Failed to start writing")]
     AssetWriterStartFailedUnknown,
 
+    #[error("Failed to append sample buffer ({0}): {1}")]
+    AssetWriterAppendFailed(String, String),
+
     // CVPixelBuffer/CVMetalTexture related errors
     #[error("CVMetalTexture is null")]
     MetalTextureNull,
@@ -137,6 +140,7 @@ impl CategorizedError for AppleError {
             // Muxing errors
             AppleError::AssetWriterStartFailed(_) => ErrorCategory::Muxing,
             AppleError::AssetWriterStartFailedUnknown => ErrorCategory::Muxing,
+            AppleError::AssetWriterAppendFailed(_, _) => ErrorCategory::Muxing,
 
             // Wrapped common errors - delegate to inner
             AppleError::Common(e) => e.category(),
@@ -190,5 +194,26 @@ impl OsStatusExt for i32 {
         } else {
             Err(AppleError::OsStatus(*self))
         }
+    }
+}
+
+pub(crate) trait NSErrorDisplay {
+    fn to_friendly_string(&self) -> String;
+}
+
+impl NSErrorDisplay for Retained<NSError> {
+    fn to_friendly_string(&self) -> String {
+        format!(
+            "domain: {}, code: {}\ndescription: {}\nreason: {}\nrecovery suggestion: {}",
+            self.domain(),
+            self.code(),
+            self.localizedDescription(),
+            self.localizedFailureReason()
+                .map(|s| s.to_string())
+                .unwrap_or_else(|| "unknown failure reason".to_string()),
+            self.localizedRecoverySuggestion()
+                .map(|s| s.to_string())
+                .unwrap_or_else(|| "unknown failure reason".to_string()),
+        )
     }
 }

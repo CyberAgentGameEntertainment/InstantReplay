@@ -5,7 +5,7 @@ use std::sync::Mutex;
 use std::{path::Path, ptr::NonNull};
 
 use crate::allocator;
-use crate::error::{AppleError, OsStatusExt, Result};
+use crate::error::{AppleError, NSErrorDisplay, OsStatusExt, Result};
 use block2::RcBlock;
 use dispatch2::DispatchQueue;
 use objc2::rc::Retained;
@@ -114,8 +114,9 @@ impl CompletionHandle for AVFMuxerCompletionHandle {
             writer.finishWritingWithCompletionHandler(&RcBlock::new(move || {
                 if let Some(tx) = tx.borrow_mut().take() {
                     if let Some(err) = writer1.error() {
-                        println!("Failed to finish writing: {}", err);
-                        tx.send(Err(CommonError::Other(err.to_string()))).unwrap();
+                        println!("Failed to finish writing: {}", err.to_friendly_string());
+                        tx.send(Err(CommonError::Other(err.to_friendly_string())))
+                            .unwrap();
                     } else {
                         tx.send(Ok(())).unwrap();
                     }
@@ -257,14 +258,29 @@ impl AVFMuxer {
                 while unsafe { input_clone.isReadyForMoreMediaData() } {
                     match rx.borrow_mut().try_recv() {
                         Ok(sample_buffer) => {
-                            if !unsafe {
-                                input_clone.appendSampleBuffer(&sample_buffer.lock().unwrap())
-                            } {
-                                // TODO: handle error
-                                println!(
-                                    "failed to append sample buffer: {label_clone}, {}",
-                                    unsafe { writer.error().unwrap() }
-                                );
+                            let sample_buffer = sample_buffer.lock().unwrap();
+                            if !unsafe { input_clone.appendSampleBuffer(&sample_buffer) } {
+                                let err_msg = unsafe { writer.error() }
+                                    .map(|e| e.to_friendly_string())
+                                    .unwrap_or_else(|| "unknown error".to_string());
+                                println!("{label_clone}: appendSampleBuffer failed: {err_msg}");
+                                if let Some(finish_tx) = finish_tx.borrow_mut().take() {
+                                    if finish_tx
+                                        .send(Err(AppleError::AssetWriterAppendFailed(
+                                            label_clone.clone(),
+                                            err_msg,
+                                        )))
+                                        .is_err()
+                                    {
+                                        println!(
+                                            "{label_clone}: failed to send error to finish_tx: channel closed"
+                                        );
+                                    }
+                                } else {
+                                    println!(
+                                        "{label_clone}: failed to send error to finish_tx: already taken"
+                                    );
+                                }
                                 return;
                             }
                         }
@@ -275,7 +291,7 @@ impl AVFMuxer {
                             if let Some(finish_tx) = finish_tx.borrow_mut().take() {
                                 input_clone.markAsFinished();
                                 finish_tx.send(Ok(())).unwrap_or_else(|e| {
-                                    println!("failed to send finish signal: {e:?}");
+                                    println!("{label_clone}: failed to send finish signal: {e:?}");
                                 });
                             }
                             return;

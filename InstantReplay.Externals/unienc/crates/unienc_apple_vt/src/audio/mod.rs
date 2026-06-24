@@ -29,6 +29,11 @@ pub struct AudioToolboxEncoderInput {
     max_output_packet_size: u32,
     sample_rate: u32,
     last_data: Option<AudioSample>,
+    /// Running presentation position (in samples) of the next output packet to emit. Anchored to the
+    /// first input buffer's timestamp and advanced by `frames_per_packet` for each emitted packet.
+    output_position_in_samples: Option<u64>,
+    /// Number of samples represented by a single output (AAC) packet. For AAC-LC this is 1024.
+    frames_per_packet: u64,
 }
 
 unsafe impl Send for AudioToolboxEncoderInput {}
@@ -82,15 +87,28 @@ impl EncoderInput for AudioToolboxEncoderInput {
             let packet_descs = &packet_descs[..num_output_packets as usize];
 
             for packet_desc in packet_descs {
+                // AudioToolbox can emit multiple output packets from a single input buffer (e.g. when a
+                // large batched buffer is pushed while the main thread is stalled by framerate jitter).
+                // Assigning every packet the input buffer's timestamp would produce duplicate / overlapping
+                // PTS that the muxer (AVAssetWriter) rejects. The encoder consumes a continuous PCM stream,
+                // so assign a contiguous per-packet timeline: anchor to the first input timestamp, then
+                // advance by exactly one packet for each emitted packet.
+                let timestamp_in_samples = *self
+                    .output_position_in_samples
+                    .get_or_insert(data.timestamp_in_samples);
+
                 let packet = AudioPacket {
                     data: output_buffer_data[packet_desc.mStartOffset as usize
                         ..packet_desc.mStartOffset as usize + packet_desc.mDataByteSize as usize]
                         .to_vec(),
-                    timestamp_in_samples: data.timestamp_in_samples,
+                    timestamp_in_samples,
                     sample_rate: self.sample_rate,
                     magic_cookie: magic_cookie.clone(),
                 };
                 self.tx.send(packet).await.map_err(AppleError::from)?;
+
+                self.output_position_in_samples =
+                    Some(timestamp_in_samples + self.frames_per_packet);
             }
 
             sample.is_some()
@@ -147,6 +165,8 @@ impl AudioToolboxEncoder {
                 max_output_packet_size,
                 sample_rate: options.sample_rate(),
                 last_data: None,
+                output_position_in_samples: None,
+                frames_per_packet: to.mFramesPerPacket as u64,
             },
             output: AudioToolboxEncoderOutput { rx },
         })

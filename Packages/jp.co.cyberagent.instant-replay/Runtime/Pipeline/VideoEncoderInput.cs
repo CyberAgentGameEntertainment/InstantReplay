@@ -45,7 +45,7 @@ namespace InstantReplay
             _next?.Dispose();
         }
 
-        public async PooledValueTask PushCoreAsync(LazyVideoFrameData value)
+        private async PooledValueTask PushCoreAsync(LazyVideoFrameData value)
         {
             switch (value.Kind)
             {

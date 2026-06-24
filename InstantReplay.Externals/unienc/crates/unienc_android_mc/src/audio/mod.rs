@@ -18,7 +18,13 @@ pub struct MediaCodecAudioEncoder {
 pub struct MediaCodecAudioEncoderInput {
     codec: MediaCodec,
     sample_rate: u32,
+    channels: u32,
     last_timestamp: i64,
+    /// Running presentation position (in samples) of the next input chunk. Anchored to the first input
+    /// buffer's timestamp and advanced by the number of frames actually queued, so that a single large
+    /// (batched) input buffer split across multiple MediaCodec input buffers yields strictly increasing,
+    /// contiguous timestamps instead of repeating the same input timestamp.
+    position_in_samples: Option<u64>,
 }
 
 unsafe impl Send for MediaCodecAudioEncoderInput {}
@@ -61,7 +67,9 @@ impl MediaCodecAudioEncoder {
             input: MediaCodecAudioEncoderInput {
                 codec: codec_input,
                 sample_rate: options.sample_rate(),
+                channels: options.channels(),
                 last_timestamp: 0,
+                position_in_samples: None,
             },
             output: MediaCodecAudioEncoderOutput {
                 codec: codec_output,
@@ -129,15 +137,28 @@ async fn push_impl(this: &mut MediaCodecAudioEncoderInput, data: AudioSample) ->
                 crate::common::write_to_buffer(env, &input_buffer, &byte_data[..bytes_to_write])?;
                 byte_data = &byte_data[bytes_to_write..];
 
+                // A single push can be split across multiple MediaCodec input buffers (e.g. when a large
+                // batched buffer is pushed while the main thread is stalled by framerate jitter). Assigning
+                // every chunk the same input timestamp would make MediaCodec emit output packets with
+                // duplicate / non-monotonic PTS that the muxer rejects. Instead, derive a contiguous
+                // timeline: anchor to the first input timestamp and advance by the number of frames queued.
+                let position_in_samples = *this
+                    .position_in_samples
+                    .get_or_insert(data.timestamp_in_samples);
+
                 // Calculate timestamp in microseconds
-                let timestamp_us = (data.timestamp_in_samples as f64 / this.sample_rate as f64
-                    * 1_000_000.0) as i64;
+                let timestamp_us =
+                    (position_in_samples as f64 / this.sample_rate as f64 * 1_000_000.0) as i64;
 
                 this.last_timestamp = timestamp_us;
 
                 // Queue input buffer
                 this.codec
                     .queue_input_buffer(buffer_index, 0, bytes_to_write, timestamp_us, 0)?;
+
+                // Advance by the number of whole frames written (2 bytes per i16 sample, `channels` per frame).
+                let frames_written = (bytes_to_write / (2 * this.channels as usize)) as u64;
+                this.position_in_samples = Some(position_in_samples + frames_written);
             }
         } else if buffer_index == media_codec_errors::INFO_TRY_AGAIN_LATER {
             std::thread::sleep(Duration::from_millis(10));
