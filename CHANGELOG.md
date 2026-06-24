@@ -1,3 +1,11 @@
+## [1.6.3] - 2026/06/24
+
+### Fixed
+
+- Fixed recording failures on Windows and Apple platforms where errors occurring during multiplexing were silently suppressed instead of being reported. Such errors are now properly surfaced.
+- Fixed an issue where the lag compensation feature could cause frame timestamps to move backward during significant frame rate fluctuations, resulting in failed video output.
+- Fixed an issue on Apple and Android devices where consecutive audio samples could be assigned the same timestamp, resulting in failed video output.
+
 ## [1.6.2] - 2026/06/19
 
 ### Fixed
