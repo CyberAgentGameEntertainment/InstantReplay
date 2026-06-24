@@ -107,7 +107,8 @@ impl EncoderInput for AudioToolboxEncoderInput {
                 };
                 self.tx.send(packet).await.map_err(AppleError::from)?;
 
-                self.output_position_in_samples = Some(timestamp_in_samples + self.frames_per_packet);
+                self.output_position_in_samples =
+                    Some(timestamp_in_samples + self.frames_per_packet);
             }
 
             sample.is_some()
