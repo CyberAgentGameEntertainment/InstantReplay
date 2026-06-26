@@ -89,12 +89,14 @@ namespace InstantReplay
 
             time -= _recordingTimeProvider.TotalPausedDuration;
 
-            // Ensure the output timestamp is strictly monotonically increasing.
-            // The timestamp rebase above (time = realTime) is based on a different clock than the input
-            // timestamp, so under framerate jitter it can produce a value that is not greater than the
-            // previously emitted one. A non-monotonic PTS makes the downstream muxer
-            // reject the sample buffer, so drop such frames here.
-            if (_prevOutputTime is { } prevOutputTime && time <= prevOutputTime)
+            // Ensure the output timestamp is strictly monotonically increasing AND spaced by a minimum
+            // interval. The timestamp rebase above (time = realTime) is based on a different clock than the
+            // input timestamp, so under framerate jitter it can place a frame at (or just after) the
+            // previously emitted one. Frames spaced sub-millisecond apart make the downstream muxer
+            // (AVAssetWriter) fail asynchronously, so drop frames that do not advance by at least
+            // minOutputInterval.
+            var minOutputInterval = _fixedFrameInterval is { } ffi ? ffi * 0.5 : 0.0;
+            if (_prevOutputTime is { } prevOutputTime && time <= prevOutputTime + minOutputInterval)
             {
                 output = default;
                 return false;

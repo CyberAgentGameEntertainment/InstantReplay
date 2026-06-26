@@ -32,6 +32,9 @@ pub struct AudioToolboxEncoderInput {
     /// Running presentation position (in samples) of the next output packet to emit. Anchored to the
     /// first input buffer's timestamp and advanced by `frames_per_packet` for each emitted packet.
     output_position_in_samples: Option<u64>,
+    /// Expected input timestamp (in samples) of the next push, i.e. the previous push's timestamp plus
+    /// the number of frames it delivered. Used to detect discontinuities in the input timeline.
+    next_input_position: Option<u64>,
     /// Number of samples represented by a single output (AAC) packet. For AAC-LC this is 1024.
     frames_per_packet: u64,
 }
@@ -64,6 +67,34 @@ impl EncoderInput for AudioToolboxEncoderInput {
     type Data = AudioSample;
 
     async fn push(&mut self, data: Self::Data) -> unienc_common::Result<()> {
+        // Keep the encoded audio contiguous in sample-count terms so the muxer (which derives audio timing
+        // from the number of encoded samples, not from explicit PTS gaps) keeps audio aligned with video.
+        // When the input timeline jumps forward (e.g. dropped or suspended audio that advances
+        // `timestamp_in_samples` by more than the number of samples actually delivered), fill the gap with
+        // leading silence rather than relying on a PTS jump the muxer may collapse. Backward jumps are
+        // ignored by `forward_audio_discontinuity`, so the timeline never regresses.
+        let channels = (self.converter.from.mChannelsPerFrame as u64).max(1);
+        let frames_in_push = data.data.len() as u64 / channels;
+        self.output_position_in_samples
+            .get_or_insert(data.timestamp_in_samples);
+        let gap = unienc_common::forward_audio_discontinuity(
+            self.next_input_position,
+            data.timestamp_in_samples,
+        );
+        self.next_input_position = Some(data.timestamp_in_samples + frames_in_push);
+
+        let data = if gap > 0 {
+            let mut padded = Vec::with_capacity(((gap + frames_in_push) * channels) as usize);
+            padded.resize((gap * channels) as usize, 0);
+            padded.extend_from_slice(&data.data);
+            AudioSample {
+                data: padded,
+                timestamp_in_samples: data.timestamp_in_samples,
+            }
+        } else {
+            data
+        };
+
         let mut output_buffer_data = vec![0; self.max_output_packet_size as usize];
 
         let max_output_packets = 1;
@@ -91,11 +122,13 @@ impl EncoderInput for AudioToolboxEncoderInput {
                 // large batched buffer is pushed while the main thread is stalled by framerate jitter).
                 // Assigning every packet the input buffer's timestamp would produce duplicate / overlapping
                 // PTS that the muxer (AVAssetWriter) rejects. The encoder consumes a continuous PCM stream,
-                // so assign a contiguous per-packet timeline: anchor to the first input timestamp, then
-                // advance by exactly one packet for each emitted packet.
-                let timestamp_in_samples = *self
+                // so assign a contiguous per-packet timeline advancing by exactly one packet for each
+                // emitted packet. The running position is seeded to the first input timestamp at the start
+                // of `push`; forward discontinuities are materialized there as leading silence, so the
+                // position simply advances one packet at a time here.
+                let timestamp_in_samples = self
                     .output_position_in_samples
-                    .get_or_insert(data.timestamp_in_samples);
+                    .expect("output_position_in_samples is initialized at the start of push");
 
                 let packet = AudioPacket {
                     data: output_buffer_data[packet_desc.mStartOffset as usize
@@ -166,6 +199,7 @@ impl AudioToolboxEncoder {
                 sample_rate: options.sample_rate(),
                 last_data: None,
                 output_position_in_samples: None,
+                next_input_position: None,
                 frames_per_packet: to.mFramesPerPacket as u64,
             },
             output: AudioToolboxEncoderOutput { rx },
