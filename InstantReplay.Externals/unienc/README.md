@@ -12,6 +12,10 @@ A Rust-based unified encoding system that provides cross-platform video and audi
 | **Linux / Unix** | FFmpeg | FFmpeg | FFmpeg | - |
 | **WebAssembly** (Emscripten) | WebCodecs API | WebCodecs API | muxide (MP4) | - |
 
+## Build
+
+See .github/workflows/build-unienc.yml at the root of the repository for the CI build configuration. The build process is automated and handles platform-specific compilation and linking.
+
 ## Architecture
 
 The codebase follows a modular architecture with platform-specific implementations behind a unified trait interface.

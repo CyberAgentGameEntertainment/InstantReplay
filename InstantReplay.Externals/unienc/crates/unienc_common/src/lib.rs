@@ -193,6 +193,22 @@ impl AudioSample {
     }
 }
 
+/// Computes the forward discontinuity (in samples) between the expected next input position and the
+/// actual timestamp of an incoming audio sample.
+///
+/// `expected_next` is the position the next input was expected at, i.e. the previous push's timestamp
+/// plus the number of frames it delivered. Returns the number of samples by which the input timeline
+/// jumped forward — to be reflected in the emitted PTS (Apple/Android) or filled with silence (FFmpeg)
+/// so audio does not drift ahead of video. Returns 0 when the input is continuous, when this is the
+/// first push (`expected_next` is `None`), or when the timestamp jumped backward (backward jumps are
+/// ignored to keep PTS monotonic, which the muxers require).
+pub fn forward_audio_discontinuity(expected_next: Option<u64>, actual_timestamp: u64) -> u64 {
+    match expected_next {
+        Some(expected) if actual_timestamp > expected => actual_timestamp - expected,
+        _ => 0,
+    }
+}
+
 pub trait EncodedData: Encode + Decode<()> {
     fn timestamp(&self) -> f64;
     fn set_timestamp(&mut self, timestamp: f64);
@@ -229,6 +245,23 @@ pub trait EncoderOutput: Send {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn forward_audio_discontinuity_handles_continuity_gaps_and_backward_jumps() {
+        // First push: no expectation yet, so no discontinuity.
+        assert_eq!(forward_audio_discontinuity(None, 0), 0);
+        assert_eq!(forward_audio_discontinuity(None, 48_000), 0);
+
+        // Continuous input: actual timestamp matches the expected next position.
+        assert_eq!(forward_audio_discontinuity(Some(48_000), 48_000), 0);
+
+        // Forward discontinuity (dropped / paused audio): report the gap so it can be reflected in PTS.
+        assert_eq!(forward_audio_discontinuity(Some(48_000), 72_000), 24_000);
+
+        // Backward jump: ignored to keep PTS monotonic.
+        assert_eq!(forward_audio_discontinuity(Some(48_000), 24_000), 0);
+        assert_eq!(forward_audio_discontinuity(Some(48_000), 0), 0);
+    }
 
     #[test]
     fn audio_sample_data_as_s16le_bytes_uses_little_endian_order() {

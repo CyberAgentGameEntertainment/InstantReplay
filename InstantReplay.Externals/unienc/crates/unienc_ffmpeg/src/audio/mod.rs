@@ -21,6 +21,10 @@ pub struct FFmpegAudioEncoder {
 pub struct FFmpegAudioEncoderInput {
     _ffmpeg: Arc<ffmpeg::FFmpeg>,
     input: ffmpeg::Input,
+    channels: u32,
+    /// Expected input timestamp (in samples) of the next push, i.e. the previous push's timestamp plus
+    /// the number of frames it delivered. Used to detect discontinuities in the input timeline.
+    next_input_position: Option<u64>,
 }
 
 pub struct FFmpegAudioEncoderOutput {
@@ -64,6 +68,8 @@ impl FFmpegAudioEncoder {
             input: FFmpegAudioEncoderInput {
                 _ffmpeg: ffmpeg.clone(),
                 input,
+                channels,
+                next_input_position: None,
             },
             output: FFmpegAudioEncoderOutput {
                 _ffmpeg: ffmpeg,
@@ -88,6 +94,27 @@ impl EncoderInput for FFmpegAudioEncoderInput {
     type Data = AudioSample;
 
     async fn push(&mut self, data: Self::Data) -> unienc_common::Result<()> {
+        // The ffmpeg output PTS is derived purely from the number of encoded frames (see the output's
+        // `timestamp_in_samples` counter), so a discontinuity in the input timeline would otherwise be
+        // swallowed and make audio drift ahead of video. Materialize forward gaps as silence so the
+        // encoded stream length matches the real timeline. Backward jumps are ignored to keep the stream
+        // monotonic.
+        let channels = (self.channels as u64).max(1);
+        let frames_in_push = data.data.len() as u64 / channels;
+        let gap = unienc_common::forward_audio_discontinuity(
+            self.next_input_position,
+            data.timestamp_in_samples,
+        );
+        if gap > 0 {
+            // s16le PCM: 2 bytes per sample, silence is all-zero.
+            let silence = vec![0u8; gap as usize * channels as usize * 2];
+            self.input
+                .write_all(&silence)
+                .await
+                .map_err(FFmpegError::from)?;
+        }
+        self.next_input_position = Some(data.timestamp_in_samples + frames_in_push);
+
         let data = data.data_as_s16le_bytes();
 
         self.input

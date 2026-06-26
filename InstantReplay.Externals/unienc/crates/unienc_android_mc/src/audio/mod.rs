@@ -25,6 +25,9 @@ pub struct MediaCodecAudioEncoderInput {
     /// (batched) input buffer split across multiple MediaCodec input buffers yields strictly increasing,
     /// contiguous timestamps instead of repeating the same input timestamp.
     position_in_samples: Option<u64>,
+    /// Expected input timestamp (in samples) of the next push, i.e. the previous push's timestamp plus
+    /// the number of frames it delivered. Used to detect discontinuities in the input timeline.
+    next_input_position: Option<u64>,
 }
 
 unsafe impl Send for MediaCodecAudioEncoderInput {}
@@ -70,6 +73,7 @@ impl MediaCodecAudioEncoder {
                 channels: options.channels(),
                 last_timestamp: 0,
                 position_in_samples: None,
+                next_input_position: None,
             },
             output: MediaCodecAudioEncoderOutput {
                 codec: codec_output,
@@ -117,6 +121,24 @@ impl EncoderInput for MediaCodecAudioEncoderInput {
 }
 
 async fn push_impl(this: &mut MediaCodecAudioEncoderInput, data: AudioSample) -> Result<()> {
+    // Reconcile the input timeline with the provided timestamp so that discontinuities (dropped or paused
+    // audio that advances `timestamp_in_samples` by more than the number of samples actually delivered) are
+    // reflected in the emitted PTS instead of being swallowed, which would make audio drift ahead of video.
+    // We only ever move forward to keep PTS monotonic (MediaCodec / the muxer reject regressing timestamps).
+    let channels = (this.channels as u64).max(1);
+    let frames_in_push = data.data.len() as u64 / channels;
+    let anchor = *this
+        .position_in_samples
+        .get_or_insert(data.timestamp_in_samples);
+    let gap = unienc_common::forward_audio_discontinuity(
+        this.next_input_position,
+        data.timestamp_in_samples,
+    );
+    if gap > 0 {
+        this.position_in_samples = Some(anchor + gap);
+    }
+    this.next_input_position = Some(data.timestamp_in_samples + frames_in_push);
+
     // Convert i16 samples to signed 16-bit little-endian PCM bytes.
     let byte_data = data.data_as_s16le_bytes();
     let mut byte_data = byte_data.as_slice();
@@ -141,10 +163,11 @@ async fn push_impl(this: &mut MediaCodecAudioEncoderInput, data: AudioSample) ->
                 // batched buffer is pushed while the main thread is stalled by framerate jitter). Assigning
                 // every chunk the same input timestamp would make MediaCodec emit output packets with
                 // duplicate / non-monotonic PTS that the muxer rejects. Instead, derive a contiguous
-                // timeline: anchor to the first input timestamp and advance by the number of frames queued.
-                let position_in_samples = *this
+                // timeline that advances by the number of frames queued. The running position is
+                // seeded/realigned to the input timeline (including discontinuities) at the start of `push`.
+                let position_in_samples = this
                     .position_in_samples
-                    .get_or_insert(data.timestamp_in_samples);
+                    .expect("position_in_samples is initialized at the start of push");
 
                 // Calculate timestamp in microseconds
                 let timestamp_us =
