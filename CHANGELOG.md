@@ -1,3 +1,11 @@
+## [1.6.4] - 2026/06/26
+
+### Fixed
+
+- Fixed recording failures that could occur under heavy frame rate fluctuations, where video frames spaced too closely together (less than half a frame interval apart) caused the muxer to fail. Such frames are now dropped to keep the output valid.
+- Fixed audio handling on platforms that report audio timestamps in coarse, discrete steps (Apple, Android, and Linux/FFmpeg). Discrete timestamps are now interpreted correctly, preventing video output failures.
+- Fixed audio drifting out of sync with video after resuming from a suspended state. Inserted silence gaps are now placed at the correct position so audio no longer lags behind video.
+
 ## [1.6.3] - 2026/06/24
 
 ### Fixed
