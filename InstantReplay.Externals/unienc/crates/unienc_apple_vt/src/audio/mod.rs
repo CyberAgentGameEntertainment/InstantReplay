@@ -67,24 +67,33 @@ impl EncoderInput for AudioToolboxEncoderInput {
     type Data = AudioSample;
 
     async fn push(&mut self, data: Self::Data) -> unienc_common::Result<()> {
-        // Reconcile the output timeline with the input timestamp so that discontinuities in the input
-        // (e.g. dropped or paused audio that advances `timestamp_in_samples` by more than the number of
-        // samples actually delivered) are reflected in the emitted PTS. Without this, the encoder lays
-        // packets out contiguously regardless of the input timeline and audio progressively drifts ahead
-        // of video. We only ever move the timeline forward, since AVAssetWriter rejects regressing PTS.
+        // Keep the encoded audio contiguous in sample-count terms so the muxer (which derives audio timing
+        // from the number of encoded samples, not from explicit PTS gaps) keeps audio aligned with video.
+        // When the input timeline jumps forward (e.g. dropped or suspended audio that advances
+        // `timestamp_in_samples` by more than the number of samples actually delivered), fill the gap with
+        // leading silence rather than relying on a PTS jump the muxer may collapse. Backward jumps are
+        // ignored by `forward_audio_discontinuity`, so the timeline never regresses.
         let channels = (self.converter.from.mChannelsPerFrame as u64).max(1);
         let frames_in_push = data.data.len() as u64 / channels;
-        let anchor = *self
-            .output_position_in_samples
+        self.output_position_in_samples
             .get_or_insert(data.timestamp_in_samples);
         let gap = unienc_common::forward_audio_discontinuity(
             self.next_input_position,
             data.timestamp_in_samples,
         );
-        if gap > 0 {
-            self.output_position_in_samples = Some(anchor + gap);
-        }
         self.next_input_position = Some(data.timestamp_in_samples + frames_in_push);
+
+        let data = if gap > 0 {
+            let mut padded = Vec::with_capacity(((gap + frames_in_push) * channels) as usize);
+            padded.resize((gap * channels) as usize, 0);
+            padded.extend_from_slice(&data.data);
+            AudioSample {
+                data: padded,
+                timestamp_in_samples: data.timestamp_in_samples,
+            }
+        } else {
+            data
+        };
 
         let mut output_buffer_data = vec![0; self.max_output_packet_size as usize];
 
@@ -114,8 +123,9 @@ impl EncoderInput for AudioToolboxEncoderInput {
                 // Assigning every packet the input buffer's timestamp would produce duplicate / overlapping
                 // PTS that the muxer (AVAssetWriter) rejects. The encoder consumes a continuous PCM stream,
                 // so assign a contiguous per-packet timeline advancing by exactly one packet for each
-                // emitted packet. The running position is seeded/realigned to the input timeline (including
-                // discontinuities) at the start of `push`.
+                // emitted packet. The running position is seeded to the first input timestamp at the start
+                // of `push`; forward discontinuities are materialized there as leading silence, so the
+                // position simply advances one packet at a time here.
                 let timestamp_in_samples = self
                     .output_position_in_samples
                     .expect("output_position_in_samples is initialized at the start of push");

@@ -95,9 +95,11 @@ namespace InstantReplay
             }
             else
             {
-                // if there is slight lag, scale samples to fit
+                // Within the allowed lag, prefer input sample continuity over tight video sync: emit the
+                // samples as-is (no blank, no skip, no scaling). The small lag is left uncorrected and
+                // accumulates until it exceeds the threshold, at which point the branch above inserts a
+                // blank or skips. This avoids resampling artifacts from per-frame stretching/squeezing.
                 blankOrSkip = 0;
-                numScaledSamples += lag;
             }
 
             var writeLength = (int)((numScaledSamples + blankOrSkip) * _numChannelsInOption);
@@ -138,7 +140,18 @@ namespace InstantReplay
                 }
             }
 
-            output = new PcmAudioFrame(writeBufferArray, writeBufferArray.AsMemory(0, writeLength), timestamp);
+            // Stamp the frame with the contiguous sample position where the written buffer begins, not the
+            // (resynced) realtime-based `timestamp`. When a blank is inserted (e.g. resuming from a Wwise
+            // suspend), the buffer starts with `blank` silence samples that must occupy the gap BEFORE the
+            // current realtime moment; `timestamp` points to the position AFTER the gap, which would misplace
+            // the silence and shift real audio later. `_currentSamplePosition` already tracks realtime via the
+            // blank/skip mechanism, so this keeps the emitted timestamp exactly consistent with the sample
+            // count and avoids handing the encoder a spurious timestamp discontinuity (which it would then
+            // compensate for again, on top of the blank, causing audio to lag video on resume).
+            var outputTimestamp = currentSamplePosition / _sampleRateInOption;
+
+            output = new PcmAudioFrame(writeBufferArray, writeBufferArray.AsMemory(0, writeLength),
+                outputTimestamp);
 
             return true;
         }
