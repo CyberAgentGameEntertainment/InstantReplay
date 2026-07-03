@@ -58,7 +58,14 @@ namespace InstantReplay
 
             if (_fixedFrameInterval is { } fixedFrameInterval)
             {
-                if (_prevFrameTime.HasValue && _frameTimer < _fixedFrameInterval) return false;
+                if (_prevFrameTime.HasValue && _frameTimer < _fixedFrameInterval)
+                {
+                    // The elapsed time of this frame has already been accumulated into _frameTimer,
+                    // so advance _prevFrameTime to avoid counting it again on the next frame.
+                    _prevFrameTime = time;
+                    return false;
+                }
+
                 _frameTimer %= fixedFrameInterval;
             }
 
