@@ -148,10 +148,13 @@ namespace InstantReplay
             // blank/skip mechanism, so this keeps the emitted timestamp exactly consistent with the sample
             // count and avoids handing the encoder a spurious timestamp discontinuity (which it would then
             // compensate for again, on top of the blank, causing audio to lag video on resume).
+            // `currentSamplePosition` is also carried as-is (integer) so the encoder input does not have to
+            // recover it from the seconds-based timestamp, which would truncate and produce spurious
+            // one-sample gaps on the native side.
             var outputTimestamp = currentSamplePosition / _sampleRateInOption;
 
             output = new PcmAudioFrame(writeBufferArray, writeBufferArray.AsMemory(0, writeLength),
-                outputTimestamp);
+                outputTimestamp, currentSamplePosition);
 
             return true;
         }
