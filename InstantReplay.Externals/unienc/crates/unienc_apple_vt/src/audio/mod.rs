@@ -24,7 +24,7 @@ pub struct AudioToolboxEncoder {
 }
 
 pub struct AudioToolboxEncoderInput {
-    tx: mpsc::Sender<AudioPacket>,
+    tx: mpsc::UnboundedSender<AudioPacket>,
     converter: AudioConverter,
     max_output_packet_size: u32,
     sample_rate: u32,
@@ -42,7 +42,7 @@ pub struct AudioToolboxEncoderInput {
 unsafe impl Send for AudioToolboxEncoderInput {}
 
 pub struct AudioToolboxEncoderOutput {
-    rx: mpsc::Receiver<AudioPacket>,
+    rx: mpsc::UnboundedReceiver<AudioPacket>,
 }
 
 #[derive(Encode, Decode, Clone)]
@@ -105,44 +105,7 @@ impl EncoderInput for AudioToolboxEncoderInput {
         let mut sample = Some(&data);
 
         while {
-            let num_output_packets = self.converter.fill_complex_buffer(
-                &mut sample,
-                &mut output_buffer_data,
-                &mut packet_descs,
-            )?;
-
-            let magic_cookie = self
-                .converter
-                .get_property_raw(kAudioConverterCompressionMagicCookie)?;
-
-            let packet_descs = &packet_descs[..num_output_packets as usize];
-
-            for packet_desc in packet_descs {
-                // AudioToolbox can emit multiple output packets from a single input buffer (e.g. when a
-                // large batched buffer is pushed while the main thread is stalled by framerate jitter).
-                // Assigning every packet the input buffer's timestamp would produce duplicate / overlapping
-                // PTS that the muxer (AVAssetWriter) rejects. The encoder consumes a continuous PCM stream,
-                // so assign a contiguous per-packet timeline advancing by exactly one packet for each
-                // emitted packet. The running position is seeded to the first input timestamp at the start
-                // of `push`; forward discontinuities are materialized there as leading silence, so the
-                // position simply advances one packet at a time here.
-                let timestamp_in_samples = self
-                    .output_position_in_samples
-                    .expect("output_position_in_samples is initialized at the start of push");
-
-                let packet = AudioPacket {
-                    data: output_buffer_data[packet_desc.mStartOffset as usize
-                        ..packet_desc.mStartOffset as usize + packet_desc.mDataByteSize as usize]
-                        .to_vec(),
-                    timestamp_in_samples,
-                    sample_rate: self.sample_rate,
-                    magic_cookie: magic_cookie.clone(),
-                };
-                self.tx.send(packet).await.map_err(AppleError::from)?;
-
-                self.output_position_in_samples =
-                    Some(timestamp_in_samples + self.frames_per_packet);
-            }
+            self.encode_round(&mut sample, false, &mut output_buffer_data, &mut packet_descs)?;
 
             sample.is_some()
         } {}
@@ -150,6 +113,88 @@ impl EncoderInput for AudioToolboxEncoderInput {
         // we need to keep the data until next fill_complex_buffer call
         self.last_data = Some(data);
         Ok(())
+    }
+}
+
+impl AudioToolboxEncoderInput {
+    /// Runs a single conversion round and forwards every produced packet to the output channel,
+    /// advancing the contiguous per-packet output timeline. Returns the number of packets emitted.
+    fn encode_round(
+        &mut self,
+        sample: &mut Option<&AudioSample>,
+        end_of_stream: bool,
+        output_buffer_data: &mut [u8],
+        packet_descs: &mut [AudioStreamPacketDescription],
+    ) -> Result<u32> {
+        let num_output_packets = self.converter.fill_complex_buffer(
+            sample,
+            end_of_stream,
+            output_buffer_data,
+            packet_descs,
+        )?;
+
+        let magic_cookie = self
+            .converter
+            .get_property_raw(kAudioConverterCompressionMagicCookie)?;
+
+        let packet_descs = &packet_descs[..num_output_packets as usize];
+
+        for packet_desc in packet_descs {
+            // AudioToolbox can emit multiple output packets from a single input buffer (e.g. when a
+            // large batched buffer is pushed while the main thread is stalled by framerate jitter).
+            // Assigning every packet the input buffer's timestamp would produce duplicate / overlapping
+            // PTS that the muxer (AVAssetWriter) rejects. The encoder consumes a continuous PCM stream,
+            // so assign a contiguous per-packet timeline advancing by exactly one packet for each
+            // emitted packet. The running position is seeded to the first input timestamp at the start
+            // of `push`; forward discontinuities are materialized there as leading silence, so the
+            // position simply advances one packet at a time here. The converter cannot produce packets
+            // before the first push seeds the position, so the fallback value is unreachable; it only
+            // exists to keep the end-of-stream drain (which runs in `drop`) panic-free.
+            let timestamp_in_samples = self.output_position_in_samples.unwrap_or_default();
+
+            let packet = AudioPacket {
+                data: output_buffer_data[packet_desc.mStartOffset as usize
+                    ..packet_desc.mStartOffset as usize + packet_desc.mDataByteSize as usize]
+                    .to_vec(),
+                timestamp_in_samples,
+                sample_rate: self.sample_rate,
+                magic_cookie: magic_cookie.clone(),
+            };
+            self.tx.send(packet).map_err(AppleError::from)?;
+
+            self.output_position_in_samples = Some(timestamp_in_samples + self.frames_per_packet);
+        }
+
+        Ok(num_output_packets)
+    }
+
+    /// Drains packets still buffered inside the AudioConverter by signaling end of stream: complete
+    /// packets that were not emitted during `push` and the final partial (< frames-per-packet)
+    /// packet, which the converter pads and flushes. Without this, the tail of every recording
+    /// (up to a few tens of milliseconds of audio) is lost.
+    fn drain(&mut self) -> Result<()> {
+        let mut output_buffer_data = vec![0; self.max_output_packet_size as usize];
+        let mut packet_descs = vec![unsafe { std::mem::zeroed::<AudioStreamPacketDescription>() }];
+
+        loop {
+            let mut sample = None;
+            let num_output_packets =
+                self.encode_round(&mut sample, true, &mut output_buffer_data, &mut packet_descs)?;
+            if num_output_packets == 0 {
+                break;
+            }
+        }
+
+        Ok(())
+    }
+}
+
+impl Drop for AudioToolboxEncoderInput {
+    fn drop(&mut self) {
+        // The input being dropped is the end-of-stream signal (`EncoderInput` has no explicit
+        // finish), so flush the converter here. Errors are ignored: the output side may already
+        // have been dropped, and panicking in drop is not an option.
+        _ = self.drain();
     }
 }
 
@@ -189,7 +234,7 @@ impl AudioToolboxEncoder {
             &mut max_output_packet_size,
         )?;
 
-        let (tx, rx) = mpsc::channel(32);
+        let (tx, rx) = mpsc::unbounded_channel();
 
         Ok(Self {
             input: AudioToolboxEncoderInput {
@@ -324,6 +369,7 @@ impl AudioConverter {
     fn fill_complex_buffer(
         &self,
         sample: &mut Option<&AudioSample>,
+        end_of_stream: bool,
         output_buffer: &mut [u8],
         packet_descs: &mut [AudioStreamPacketDescription],
     ) -> Result<u32> {
@@ -348,7 +394,15 @@ impl AudioConverter {
 
                 let Some(sample) = sample.take() else {
                     *number_data_packets = 0;
-                    return FillBufferResult::Skip as i32;
+                    // Returning noErr with zero packets tells the converter the input stream has
+                    // ended, making it flush buffered output (padding the final partial packet).
+                    // Returning a non-zero code instead just pauses conversion until more input
+                    // arrives on a later call.
+                    return if end_of_stream {
+                        FillBufferResult::Ok as i32
+                    } else {
+                        FillBufferResult::Skip as i32
+                    };
                 };
 
                 let num_input_packets = sample.data.len() * 2 / self.from.mBytesPerPacket as usize;
