@@ -30,7 +30,7 @@ pub struct VideoToolboxEncoder {
 }
 pub struct VideoToolboxEncoderInput {
     session: CompressionSession,
-    tx: Box<mpsc::Sender<VideoEncodedData>>,
+    tx: Box<mpsc::UnboundedSender<Result<VideoEncodedData>>>,
     width: u32,
     height: u32,
     bitrate: u32,
@@ -43,7 +43,7 @@ struct CompressionSession {
 unsafe impl Send for VideoToolboxEncoderInput {}
 
 pub struct VideoToolboxEncoderOutput {
-    rx: mpsc::Receiver<VideoEncodedData>,
+    rx: mpsc::UnboundedReceiver<Result<VideoEncodedData>>,
 }
 
 pub struct VideoEncodedData {
@@ -107,15 +107,29 @@ impl EncodedData for VideoEncodedData {
 unsafe extern "C-unwind" fn handle_video_encode_output(
     output_callback_ref_con: *mut c_void,
     _source_frame_ref_con: *mut c_void,
-    _status: i32,
+    status: i32,
     _info_flags: VTEncodeInfoFlags,
     sample_buffer: *mut CMSampleBuffer,
 ) {
-    let tx = unsafe { &*(output_callback_ref_con as *const mpsc::Sender<VideoEncodedData>) };
+    let tx = unsafe {
+        &*(output_callback_ref_con as *const mpsc::UnboundedSender<Result<VideoEncodedData>>)
+    };
+
+    // Propagate encode failures to the output side instead of silently ignoring them.
+    if let Err(err) = status.to_result() {
+        // send only fails when the output has already been dropped
+        _ = tx.send(Err(err));
+        return;
+    }
 
     if let Some(sample_buffer) = unsafe { Retained::retain(sample_buffer) } {
-        _ = tx.try_send(VideoEncodedData::new(sample_buffer.into()));
-    } // otherwise dropped
+        // The channel is unbounded, so encoded frames are never dropped here. Dropping a frame at
+        // this layer would break the reference chain of subsequent P-frames; any backpressure /
+        // dropping policy is applied by the consumer (BoundedEncodedDataBuffer on the C# side).
+        // Blocking this callback is not an option either: it runs on VideoToolbox's internal
+        // queue, and complete_frames() waits for pending callbacks to return.
+        _ = tx.send(Ok(VideoEncodedData::new(sample_buffer.into())));
+    } // otherwise the frame was dropped by the encoder itself (e.g. kVTEncodeInfo_FrameDropped)
 }
 
 unsafe extern "C-unwind" fn release_pixel_buffer(
@@ -252,7 +266,11 @@ impl EncoderOutput for VideoToolboxEncoderOutput {
     type Data = VideoEncodedData;
 
     async fn pull(&mut self) -> unienc_common::Result<Option<Self::Data>> {
-        Ok(self.rx.recv().await)
+        match self.rx.recv().await {
+            Some(Ok(data)) => Ok(Some(data)),
+            Some(Err(err)) => Err(err.into()),
+            None => Ok(None),
+        }
     }
 }
 
@@ -277,7 +295,7 @@ impl CompressionSession {
         width: u32,
         height: u32,
         bitrate: u32,
-        tx: *const mpsc::Sender<VideoEncodedData>,
+        tx: *const mpsc::UnboundedSender<Result<VideoEncodedData>>,
     ) -> Result<Self> {
         let mut session: *mut VTCompressionSession = std::ptr::null_mut();
 
@@ -330,7 +348,7 @@ impl CompressionSession {
 
 impl VideoToolboxEncoder {
     pub fn new(options: &impl unienc_common::VideoEncoderOptions) -> Result<Self> {
-        let (tx, rx) = mpsc::channel(32);
+        let (tx, rx) = mpsc::unbounded_channel();
         let tx = Box::new(tx);
 
         let (width, height, bitrate) = (options.width(), options.height(), options.bitrate());
