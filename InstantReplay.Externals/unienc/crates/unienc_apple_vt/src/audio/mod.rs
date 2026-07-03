@@ -105,7 +105,12 @@ impl EncoderInput for AudioToolboxEncoderInput {
         let mut sample = Some(&data);
 
         while {
-            self.encode_round(&mut sample, false, &mut output_buffer_data, &mut packet_descs)?;
+            self.encode_round(
+                &mut sample,
+                false,
+                &mut output_buffer_data,
+                &mut packet_descs,
+            )?;
 
             sample.is_some()
         } {}
@@ -178,8 +183,12 @@ impl AudioToolboxEncoderInput {
 
         loop {
             let mut sample = None;
-            let num_output_packets =
-                self.encode_round(&mut sample, true, &mut output_buffer_data, &mut packet_descs)?;
+            let num_output_packets = self.encode_round(
+                &mut sample,
+                true,
+                &mut output_buffer_data,
+                &mut packet_descs,
+            )?;
             if num_output_packets == 0 {
                 break;
             }
