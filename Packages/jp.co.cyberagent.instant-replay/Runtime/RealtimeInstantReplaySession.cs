@@ -137,7 +137,7 @@ namespace InstantReplay
                     options.AudioOptions.Channels,
                     options.AudioLagAdjustmentThreshold).AsInput(
                     new PcmAudioFrameDroppingChannelInput(audioInputQueueSizeSamples,
-                        new AudioEncoderInput(audioEncoder, options.AudioOptions.SampleRate,
+                        new AudioEncoderInput(audioEncoder,
                             new BoundedEncodedDataBufferAudioInput(buffer).AsAsync()))));
 
             _temporalController.Resume();
