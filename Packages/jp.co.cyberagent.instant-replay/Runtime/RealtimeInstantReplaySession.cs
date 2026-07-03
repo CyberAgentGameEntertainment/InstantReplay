@@ -207,10 +207,10 @@ namespace InstantReplay
                 _temporalController.Pause();
             }
 
-            await Task.WhenAll(_videoPipeline.CompleteAsync().AsTask(), _audioPipeline.CompleteAsync().AsTask());
-
             try
             {
+                await Task.WhenAll(_videoPipeline.CompleteAsync().AsTask(), _audioPipeline.CompleteAsync().AsTask());
+
                 State = SessionState.Exporting;
 
                 // Generate output path if not provided
@@ -307,12 +307,22 @@ namespace InstantReplay
                     throw exception;
             }
 
-            var video = MuxVideoAsync();
-            var audio = MuxAudioAsync();
-            
-            await audio;
-            await video;
+            // Always observe both tasks even if one of them fails, so that the muxer is not
+            // disposed (by the caller) while the other task is still using it.
+            var video = MuxVideoAsync().AsTask();
+            var audio = MuxAudioAsync().AsTask();
 
+            var whenAll = Task.WhenAll(video, audio);
+            try
+            {
+                await whenAll.ConfigureAwait(false);
+            }
+            catch (Exception) when (whenAll.Exception is { } aggregate && aggregate.InnerExceptions.Count > 1)
+            {
+                // Awaiting Task.WhenAll rethrows only the first exception;
+                // rethrow the AggregateException so that all failures are propagated.
+                throw aggregate;
+            }
 
             await muxer.CompleteAsync();
         }
