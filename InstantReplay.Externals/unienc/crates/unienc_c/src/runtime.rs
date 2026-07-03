@@ -10,7 +10,10 @@ use std::task::{Context, Poll};
 use thiserror::Error;
 
 thread_local! {
-    static CURRENT: RefCell<Option<Runtime>> = None.into();
+    // Holds a weak reference so that thread-local storage on the executor's
+    // own worker threads never keeps the executor alive (which would form a
+    // reference cycle and leak the thread pool).
+    static CURRENT: RefCell<Option<WeakRuntime>> = None.into();
 }
 
 #[derive(Error, Debug)]
@@ -56,13 +59,17 @@ impl LocalExecutor {
 
 impl Runtime {
     pub fn new() -> Result<Runtime, RuntimeError> {
-        let lazy_runtime: Arc<Mutex<Option<Runtime>>> = Arc::new(Mutex::new(None));
+        // The cell stores only a weak reference: the `after_start` closure is
+        // owned by the thread pool itself, so a strong `Runtime` here would
+        // create a cycle (`ThreadPool -> closure -> Runtime -> ThreadPool`)
+        // and the pool would never be dropped.
+        let lazy_runtime: Arc<Mutex<Option<WeakRuntime>>> = Arc::new(Mutex::new(None));
         let mut lock = lazy_runtime.lock().unwrap();
         let runtime = Self {
             executor: Arc::new(new_executor(lazy_runtime.clone())),
         };
 
-        *lock = Some(runtime.clone());
+        *lock = Some(runtime.weak());
         Ok(runtime)
     }
 
@@ -73,7 +80,7 @@ impl Runtime {
                 _lifetime: PhantomData,
             },
             None => {
-                *local = Some(self.clone());
+                *local = Some(self.weak());
                 RuntimeGuard {
                     acquired: true,
                     _lifetime: PhantomData,
@@ -84,7 +91,7 @@ impl Runtime {
 
     pub fn spawn(fut: impl Future<Output = ()> + Send + 'static) {
         CURRENT.with_borrow(|local| {
-            if let Some(runtime) = local {
+            if let Some(runtime) = local.as_ref().and_then(WeakRuntime::upgrade) {
                 #[cfg(feature = "multi-thread")]
                 {
                     runtime
@@ -164,9 +171,10 @@ impl Drop for RuntimeGuard<'_> {
     }
 }
 
-fn new_executor(lazy_runtime: Arc<Mutex<Option<Runtime>>>) -> Executor {
+fn new_executor(lazy_runtime: Arc<Mutex<Option<WeakRuntime>>>) -> Executor {
     #[cfg(not(feature = "multi-thread"))]
     {
+        let _ = lazy_runtime;
         println!("Using current thread runtime");
         LocalExecutor::new()
     }
@@ -178,7 +186,11 @@ fn new_executor(lazy_runtime: Arc<Mutex<Option<Runtime>>>) -> Executor {
                 CURRENT.with_borrow_mut(|local| match local {
                     Some(_) => {}
                     None => {
-                        *local = Some(lazy_runtime.lock().unwrap().as_ref().unwrap().clone());
+                        // Locking here synchronizes with `Runtime::new`, which
+                        // holds the lock until the weak handle is stored, so
+                        // worker threads started during pool creation observe
+                        // the initialized value.
+                        *local = lazy_runtime.lock().unwrap().clone();
                     }
                 })
             })
