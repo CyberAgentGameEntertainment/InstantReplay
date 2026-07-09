@@ -128,6 +128,21 @@ jobs:
       - run: rustup default stable
       - run: rustup target add ${{ matrix.arch }}-apple-ios
       - run: cargo build --target ${{ matrix.arch }}-apple-ios --profile ${{ env._RUST_BUILD_CONFIG == 'debug' && 'dev' || env._RUST_BUILD_CONFIG }} ${{ matrix.variant == 'unity' && '-F unity,mimalloc' || '' }}
+        env:
+          # Turn mimalloc's tentative definitions (e.g. _mi_page_map) into real
+          # BSS definitions. Common symbols cannot be localized, so without this
+          # `_mi_page_map` would remain external and still coalesce with Unity's
+          # mimalloc. Injected via cc-rs's target CFLAGS so no submodule change
+          # is needed. Only aarch64 is built for iOS (see matrix).
+          CFLAGS_aarch64-apple-ios: -fno-common
+      # Localize the bundled mimalloc so it does not coalesce with Unity 6.5's
+      # built-in mimalloc when statically linked into UnityFramework.
+      - name: Localize non-exported symbols (Unity variant only)
+        if: matrix.variant == 'unity'
+        working-directory: InstantReplay.Externals/unienc/target/${{ matrix.arch }}-apple-ios/${{ env._RUST_BUILD_CONFIG }}
+        run: |
+          chmod +x "$GITHUB_WORKSPACE/.github/scripts/localize-apple-staticlib.sh"
+          "$GITHUB_WORKSPACE/.github/scripts/localize-apple-staticlib.sh" libunienc_c.a arm64 iphoneos
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.variant }}-${{ matrix.arch }}-apple-ios
