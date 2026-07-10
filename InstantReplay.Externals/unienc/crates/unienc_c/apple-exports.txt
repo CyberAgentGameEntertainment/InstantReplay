@@ -1,0 +1,11 @@
+# Symbols that must stay globally visible when libunienc_c.a is statically
+# linked into UnityFramework (iOS). Consumed via `ld -r -exported_symbols_list`.
+#
+# Everything NOT listed here (all mimalloc `mi_*`/`_mi_*`/`heap_main` symbols and
+# Rust internals) is demoted to a local symbol, so the bundled mimalloc no longer
+# coalesces with Unity 6.5's own built-in mimalloc.
+#
+# All FFI entry points (csbindgen `unienc_*` + the iOS `unienc_UnityPluginLoad` /
+# `unienc_UnityPluginUnload` registered by RegisterPlugin.mm) share the `_unienc`
+# Mach-O prefix, so a single wildcard covers them and any future additions.
+_unienc*
