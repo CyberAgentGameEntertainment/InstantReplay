@@ -135,6 +135,7 @@ jobs:
           # mimalloc. Injected via cc-rs's target CFLAGS so no submodule change
           # is needed. Only aarch64 is built for iOS (see matrix).
           CFLAGS_aarch64-apple-ios: -fno-common
+          IPHONEOS_DEPLOYMENT_TARGET: 10.0
       # Localize the bundled mimalloc so it does not coalesce with Unity 6.5's
       # built-in mimalloc when statically linked into UnityFramework.
       - name: Localize non-exported symbols (Unity variant only)
