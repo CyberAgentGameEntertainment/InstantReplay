@@ -1,3 +1,13 @@
+## [1.6.5] - 2026/07/10
+
+### Fixed
+
+- Fixed a crash on iOS players built with Unity 6.5 or newer, caused by a native memory allocator symbol conflict between InstantReplay's native library and Unity's own runtime.
+- Fixed a native thread and memory leak where worker threads used by the recording engine were never released after disposing a recording session, causing threads and memory to accumulate across domain reloads or repeated session creation.
+- Fixed a rare race condition that could corrupt or double-free video frame buffers during realtime recording, potentially causing crashes or corrupted output.
+- Fixed audio occasionally producing clicking noise and gradually drifting out of sync with video, caused by a rounding error in audio timestamp handling.
+- Fixed fixed-frame-rate output pacing becoming irregular under frame rate fluctuations; output intervals are now consistently spaced as configured.
+
 ## [1.6.4] - 2026/06/26
 
 ### Fixed
