@@ -1,3 +1,9 @@
+## [1.6.6] - 2026/07/13
+
+### Fixed
+
+- Fixed iOS players built with Unity 6.5 or newer failing to link with "ld: Too many personality routines for compact unwind" when InstantReplay's native library is statically linked into UnityFramework. The iOS crash fix introduced in 1.6.5 now localizes only the bundled memory allocator's symbols, leaving the Rust runtime symbols intact.
+
 ## [1.6.5] - 2026/07/10
 
 ### Fixed
