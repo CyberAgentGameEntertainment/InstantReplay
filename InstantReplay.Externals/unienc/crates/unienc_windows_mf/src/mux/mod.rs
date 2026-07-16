@@ -97,64 +97,81 @@ impl MediaFoundationMuxer {
                 let sink = UnsafeSend(unsafe {
                     MFCreateMPEG4MediaSink(&*file, &*video_type, &*audio_type)?
                 });
-                assert_eq!(
-                    unsafe { sink.GetCharacteristics()? } & MEDIASINK_RATELESS,
-                    MEDIASINK_RATELESS
-                );
-                let finalizable = sink.cast::<IMFFinalizableMediaSink>().ok().map(UnsafeSend);
-                let sink_count = unsafe { sink.GetStreamSinkCount()? };
-                assert_eq!(sink_count, 2);
-                let (video_stream, video_finish_rx) =
-                    Stream::new(unsafe { sink.GetStreamSinkByIndex(0)? }, &runtime_clone)?;
-                let (audio_stream, audio_finish_rx) =
-                    Stream::new(unsafe { sink.GetStreamSinkByIndex(1)? }, &runtime_clone)?;
-
-                {
-                    let presentation_clock = unsafe { MFCreatePresentationClock()? };
-                    let time_source = unsafe { MFCreateSystemTimeSource()? };
-                    unsafe { presentation_clock.SetTimeSource(&time_source)? };
-                    unsafe { sink.SetPresentationClock(&presentation_clock)? };
-
-                    unsafe { presentation_clock.Start(0)? };
-                }
-
-                video_stream_tx
-                    .send(Ok(video_stream))
-                    .map_err(|_| WindowsError::StreamSendFailed)?;
-                audio_stream_tx
-                    .send(Ok(audio_stream))
-                    .map_err(|_| WindowsError::StreamSendFailed)?;
-
-                video_finish_rx.await?;
-                audio_finish_rx.await?;
-
-                if let Some(finalizable) = finalizable {
-                    let finalizable = UnsafeSend(finalizable);
-
-                    let finalizable_clone = UnsafeSend(finalizable.clone());
-                    let (done_tx, done_rx) = oneshot::channel();
+                let sink_inner = UnsafeSend(sink.clone());
+                let result: Result<()> = async move {
+                    let sink = sink_inner;
+                    assert_eq!(
+                        unsafe { sink.GetCharacteristics()? } & MEDIASINK_RATELESS,
+                        MEDIASINK_RATELESS
+                    );
+                    let finalizable =
+                        sink.cast::<IMFFinalizableMediaSink>().ok().map(UnsafeSend);
+                    let sink_count = unsafe { sink.GetStreamSinkCount()? };
+                    assert_eq!(sink_count, 2);
+                    let (video_stream, video_finish_rx) =
+                        Stream::new(unsafe { sink.GetStreamSinkByIndex(0)? }, &runtime_clone)?;
+                    let (audio_stream, audio_finish_rx) =
+                        Stream::new(unsafe { sink.GetStreamSinkByIndex(1)? }, &runtime_clone)?;
 
                     {
-                        let callback: IMFAsyncCallback = AsyncCallback::new(move |result| unsafe {
-                            let result: windows_core::Result<()> = (move || {
-                                finalizable_clone.EndFinalize(result.ok()?)?;
-                                Ok(())
-                            })();
-                            let _ = done_tx.send(result);
-                        })
-                        .into();
+                        let presentation_clock = unsafe { MFCreatePresentationClock()? };
+                        let time_source = unsafe { MFCreateSystemTimeSource()? };
+                        unsafe { presentation_clock.SetTimeSource(&time_source)? };
+                        unsafe { sink.SetPresentationClock(&presentation_clock)? };
 
-                        unsafe { finalizable.BeginFinalize(&callback, Option::<&IUnknown>::None) }?;
+                        unsafe { presentation_clock.Start(0)? };
                     }
 
-                    done_rx
-                        .await
-                        .map_err(|e| WindowsError::Other(e.to_string()))??;
+                    video_stream_tx
+                        .send(Ok(video_stream))
+                        .map_err(|_| WindowsError::StreamSendFailed)?;
+                    audio_stream_tx
+                        .send(Ok(audio_stream))
+                        .map_err(|_| WindowsError::StreamSendFailed)?;
 
+                    video_finish_rx.await?;
+                    audio_finish_rx.await?;
+
+                    if let Some(finalizable) = finalizable {
+                        let finalizable = UnsafeSend(finalizable);
+
+                        let finalizable_clone = UnsafeSend(finalizable.clone());
+                        let (done_tx, done_rx) = oneshot::channel();
+
+                        {
+                            let callback: IMFAsyncCallback =
+                                AsyncCallback::new(move |result| unsafe {
+                                    let result: windows_core::Result<()> = (move || {
+                                        finalizable_clone.EndFinalize(result.ok()?)?;
+                                        Ok(())
+                                    })();
+                                    let _ = done_tx.send(result);
+                                })
+                                .into();
+
+                            unsafe {
+                                finalizable.BeginFinalize(&callback, Option::<&IUnknown>::None)
+                            }?;
+                        }
+
+                        done_rx
+                            .await
+                            .map_err(|e| WindowsError::Other(e.to_string()))??;
+
+                        let _ = unsafe { sink.Shutdown() };
+                    }
+
+                    Result::<()>::Ok(())
+                }
+                .await;
+
+                // Release the output file even when muxing fails; otherwise the
+                // sink keeps the file handle open until the process exits.
+                if result.is_err() {
                     let _ = unsafe { sink.Shutdown() };
                 }
 
-                Result::<()>::Ok(())
+                result
             }
             .await;
 
@@ -204,13 +221,23 @@ impl Stream {
                         if let Some(sample) = sample_rx.recv().await {
                             unsafe { stream_cap.ProcessSample(&*sample)? };
                         } else {
-                            unsafe {
+                            // Some Windows builds (observed on 26200 with
+                            // mfmp4srcsnk.dll 10.0.26100.8457) reject PlaceMarker with
+                            // MF_E_INVALIDTYPE for every marker type. The marker only
+                            // tells us the sink consumed everything; treat failure as
+                            // non-fatal so finalization still runs and writes the moov.
+                            if let Err(e) = unsafe {
                                 stream_cap.PlaceMarker(
                                     MFSTREAMSINK_MARKER_ENDOFSEGMENT,
                                     std::ptr::null(),
                                     std::ptr::null(),
-                                )?
-                            };
+                                )
+                            } {
+                                println!(
+                                    "PlaceMarker(ENDOFSEGMENT) failed (non-fatal): {:?}",
+                                    e
+                                );
+                            }
                             if let Some(finish_tx) = finish_tx.take() {
                                 finish_tx
                                     .send(())
