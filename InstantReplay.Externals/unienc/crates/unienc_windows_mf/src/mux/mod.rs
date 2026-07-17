@@ -104,8 +104,7 @@ impl MediaFoundationMuxer {
                         unsafe { sink.GetCharacteristics()? } & MEDIASINK_RATELESS,
                         MEDIASINK_RATELESS
                     );
-                    let finalizable =
-                        sink.cast::<IMFFinalizableMediaSink>().ok().map(UnsafeSend);
+                    let finalizable = sink.cast::<IMFFinalizableMediaSink>().ok().map(UnsafeSend);
                     let sink_count = unsafe { sink.GetStreamSinkCount()? };
                     assert_eq!(sink_count, 2);
                     let (video_stream, video_finish_rx) =
@@ -144,7 +143,8 @@ impl MediaFoundationMuxer {
                                     let result: windows_core::Result<()> = (move || {
                                         finalizable_clone.EndFinalize(result.ok()?)?;
                                         Ok(())
-                                    })();
+                                    })(
+                                    );
                                     let _ = done_tx.send(result);
                                 })
                                 .into();
@@ -233,10 +233,7 @@ impl Stream {
                                     std::ptr::null(),
                                 )
                             } {
-                                println!(
-                                    "PlaceMarker(ENDOFSEGMENT) failed (non-fatal): {:?}",
-                                    e
-                                );
+                                println!("PlaceMarker(ENDOFSEGMENT) failed (non-fatal): {:?}", e);
                             }
                             if let Some(finish_tx) = finish_tx.take() {
                                 finish_tx
