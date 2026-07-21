@@ -1,3 +1,9 @@
+## [1.6.7] - 2026/07/21
+
+### Fixed
+
+- Fixed video export failing with a "channel closed" error on some Windows builds where the OS MPEG4 media sink rejected the end-of-segment marker. This case is now handled without aborting the export, and the output file handle is properly released even when muxing fails.
+
 ## [1.6.6] - 2026/07/13
 
 ### Fixed
