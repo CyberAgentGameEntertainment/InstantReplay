@@ -1,3 +1,9 @@
+## [1.6.8] - 2026/07/24
+
+### Fixed
+
+- Fixed the Windows native binary shipped in 1.6.7 not actually containing the fix for the "channel closed" export error, because it was not rebuilt for that release. The fix is now included in the shipped binary.
+
 ## [1.6.7] - 2026/07/21
 
 ### Fixed
