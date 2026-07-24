@@ -1,0 +1,62 @@
+name: Check native binaries
+
+# Guards against releasing stale native binaries. When the unienc Rust source,
+# Cargo.lock, submodule pointers or build recipe change, the committed binaries
+# must be rebuilt by manually dispatching the "Build unienc" workflow.
+#
+# This check runs on the version-bump PR (detected via a change to the package
+# manifest, which every release goes through) and fails if the committed source
+# fingerprint no longer matches the current source - i.e. a rebuild was
+# forgotten. Set this as a required status check on the default branch so the
+# version-bump PR cannot be merged (and therefore no tag/release created)
+# without up-to-date binaries.
+on:
+  pull_request:
+    paths:
+      - 'Packages/jp.co.cyberagent.instant-replay/package.json'
+      - '.github/workflows/check-native-binaries.yml'
+      - '.github/scripts/compute-unienc-fingerprint.sh'
+
+permissions:
+  contents: read
+
+jobs:
+  check-fingerprint:
+    name: Verify native binaries are up to date
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # Submodules are intentionally NOT checked out: submodule commit SHAs are
+      # already captured as gitlink entries in the unienc tree hash.
+      - uses: actions/checkout@v4
+      - name: Compare source fingerprint
+        run: |
+          set -euo pipefail
+          marker="Packages/jp.co.cyberagent.instant-replay/UniEnc/.source-fingerprint"
+          chmod +x .github/scripts/compute-unienc-fingerprint.sh
+          expected="$(.github/scripts/compute-unienc-fingerprint.sh HEAD)"
+
+          if [ ! -f "$marker" ]; then
+            echo "::error::${marker} not found. Run the 'Build unienc' workflow on this branch to generate the native binaries and their fingerprint."
+            exit 1
+          fi
+
+          actual="$(cat "$marker")"
+          if [ "$expected" != "$actual" ]; then
+            echo "::error::Native binaries are out of date with the unienc source."
+            {
+              echo "The Rust source, Cargo.lock, submodule pointers or build recipe changed"
+              echo "since the native binaries were last built."
+              echo
+              echo "=> Manually run the 'Build unienc' workflow (build-unienc.yml) on this"
+              echo "   branch to rebuild the binaries before releasing."
+              echo
+              echo "--- expected (computed from current source) ---"
+              echo "$expected"
+              echo "--- actual (committed marker) ---"
+              echo "$actual"
+            } >&2
+            exit 1
+          fi
+
+          echo "Native binaries are up to date with the unienc source."

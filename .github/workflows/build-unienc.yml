@@ -250,8 +250,18 @@ jobs:
             mkdir -p "$dest/$target"
             cp -R "$d"/. "$dest/$target/"
           done
+      - name: Update source fingerprint
+        # Record a fingerprint of the source that produced these binaries, so
+        # the check-native-binaries workflow can later detect a forgotten
+        # rebuild. Computed from HEAD (the source state that was just built).
+        run: |
+          set -euo pipefail
+          chmod +x .github/scripts/compute-unienc-fingerprint.sh
+          .github/scripts/compute-unienc-fingerprint.sh HEAD \
+            > ./Packages/jp.co.cyberagent.instant-replay/UniEnc/.source-fingerprint
       - run: |
           git add ./Packages/jp.co.cyberagent.instant-replay/UniEnc/Plugins
+          git add ./Packages/jp.co.cyberagent.instant-replay/UniEnc/.source-fingerprint
           git add ./InstantReplay.Externals/src/UniEnc/Plugins
           git add ./THIRD-PARTY-NOTICES.md
           git config --local user.email "41898282+github-actions[bot]@users.noreply.github.com"
