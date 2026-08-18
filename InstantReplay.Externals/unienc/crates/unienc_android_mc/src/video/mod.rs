@@ -210,7 +210,7 @@ async fn push_video_impl<R: unienc_common::Runtime + 'static>(
                     }
                 }
                 if sleep {
-                    tokio::time::sleep(Duration::from_millis(10)).await;
+                    yield_now().await;
                 }
             }
 
