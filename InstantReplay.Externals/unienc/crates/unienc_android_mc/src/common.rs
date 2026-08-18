@@ -255,22 +255,34 @@ impl MediaCodec {
             &[],
         )?;
 
-        // getCanonicalName
-        let canonical_name = env
-            .call_method(&codec_info, "getCanonicalName", "()Ljava/lang/String;", &[])?
+        // MediaCodecInfo.getCanonicalName() and isHardwareAccelerated() were added in API 29.
+        // On older API levels, fall back to getName() (available since API 16) and omit the
+        // hardware acceleration flag.
+        let api_level = get_android_api_level()?;
+
+        let name_method = if api_level >= 29 {
+            "getCanonicalName"
+        } else {
+            "getName"
+        };
+        let name = env
+            .call_method(&codec_info, name_method, "()Ljava/lang/String;", &[])?
             .l()?;
-        let canonical_name_str = JString::from(canonical_name);
-        let canonical_name_rust = env.get_string(&canonical_name_str)?.to_str()?.to_string();
+        let name_str = JString::from(name);
+        let name_rust = env.get_string(&name_str)?.to_str()?.to_string();
 
-        // isHardwareAccelerated
-        let is_hardware_accelerated = env
-            .call_method(codec_info, "isHardwareAccelerated", "()Z", &[])?
-            .z()?;
+        if api_level >= 29 {
+            let is_hardware_accelerated = env
+                .call_method(codec_info, "isHardwareAccelerated", "()Z", &[])?
+                .z()?;
 
-        println!(
-            "MediaCodec Info: Canonical Name: {}, Hardware Accelerated: {}",
-            canonical_name_rust, is_hardware_accelerated
-        );
+            println!(
+                "MediaCodec Info: Name: {}, Hardware Accelerated: {}",
+                name_rust, is_hardware_accelerated
+            );
+        } else {
+            println!("MediaCodec Info: Name: {}", name_rust);
+        }
 
         Ok(())
     }
@@ -767,6 +779,12 @@ pub(crate) fn format_to_map(
     env: &mut JNIEnv,
     format: &JObject,
 ) -> Result<HashMap<String, MediaFormatValue>> {
+    // MediaFormat.getKeys() and getValueTypeForKey() were added in API 29. On older API levels
+    // the format has to be probed with a fixed list of well-known keys instead.
+    if get_android_api_level()? < 29 {
+        return format_to_map_legacy(env, format);
+    }
+
     // serialize
     let keys = env
         .call_method(format, "getKeys", "()Ljava/util/Set;", &[])?
@@ -856,6 +874,177 @@ pub(crate) fn format_to_map(
         }
     }
     Ok(map)
+}
+
+/// Well-known MediaFormat keys probed by [`format_to_map_legacy`].
+///
+/// MediaFormat.getKeys() (API 29+) enumerates the keys actually present in the format. On older
+/// API levels there is no way to enumerate them, so this fixed list is probed instead. It covers
+/// the keys that encoder output formats are known to carry, including the codec-specific data
+/// ("csd-*") required by MediaMuxer.addTrack().
+const LEGACY_MEDIA_FORMAT_KEYS: &[&str] = &[
+    // common
+    "mime",
+    "bitrate",
+    "bitrate-mode",
+    "max-input-size",
+    "durationUs",
+    "track-id",
+    "language",
+    "profile",
+    "level",
+    "csd-0",
+    "csd-1",
+    "csd-2",
+    // video
+    "width",
+    "height",
+    "color-format",
+    "color-range",
+    "color-standard",
+    "color-transfer",
+    "frame-rate",
+    "i-frame-interval",
+    "rotation-degrees",
+    "crop-left",
+    "crop-right",
+    "crop-top",
+    "crop-bottom",
+    "stride",
+    "slice-height",
+    "display-width",
+    "display-height",
+    "sar-width",
+    "sar-height",
+    "max-width",
+    "max-height",
+    "hdr-static-info",
+    // audio
+    "sample-rate",
+    "channel-count",
+    "channel-mask",
+    "aac-profile",
+    "aac-sbr-mode",
+    "is-adts",
+    "pcm-encoding",
+    "encoder-delay",
+    "encoder-padding",
+];
+
+/// Serialize a MediaFormat on API levels below 29, where MediaFormat.getKeys() and
+/// MediaFormat.getValueTypeForKey() are unavailable.
+///
+/// Instead of enumerating the keys, each key in [`LEGACY_MEDIA_FORMAT_KEYS`] is tested with
+/// MediaFormat.containsKey() (available since API 16) and read back through
+/// [`get_media_format_value_untyped`].
+fn format_to_map_legacy(
+    env: &mut JNIEnv,
+    format: &JObject,
+) -> Result<HashMap<String, MediaFormatValue>> {
+    let mut map = HashMap::<String, MediaFormatValue>::new();
+
+    for key in LEGACY_MEDIA_FORMAT_KEYS {
+        let key_obj = env.new_string(key)?;
+
+        let contains = env
+            .call_method(
+                format,
+                "containsKey",
+                "(Ljava/lang/String;)Z",
+                &[JValue::Object(&key_obj)],
+            )?
+            .z()?;
+        if !contains {
+            continue;
+        }
+
+        match get_media_format_value_untyped(env, format, &key_obj)? {
+            Some(value) => {
+                map.insert((*key).to_string(), value);
+            }
+            None => {
+                println!(
+                    "MediaFormat key '{}' has an unsupported value type; skipped",
+                    key
+                );
+            }
+        }
+    }
+
+    Ok(map)
+}
+
+/// Read a single MediaFormat entry without knowing its value type in advance.
+///
+/// MediaFormat.getValueTypeForKey() requires API 29, so every typed getter is tried in turn and
+/// the ClassCastException raised by a type mismatch is discarded. Returns `None` when none of the
+/// supported types match.
+fn get_media_format_value_untyped<'local>(
+    env: &mut JNIEnv<'local>,
+    format: &JObject,
+    key: &JString,
+) -> Result<Option<MediaFormatValue>> {
+    if let Some(value) =
+        try_call_format_getter(env, format, key, "getInteger", "(Ljava/lang/String;)I")?
+    {
+        return Ok(Some(MediaFormatValue::Integer(value.i()?)));
+    }
+    if let Some(value) =
+        try_call_format_getter(env, format, key, "getLong", "(Ljava/lang/String;)J")?
+    {
+        return Ok(Some(MediaFormatValue::Long(value.j()?)));
+    }
+    if let Some(value) =
+        try_call_format_getter(env, format, key, "getFloat", "(Ljava/lang/String;)F")?
+    {
+        return Ok(Some(MediaFormatValue::Float(value.f()?)));
+    }
+    if let Some(value) = try_call_format_getter(
+        env,
+        format,
+        key,
+        "getString",
+        "(Ljava/lang/String;)Ljava/lang/String;",
+    )? {
+        let value = JString::from(value.l()?);
+        let value = env.get_string(&value)?;
+        return Ok(Some(MediaFormatValue::String(value.into())));
+    }
+    if let Some(value) = try_call_format_getter(
+        env,
+        format,
+        key,
+        "getByteBuffer",
+        "(Ljava/lang/String;)Ljava/nio/ByteBuffer;",
+    )? {
+        let value = value.l()?;
+        let data = read_from_buffer_all(env, &value)?;
+        return Ok(Some(MediaFormatValue::ByteBuffer(data)));
+    }
+
+    Ok(None)
+}
+
+/// Call a single-argument MediaFormat getter, returning `None` and clearing the pending exception
+/// when the stored value is of another type.
+///
+/// A pending JNI exception that is left uncleared aborts the process as soon as control returns to
+/// the JVM, so it must be discarded here.
+fn try_call_format_getter<'local>(
+    env: &mut JNIEnv<'local>,
+    format: &JObject,
+    key: &JString,
+    method: &str,
+    signature: &str,
+) -> Result<Option<jni::objects::JValueOwned<'local>>> {
+    match env.call_method(format, method, signature, &[JValue::Object(key)]) {
+        Ok(value) => Ok(Some(value)),
+        Err(jni::errors::Error::JavaException) => {
+            env.exception_clear()?;
+            Ok(None)
+        }
+        Err(error) => Err(error.into()),
+    }
 }
 
 /// ImageWriter wrapper (API 29+)
