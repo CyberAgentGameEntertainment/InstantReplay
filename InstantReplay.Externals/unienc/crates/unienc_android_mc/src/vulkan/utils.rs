@@ -58,7 +58,7 @@ impl FencePool {
                 pool: self.clone(),
             })
         } else {
-            println!("Creating new fence");
+            log::trace!("Creating new fence");
             let fence_info = ash::vk::FenceCreateInfo::default();
             Ok(FenceGuard {
                 fence: VulkanFenceHandle::new(

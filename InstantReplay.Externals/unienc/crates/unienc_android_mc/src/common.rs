@@ -267,9 +267,10 @@ impl MediaCodec {
             .call_method(codec_info, "isHardwareAccelerated", "()Z", &[])?
             .z()?;
 
-        println!(
+        log::info!(
             "MediaCodec Info: Canonical Name: {}, Hardware Accelerated: {}",
-            canonical_name_rust, is_hardware_accelerated
+            canonical_name_rust,
+            is_hardware_accelerated
         );
 
         Ok(())
@@ -294,7 +295,7 @@ impl MediaCodec {
             .call_method(&key_set, "iterator", "()Ljava/util/Iterator;", &[])?
             .l()?;
 
-        println!("MediaCodec Metrics:");
+        log::debug!("MediaCodec Metrics:");
         while env.call_method(&iterator, "hasNext", "()Z", &[])?.z()? {
             let key = env
                 .call_method(&iterator, "next", "()Ljava/lang/Object;", &[])?
@@ -317,7 +318,7 @@ impl MediaCodec {
             let value_jstr = JString::from(value_str);
             let value_rust = env.get_string(&value_jstr)?.to_str()?.to_string();
 
-            println!("  {}: {}", key_rust, value_rust);
+            log::debug!("  {}: {}", key_rust, value_rust);
         }
 
         Ok(())
@@ -706,7 +707,14 @@ pub(crate) async fn pull_encoded_data_with_codec(
                 // Read encoded data
                 let encoded_data = read_from_buffer(env, &output_buffer, offset, size)?;
 
-                // println!("new frame data: is_video: {}, flags: {:?}, length: {}, timestamp: {}, offset: {}, {:?}", is_video, flags, encoded_data.len(), timestamp, offset, encoded_data.iter().take(32).collect::<Vec<_>>());
+                log::trace!(
+                    "new frame data: flags: {:?}, length: {}, timestamp: {}, offset: {}, {:?}",
+                    flags,
+                    encoded_data.len(),
+                    timestamp,
+                    offset,
+                    encoded_data.iter().take(32).collect::<Vec<_>>()
+                );
 
                 let video_data = CommonEncodedData {
                     content: CommonEncodedDataContent::Buffer {
@@ -877,11 +885,11 @@ impl ImageWriter {
 
         let writer = if api_level >= 33 {
             // API 33+: Use ImageWriter.Builder with explicit usage flags
-            println!("Using ImageWriter.Builder for API level {}", api_level);
+            log::debug!("Using ImageWriter.Builder for API level {}", api_level);
             Self::new_with_builder(env, surface, max_images, width, height)?
         } else {
             // API 29-32: Use ImageWriter.newInstance with format parameter
-            println!(
+            log::debug!(
                 "Using ImageWriter.newInstance with RGBA_8888 format for API level {}",
                 api_level
             );
@@ -1104,12 +1112,10 @@ pub fn write_bgra_to_yuv_planes_with_padding(
     }
 
     let (y_data, u_data, v_data) = sample.to_yuv420_planes(Some((padded_width, padded_height)))?;
-    /*
-    println!("padded: {}x{}", padded_width, padded_height);
-    println!("Y: {}", planes[0]);
-    println!("U: {}", planes[1]);
-    println!("V: {}", planes[2]);
-    */
+    log::trace!("padded: {}x{}", padded_width, padded_height);
+    log::trace!("Y: {}", planes[0]);
+    log::trace!("U: {}", planes[1]);
+    log::trace!("V: {}", planes[2]);
 
     // Write to planes using padded dimensions
     planes[0].write_component_data(&y_data, padded_width, padded_height, 1, 1)?;

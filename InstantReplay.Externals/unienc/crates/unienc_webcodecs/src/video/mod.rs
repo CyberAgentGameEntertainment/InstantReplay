@@ -89,7 +89,7 @@ impl<R: Runtime + 'static> EncoderInput for WebCodecsVideoEncoderInput<R> {
                             is_key,
                         };
                         if let Err(err) = tx.try_send(encoded_data) {
-                            println!(
+                            log::error!(
                                 "WebCodecsVideoEncoder: Failed to send encoded data: {}",
                                 err
                             );

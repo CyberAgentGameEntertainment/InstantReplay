@@ -128,7 +128,7 @@ struct PixelBufferPoolEntry {
 }
 
 pub(crate) fn unity_plugin_load(interfaces: &unity_native_plugin::interface::UnityInterfaces) {
-    println!("unienc: unity_plugin_load");
+    log::info!("unity_plugin_load");
     let graphics = interfaces.interface::<UnityGraphics>().unwrap();
 
     if let Some(profiler) = interfaces.interface::<UnityProfiler>()
@@ -268,7 +268,7 @@ struct VertexUniforms {
 }
 
 extern "system" fn on_device_event(ev_type: GfxDeviceEventType) {
-    println!("unienc: on_device_event {ev_type:?}");
+    log::debug!("on_device_event {ev_type:?}");
     match ev_type {
         unity_native_plugin::graphics::GfxDeviceEventType::Initialize => {
             let graphics = GRAPHICS.get().unwrap().lock().unwrap();
@@ -283,7 +283,7 @@ extern "system" fn on_device_event(ev_type: GfxDeviceEventType) {
                 let event_id = graphics.reserve_event_id_range(1);
 
                 EVENT_ID.set(event_id).unwrap();
-                println!("unienc: reserved event id {event_id}");
+                log::debug!("reserved event id {event_id}");
 
                 let interfaces = unity_native_plugin::interface::UnityInterfaces::get();
                 let metal = interfaces.interface::<UnityGraphicsMetalV2>().unwrap();

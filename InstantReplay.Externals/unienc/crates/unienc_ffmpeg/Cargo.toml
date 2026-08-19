@@ -7,6 +7,7 @@ authors.workspace = true
 
 [dependencies]
 thiserror = { workspace = true }
+log = { workspace = true }
 tokio = { version = "1.45.1", features = ["time", "macros", "sync", "net", "process", "io-util"] }
 unienc_common = { workspace = true }
 bincode = { workspace = true }

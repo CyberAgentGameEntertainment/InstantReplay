@@ -1215,6 +1215,7 @@ dependencies = [
  "bitflags",
  "jni",
  "libc",
+ "log",
  "ndk-sys",
  "thiserror 2.0.17",
  "tokio",
@@ -1230,6 +1231,7 @@ dependencies = [
  "bitflags",
  "block2",
  "dispatch2",
+ "log",
  "mimalloc",
  "objc2",
  "objc2-audio-toolbox",
@@ -1256,7 +1258,7 @@ dependencies = [
  "blocking",
  "csbindgen",
  "futures",
- "libc",
+ "log",
  "mimalloc",
  "ndk-sys",
  "thiserror 2.0.17",
@@ -1281,6 +1283,7 @@ dependencies = [
  "bincode",
  "cros-codecs",
  "libc",
+ "log",
  "thiserror 2.0.17",
  "tokio",
  "unienc_common",
@@ -1292,6 +1295,7 @@ version = "1.4.1"
 dependencies = [
  "bincode",
  "futures",
+ "log",
  "muxide",
  "thiserror 2.0.17",
  "unienc_common",
@@ -1302,6 +1306,7 @@ name = "unienc_windows_mf"
 version = "1.4.1"
 dependencies = [
  "bincode",
+ "log",
  "thiserror 2.0.17",
  "tokio",
  "unienc_common",
