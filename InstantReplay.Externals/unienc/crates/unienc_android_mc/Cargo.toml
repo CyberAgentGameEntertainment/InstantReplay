@@ -9,7 +9,7 @@ authors.workspace = true
 thiserror = { workspace = true }
 jni = "0.21.1"
 java_api_macros = { path = "../java_api_macros" }
-tokio = { version = "1.45.1", features = ["time", "sync"] }
+tokio = { version = "1.45.1", features = ["sync"] }
 unienc_common = { workspace = true, features = ["unity"] }
 bincode = { workspace = true }
 ndk-sys = { version = "0.6.0", features = ["media"] }

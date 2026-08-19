@@ -24,13 +24,23 @@ use unienc_common::{
 use crate::{MetalTexture, common::UnsafeSendRetained, metal};
 use unienc_common::TryFromUnityNativeTexturePointer;
 
+/// Capacity of the bounded channel carrying encoded frames from the VideoToolbox callback to the
+/// consumer. `push` reserves a slot before submitting each frame, so when the consumer falls behind
+/// and the channel fills up, `push` suspends (backpressure) instead of the callback dropping
+/// already-encoded frames (which would break the P-frame reference chain).
+const OUTPUT_CHANNEL_CAPACITY: usize = 32;
+
+/// A reserved output-channel slot handed to a single encode callback via the per-frame source-frame
+/// ref-con. Completing the send through it can neither block the callback nor drop the frame.
+type OutputPermit = mpsc::OwnedPermit<Result<VideoEncodedData>>;
+
 pub struct VideoToolboxEncoder {
     input: VideoToolboxEncoderInput,
     output: VideoToolboxEncoderOutput,
 }
 pub struct VideoToolboxEncoderInput {
     session: CompressionSession,
-    tx: Box<mpsc::Sender<VideoEncodedData>>,
+    tx: Box<mpsc::Sender<Result<VideoEncodedData>>>,
     width: u32,
     height: u32,
     bitrate: u32,
@@ -43,7 +53,7 @@ struct CompressionSession {
 unsafe impl Send for VideoToolboxEncoderInput {}
 
 pub struct VideoToolboxEncoderOutput {
-    rx: mpsc::Receiver<VideoEncodedData>,
+    rx: mpsc::Receiver<Result<VideoEncodedData>>,
 }
 
 pub struct VideoEncodedData {
@@ -105,17 +115,33 @@ impl EncodedData for VideoEncodedData {
 }
 
 unsafe extern "C-unwind" fn handle_video_encode_output(
-    output_callback_ref_con: *mut c_void,
-    _source_frame_ref_con: *mut c_void,
-    _status: i32,
+    _output_callback_ref_con: *mut c_void,
+    source_frame_ref_con: *mut c_void,
+    status: i32,
     _info_flags: VTEncodeInfoFlags,
     sample_buffer: *mut CMSampleBuffer,
 ) {
-    let tx = unsafe { &*(output_callback_ref_con as *const mpsc::Sender<VideoEncodedData>) };
+    // Each submitted frame carries a pre-reserved output-channel slot (an OwnedPermit) as its
+    // source-frame ref-con. Completing the send through that permit means this callback never
+    // blocks (it runs on VideoToolbox's internal queue, which complete_frames() waits on) and
+    // never drops an encoded frame (dropping would break the reference chain of subsequent
+    // P-frames). Backpressure is instead applied in `push`, which awaits the reservation before
+    // submitting the frame, so a full channel throttles the producer rather than corrupting output.
+    let permit = unsafe { *Box::from_raw(source_frame_ref_con as *mut OutputPermit) };
+
+    // Propagate encode failures to the output side instead of silently ignoring them.
+    if let Err(err) = status.to_result() {
+        permit.send(Err(err));
+        return;
+    }
 
     if let Some(sample_buffer) = unsafe { Retained::retain(sample_buffer) } {
-        _ = tx.try_send(VideoEncodedData::new(sample_buffer.into()));
-    } // otherwise dropped
+        permit.send(Ok(VideoEncodedData::new(sample_buffer.into())));
+    } else {
+        // The encoder itself dropped the frame (e.g. kVTEncodeInfo_FrameDropped); dropping the
+        // permit returns the reserved slot to the channel.
+        drop(permit);
+    }
 }
 
 unsafe extern "C-unwind" fn release_pixel_buffer(
@@ -141,6 +167,19 @@ impl EncoderInput for VideoToolboxEncoderInput {
     type Data = VideoSample<MetalTexture>;
 
     async fn push(&mut self, data: Self::Data) -> unienc_common::Result<()> {
+        // Reserve an output-channel slot before doing any encode work. When the consumer is behind
+        // and the channel is full, this await suspends `push`, propagating backpressure up the
+        // pipeline so the C# side drops *input* frames (via DroppingChannelInput) instead of us
+        // dropping already-encoded output. Holding the OwnedPermit (Send) across the blit await
+        // below is fine; if building the frame fails, dropping the permit releases the slot.
+        let permit = self
+            .tx
+            .as_ref()
+            .clone()
+            .reserve_owned()
+            .await
+            .map_err(AppleError::from)?;
+
         let buffer = match data.frame {
             unienc_common::VideoFrame::Bgra32(bgra32) => {
                 let buffer = bgra32.buffer;
@@ -218,30 +257,49 @@ impl EncoderInput for VideoToolboxEncoderInput {
             }
         };
 
+        // Hand the reserved slot to this frame's encode callback via the source-frame ref-con. No
+        // await happens past this point, so the raw pointer is never held across a suspension.
+        let permit_ptr = Box::into_raw(Box::new(permit));
+
         let mut retry = 0;
 
-        loop {
+        let res = loop {
             let res = unsafe {
                 self.session.inner.encode_frame(
                     &buffer,
                     CMTime::with_seconds(data.timestamp, 720),
                     kCMTimeInvalid,
                     None,
-                    std::ptr::null_mut(),
+                    permit_ptr as *mut c_void,
                     std::ptr::null_mut(),
                 )
             };
 
             if res == kVTInvalidSessionErr && retry == 0 {
-                // VTCompressionSession turns invalid when the app enters background on iOS
-                // retrying once
+                // VTCompressionSession turns invalid when the app enters background on iOS; retry
+                // once with a fresh session, re-passing the same reserved permit.
                 retry += 1;
-                self.session =
-                    CompressionSession::new(self.width, self.height, self.bitrate, &*self.tx)?;
-                continue;
+                match CompressionSession::new(self.width, self.height, self.bitrate) {
+                    Ok(session) => {
+                        self.session = session;
+                        continue;
+                    }
+                    Err(err) => {
+                        // No callback will run for this frame; reclaim the permit to free the slot.
+                        drop(unsafe { Box::from_raw(permit_ptr) });
+                        return Err(err.into());
+                    }
+                }
             }
 
-            break res.to_result()?;
+            break res;
+        };
+
+        if let Err(err) = res.to_result() {
+            // The frame was not accepted, so the callback will never consume the permit; reclaim it
+            // to release the reserved slot.
+            drop(unsafe { Box::from_raw(permit_ptr) });
+            return Err(err.into());
         }
 
         Ok(())
@@ -252,7 +310,11 @@ impl EncoderOutput for VideoToolboxEncoderOutput {
     type Data = VideoEncodedData;
 
     async fn pull(&mut self) -> unienc_common::Result<Option<Self::Data>> {
-        Ok(self.rx.recv().await)
+        match self.rx.recv().await {
+            Some(Ok(data)) => Ok(Some(data)),
+            Some(Err(err)) => Err(err.into()),
+            None => Ok(None),
+        }
     }
 }
 
@@ -273,12 +335,7 @@ impl Drop for VideoToolboxEncoderInput {
 }
 
 impl CompressionSession {
-    fn new(
-        width: u32,
-        height: u32,
-        bitrate: u32,
-        tx: *const mpsc::Sender<VideoEncodedData>,
-    ) -> Result<Self> {
+    fn new(width: u32, height: u32, bitrate: u32) -> Result<Self> {
         let mut session: *mut VTCompressionSession = std::ptr::null_mut();
 
         unsafe {
@@ -291,7 +348,9 @@ impl CompressionSession {
                 None,
                 None,
                 Some(handle_video_encode_output),
-                tx as *mut c_void,
+                // The output callback receives its channel slot per-frame via the source-frame
+                // ref-con (see `push`), so no session-level ref-con is needed.
+                std::ptr::null_mut(),
                 NonNull::new(&mut session).ok_or(AppleError::NonNullCreationFailed)?,
             )
             .to_result()?;
@@ -330,14 +389,14 @@ impl CompressionSession {
 
 impl VideoToolboxEncoder {
     pub fn new(options: &impl unienc_common::VideoEncoderOptions) -> Result<Self> {
-        let (tx, rx) = mpsc::channel(32);
+        let (tx, rx) = mpsc::channel(OUTPUT_CHANNEL_CAPACITY);
         let tx = Box::new(tx);
 
         let (width, height, bitrate) = (options.width(), options.height(), options.bitrate());
 
         Ok(VideoToolboxEncoder {
             input: VideoToolboxEncoderInput {
-                session: CompressionSession::new(width, height, bitrate, &*tx)?,
+                session: CompressionSession::new(width, height, bitrate)?,
                 tx,
                 width,
                 height,
