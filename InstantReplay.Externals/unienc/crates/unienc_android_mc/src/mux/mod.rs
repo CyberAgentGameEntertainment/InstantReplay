@@ -113,7 +113,7 @@ async fn push(
     match data.content {
         CommonEncodedDataContent::FormatInfo(mut map) => {
             if track_index.is_some() {
-                println!("track already has metadata");
+                log::warn!("track already has metadata");
                 return Ok(());
             }
 
@@ -167,7 +167,13 @@ async fn push(
             let env = &mut attach_current_thread()?;
             let flags = buffer_flag;
 
-            // println!("writing sample data: is_video: {}, flags({}): {:?}, length: {}, timestamp: {}", is_video, track_index, flags, data.len(), timestamp_us);
+            log::trace!(
+                "writing sample data: flags({}): {:?}, length: {}, timestamp: {}",
+                track_index,
+                flags,
+                data.len(),
+                timestamp_us
+            );
 
             write_sample_data(env, muxer, *track_index, &data, timestamp_us, flags)?;
         }
@@ -231,7 +237,7 @@ impl CompletionHandle for MediaMuxerCompletionHandle {
 }
 
 async fn finish_completion_handle_impl(handle: MediaMuxerCompletionHandle) -> Result<()> {
-    println!("waiting for all tracks to finish");
+    log::debug!("waiting for all tracks to finish");
 
     handle.video_finish_rx.await??;
     handle.audio_finish_rx.await??;

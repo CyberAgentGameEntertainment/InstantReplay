@@ -146,7 +146,7 @@ impl MuxerInput for FFmpegMuxerAudioInput {
 impl CompletionHandle for FFmpegCompletionHandle {
     async fn finish(self) -> unienc_common::Result<()> {
         let result = self.child.wait().await?;
-        println!("FFmpeg exited: {}", result);
+        log::debug!("FFmpeg exited: {}", result);
         if result.success() {
             Ok(())
         } else {

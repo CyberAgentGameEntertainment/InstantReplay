@@ -163,8 +163,6 @@ impl EncoderOutput for FFmpegAudioEncoderOutput {
             sample_rate: self.sample_rate,
         };
 
-        // println!("{data:?}");
-
         Ok(Some(data))
     }
 }
