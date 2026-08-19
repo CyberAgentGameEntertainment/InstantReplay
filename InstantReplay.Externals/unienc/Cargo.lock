@@ -1226,6 +1226,7 @@ dependencies = [
  "ash",
  "bincode",
  "bitflags",
+ "java_api_macros",
  "jni",
  "libc",
  "ndk-sys",
