@@ -1,0 +1,18 @@
+# mimalloc symbols to localize when libunienc_c.a is statically linked into
+# UnityFramework (iOS). Consumed via `ld -r -unexported_symbols_list`.
+#
+# We localize ONLY mimalloc's own symbols so they no longer coalesce with Unity
+# 6.5's built-in mimalloc. Everything else (the `_unienc*` FFI entry points AND
+# the Rust runtime symbols such as `rust_eh_personality`) is left global on
+# purpose: localizing personality routines would give each linked static lib its
+# own copy, and the compact-unwind format can encode at most 3 personality
+# routines per image -> "ld: Too many personality routines for compact unwind".
+#
+# The three underscore depths cover the C sources `mi_*`, `_mi_*` and `__mi_*`
+# (Mach-O prepends one leading underscore). Verified to match all 432 mimalloc
+# symbols in the current unity-fork build with zero false positives.
+_mi_*
+__mi_*
+___mi_*
+_heap_main
+_theap_main

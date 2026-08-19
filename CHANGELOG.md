@@ -1,3 +1,31 @@
+## [1.6.8] - 2026/07/24
+
+### Fixed
+
+- Fixed the Windows native binary shipped in 1.6.7 not actually containing the fix for the "channel closed" export error, because it was not rebuilt for that release. The fix is now included in the shipped binary.
+
+## [1.6.7] - 2026/07/21
+
+### Fixed
+
+- Fixed video export failing with a "channel closed" error on some Windows builds where the OS MPEG4 media sink rejected the end-of-segment marker. This case is now handled without aborting the export, and the output file handle is properly released even when muxing fails.
+
+## [1.6.6] - 2026/07/13
+
+### Fixed
+
+- Fixed iOS players built with Unity 6.5 or newer failing to link with "ld: Too many personality routines for compact unwind" when InstantReplay's native library is statically linked into UnityFramework. The iOS crash fix introduced in 1.6.5 now localizes only the bundled memory allocator's symbols, leaving the Rust runtime symbols intact.
+
+## [1.6.5] - 2026/07/10
+
+### Fixed
+
+- Fixed a crash on iOS players built with Unity 6.5 or newer, caused by a native memory allocator symbol conflict between InstantReplay's native library and Unity's own runtime.
+- Fixed a native thread and memory leak where worker threads used by the recording engine were never released after disposing a recording session, causing threads and memory to accumulate across domain reloads or repeated session creation.
+- Fixed a rare race condition that could corrupt or double-free video frame buffers during realtime recording, potentially causing crashes or corrupted output.
+- Fixed audio occasionally producing clicking noise and gradually drifting out of sync with video, caused by a rounding error in audio timestamp handling.
+- Fixed fixed-frame-rate output pacing becoming irregular under frame rate fluctuations; output intervals are now consistently spaced as configured.
+
 ## [1.6.4] - 2026/06/26
 
 ### Fixed

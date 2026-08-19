@@ -40,10 +40,14 @@ namespace UniEnc
 
             Reset();
 
+            // Capture the handle before publishing this instance to the pool;
+            // once pooled, another thread may rent it and overwrite the handle field.
+            var movedHandle = handle;
+
             if (++Token < ushort.MaxValue)
                 AddToPool();
 
-            return handle;
+            return movedHandle;
         }
 
         protected abstract void AddToPool();

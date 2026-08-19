@@ -12,15 +12,12 @@ namespace InstantReplay
     {
         private readonly AudioEncoder _audioEncoder;
         private readonly IAsyncPipelineInput<EncodedFrame> _next;
-        private readonly double _sampleRateInOptions;
         private readonly SharedTaskRaceGuard _raceGuard;
         private readonly Task _transferTask;
 
-        internal AudioEncoderInput(AudioEncoder audioEncoder, double sampleRateInOptions,
-            IAsyncPipelineInput<EncodedFrame> next)
+        internal AudioEncoderInput(AudioEncoder audioEncoder, IAsyncPipelineInput<EncodedFrame> next)
         {
             _audioEncoder = audioEncoder ?? throw new ArgumentNullException(nameof(audioEncoder));
-            _sampleRateInOptions = sampleRateInOptions;
             _next = next;
             _transferTask = TransferAsync(next);
             _raceGuard = new SharedTaskRaceGuard(_transferTask);
@@ -50,10 +47,14 @@ namespace InstantReplay
             if (value.Data.IsEmpty)
                 throw new ArgumentException("Audio data cannot be empty", nameof(value.Data));
 
-            // Push samples to audio encoder
+            // Push samples to audio encoder.
+            // Use the integer sample position carried on the frame instead of reconstructing it from the
+            // seconds-based Timestamp; `(ulong)(Timestamp * sampleRate)` truncates and intermittently lands
+            // one sample early, which the native encoder treats as a one-sample forward gap and fills with
+            // silence (audible clicks and audio drift).
             try
             {
-                await _audioEncoder.PushSamplesAsync(value.Data, (ulong)(value.Timestamp * _sampleRateInOptions))
+                await _audioEncoder.PushSamplesAsync(value.Data, (ulong)value.SamplePosition)
                     .ConfigureAwait(false);
             }
             catch (ObjectDisposedException)
