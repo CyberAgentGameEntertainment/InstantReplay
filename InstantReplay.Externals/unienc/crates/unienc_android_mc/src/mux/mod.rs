@@ -4,7 +4,10 @@ use tokio::sync::{RwLock, oneshot};
 use unienc_common::{CompletionHandle, Muxer, MuxerInput};
 
 use crate::common::*;
-use crate::config::MUXER_OUTPUT_FORMAT_MPEG_4;
+use crate::config::{
+    COLOR_RANGE_LIMITED, COLOR_STANDARD_BT709, COLOR_TRANSFER_SDR_VIDEO,
+    MUXER_OUTPUT_FORMAT_MPEG_4, format_keys,
+};
 use crate::error::{AndroidError, Result};
 use crate::java::*;
 
@@ -126,6 +129,23 @@ async fn push(
                 map.insert(
                     "height".to_string(),
                     crate::common::MediaFormatValue::Integer(height as i32),
+                );
+
+                // The track format is what MediaMuxer writes the `colr` box from. These keys are
+                // set on the encoder and most codecs echo them back in their output format, but
+                // that is not guaranteed across vendors, so state them here as well. The values
+                // must match the ones `create_video_format` configures the encoder with.
+                map.insert(
+                    format_keys::KEY_COLOR_STANDARD.to_string(),
+                    crate::common::MediaFormatValue::Integer(COLOR_STANDARD_BT709),
+                );
+                map.insert(
+                    format_keys::KEY_COLOR_TRANSFER.to_string(),
+                    crate::common::MediaFormatValue::Integer(COLOR_TRANSFER_SDR_VIDEO),
+                );
+                map.insert(
+                    format_keys::KEY_COLOR_RANGE.to_string(),
+                    crate::common::MediaFormatValue::Integer(COLOR_RANGE_LIMITED),
                 );
             }
 
