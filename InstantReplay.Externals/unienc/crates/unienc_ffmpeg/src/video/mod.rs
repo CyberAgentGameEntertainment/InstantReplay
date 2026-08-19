@@ -158,6 +158,21 @@ impl FFmpegVideoEncoder {
                     &format!("{}", options.bitrate()),
                     "-force_key_frames",
                     "expr:gte(t,n_forced*1)",
+                    // Convert to and tag BT.709 limited range. Tagging the frames makes the
+                    // auto-inserted scale filter use the BT.709 matrix for the BGRA to YUV
+                    // conversion (FFmpeg otherwise derives the matrix from the frame size, which
+                    // yields BT.601 at the sizes this library records) and makes the encoder write
+                    // the color information into the SPS VUI. The muxer stream-copies this
+                    // elementary stream, so the VUI is what carries the tags into the MP4.
+                    //
+                    // The `-color_primaries` / `-color_trc` output options would be the more
+                    // obvious spelling, but FFmpeg does not reliably forward them to the encoder:
+                    // as of 8.0.1 only the matrix and the range reach the VUI that way, leaving
+                    // the primaries and the transfer function unspecified. Setting them on the
+                    // frames is honored by every encoder because it does not depend on the
+                    // encoder wrapper reading them off the codec context.
+                    "-vf",
+                    "setparams=color_primaries=bt709:color_trc=bt709:colorspace=bt709:range=tv",
                 ],
                 ffmpeg::Destination::Stdout,
             )?;
