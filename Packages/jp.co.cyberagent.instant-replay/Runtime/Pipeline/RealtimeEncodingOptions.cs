@@ -56,15 +56,18 @@ namespace InstantReplay
         public bool ForceReadback { get; set; }
 
         /// <summary>
-        ///     Storage path for disk-based frame buffer. When set, frames are written to disk instead of memory.
-        ///     Null or empty uses the default in-memory buffer.
+        ///     Enables the disk buffer. When set, encoded frames are written to segment files instead of being held in
+        ///     memory, which lowers memory pressure and makes the footage leading up to a crash recoverable through
+        ///     <see cref="DiskEncodedFrameBufferRecovery" />. <see cref="MaxMemoryUsageBytesForCompressedFrames" /> is not
+        ///     used in that case.
+        ///     Null, the default, keeps the in-memory buffer. Assign <see cref="DiskBufferOptions.Default" /> to enable the
+        ///     disk buffer with its default configuration.
         /// </summary>
-        public string DiskBufferStoragePath { get; set; }
-
-        /// <summary>
-        ///     Maximum disk usage in bytes for the disk buffer. Only used when DiskBufferStoragePath is set.
-        /// </summary>
-        public long MaxDiskUsageBytes { get; set; }
+        /// <remarks>
+        ///     Recording continuously to storage shortens the lifespan of flash memory, so this is intended primarily for
+        ///     development and quality-assurance builds.
+        /// </remarks>
+        public DiskBufferOptions? DiskBuffer { get; set; }
 
         public static ref readonly RealtimeEncodingOptions Default => ref DefaultValue; 
         private static readonly RealtimeEncodingOptions DefaultValue =
