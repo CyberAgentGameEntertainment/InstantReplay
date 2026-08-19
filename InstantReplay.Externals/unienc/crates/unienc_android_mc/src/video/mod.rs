@@ -40,7 +40,7 @@ struct UninitializedState {
     tx: tokio::sync::oneshot::Sender<()>,
     bitrate: u32,
     fps_hint: u32,
-    idr_interval_seconds: Option<f32>,
+    idr_interval_seconds: f32,
 }
 
 enum MediaCodecVideoEncoderInputProcessor {
@@ -380,7 +380,7 @@ fn create_video_format_raw(
     padded_height: u32,
     bitrate: u32,
     fps_hint: u32,
-    idr_interval_seconds: Option<f32>,
+    idr_interval_seconds: f32,
     use_surface: bool,
 ) -> Result<SafeGlobalRef> {
     let format_class = env.find_class("android/media/MediaFormat")?;
@@ -421,16 +421,13 @@ fn create_video_format_raw(
     set_format_integer(env, &format_obj, KEY_BITRATE, bitrate as jint)?;
     set_format_integer(env, &format_obj, KEY_FRAME_RATE, fps_hint as jint)?;
     // MediaFormat.KEY_I_FRAME_INTERVAL accepts a float since API 25, and `min_api` is 26, so the
-    // sub-second range is available without a version guard. Left unset when the caller asked for
-    // the platform default, in which case MediaCodec picks its own interval.
-    if let Some(idr_interval_seconds) = idr_interval_seconds {
-        set_format_float(
-            env,
-            &format_obj,
-            KEY_I_FRAME_INTERVAL,
-            idr_interval_seconds as jfloat,
-        )?;
-    }
+    // sub-second range is available without a version guard.
+    set_format_float(
+        env,
+        &format_obj,
+        KEY_I_FRAME_INTERVAL,
+        idr_interval_seconds as jfloat,
+    )?;
 
     set_format_integer(env, &format_obj, KEY_PRIORITY, 0)?;
     set_format_integer(env, &format_obj, KEY_OPERATING_RATE, fps_hint as jint)?;

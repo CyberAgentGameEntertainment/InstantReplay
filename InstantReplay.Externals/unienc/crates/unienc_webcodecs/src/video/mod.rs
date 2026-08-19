@@ -50,10 +50,8 @@ impl<R: Runtime> WebCodecsVideoEncoder<R> {
                 encoder_handle: None,
                 tx,
                 prev_key_timestamp: None,
-                // WebCodecs has no GOP-length knob; keyframes are requested per frame, so the
-                // platform-default case has to pick a concrete interval. Keep the previous
-                // hardcoded one second.
-                idr_interval_seconds: options.idr_interval_seconds().unwrap_or(1.0) as f64,
+                // WebCodecs has no GOP-length knob, so keyframes are requested per frame.
+                idr_interval_seconds: options.idr_interval_seconds() as f64,
                 runtime: runtime.clone(),
             },
             output: WebCodecsVideoEncoderOutput { rx },

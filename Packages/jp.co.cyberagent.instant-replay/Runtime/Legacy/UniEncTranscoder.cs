@@ -41,7 +41,8 @@ namespace InstantReplay
                     Height = checked((uint)height),
                     Bitrate = (uint)Mathf.Min(width * height * 30 * 0.2f - 25000,
                         width * height * 30 * 0.1f + 1000),
-                    FpsHint = 30
+                    FpsHint = 30,
+                    IdrIntervalSeconds = 1f
                 },
                 new AudioEncoderOptions
                 {

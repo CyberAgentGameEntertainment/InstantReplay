@@ -145,9 +145,8 @@ namespace UniEnc.Native
         public uint fps_hint;
         public uint bitrate;
         /// <summary>
-        ///  Maximum interval between IDR (key) frames, in seconds. Zero or negative means "leave the
-        ///  interval at the platform encoder's default"; `Option&lt;f32&gt;` has no stable `repr(C)` layout,
-        ///  so the absent case is carried by the sentinel instead of a separate discriminant field.
+        ///  Maximum interval between IDR (key) frames, in seconds. Required; the managed side rejects
+        ///  non-positive and non-finite values before the struct crosses the boundary.
         /// </summary>
         public float idr_interval_seconds;
     }

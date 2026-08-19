@@ -131,25 +131,7 @@ impl FFmpegVideoEncoder {
         let height = options.height();
         let cfr = options.fps_hint();
 
-        let mut output_options = vec![
-            "-f".to_owned(),
-            "h264".to_owned(),
-            "-pix_fmt".to_owned(),
-            "yuv420p".to_owned(),
-            "-r".to_owned(),
-            format!("{cfr}"),
-            "-c:v".to_owned(),
-            FFMPEG_CODEC.clone(),
-            "-b:v".to_owned(),
-            format!("{}", options.bitrate()),
-        ];
-
-        // Without `-force_key_frames` the encoder falls back to its own GOP heuristics, which is
-        // what the platform-default case asks for.
-        if let Some(idr_interval_seconds) = options.idr_interval_seconds() {
-            output_options.push("-force_key_frames".to_owned());
-            output_options.push(format!("expr:gte(t,n_forced*{idr_interval_seconds})"));
-        }
+        let idr_interval_seconds = options.idr_interval_seconds();
 
         // encode raw BGRA frames into H.264 stream
         let mut ffmpeg = ffmpeg::Builder::new()
@@ -164,7 +146,23 @@ impl FFmpegVideoEncoder {
                 "-framerate",
                 &format!("{cfr}"),
             ])
-            .build(output_options, ffmpeg::Destination::Stdout)?;
+            .build(
+                [
+                    "-f",
+                    "h264",
+                    "-pix_fmt",
+                    "yuv420p",
+                    "-r",
+                    &format!("{cfr}"),
+                    "-c:v",
+                    &*FFMPEG_CODEC,
+                    "-b:v",
+                    &format!("{}", options.bitrate()),
+                    "-force_key_frames",
+                    &format!("expr:gte(t,n_forced*{idr_interval_seconds})"),
+                ],
+                ffmpeg::Destination::Stdout,
+            )?;
 
         let input = ffmpeg
             .inputs

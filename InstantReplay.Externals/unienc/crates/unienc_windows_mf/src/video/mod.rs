@@ -51,15 +51,13 @@ impl MediaFoundationVideoEncoder {
         };
 
         // Media Foundation expresses the GOP length in frames, so the interval has to be resolved
-        // against the frame rate hint. `CODECAPI_AVEncMPVGOPSize` is optional: encoders that do not
-        // implement it keep their own default rather than failing to activate.
-        let gop_size = options
-            .idr_interval_seconds()
-            .map(|seconds| ((seconds as f64 * options.fps_hint() as f64).round() as u32).max(1));
+        // against the frame rate hint. `CODECAPI_AVEncMPVGOPSize` is optional for an MFT to
+        // implement, so an encoder that rejects it keeps its own GOP length rather than failing to
+        // activate.
+        let gop_size = ((options.idr_interval_seconds() as f64 * options.fps_hint() as f64).round()
+            as u32)
+            .max(1);
         let configure = |transform: &IMFTransform| {
-            let Some(gop_size) = gop_size else {
-                return;
-            };
             let Ok(codec_api) = transform.cast::<ICodecAPI>() else {
                 println!("MFT does not expose ICodecAPI; leaving the GOP size at its default");
                 return;

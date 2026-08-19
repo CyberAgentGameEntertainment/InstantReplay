@@ -18,7 +18,7 @@ pub struct VideoEncoderOptions {
     pub height: u32,
     pub fps_hint: u32,
     pub bitrate: u32,
-    pub idr_interval_seconds: Option<f32>,
+    pub idr_interval_seconds: f32,
 }
 
 #[derive(Copy, Clone)]
@@ -45,7 +45,7 @@ impl unienc::VideoEncoderOptions for VideoEncoderOptions {
         self.bitrate
     }
 
-    fn idr_interval_seconds(&self) -> Option<f32> {
+    fn idr_interval_seconds(&self) -> f32 {
         self.idr_interval_seconds
     }
 }
@@ -114,7 +114,7 @@ fn test_e2e() {
                 height: 720,
                 fps_hint: 1,
                 bitrate: 1000000,
-                idr_interval_seconds: Some(1.0),
+                idr_interval_seconds: 1.0,
             },
             &AudioEncoderOptions {
                 sample_rate: 48000,

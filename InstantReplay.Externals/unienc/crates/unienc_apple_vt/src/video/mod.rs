@@ -45,7 +45,7 @@ pub struct VideoToolboxEncoderInput {
     width: u32,
     height: u32,
     bitrate: u32,
-    idr_interval_seconds: Option<f32>,
+    idr_interval_seconds: f32,
 }
 
 struct CompressionSession {
@@ -342,12 +342,7 @@ impl Drop for VideoToolboxEncoderInput {
 }
 
 impl CompressionSession {
-    fn new(
-        width: u32,
-        height: u32,
-        bitrate: u32,
-        idr_interval_seconds: Option<f32>,
-    ) -> Result<Self> {
+    fn new(width: u32, height: u32, bitrate: u32, idr_interval_seconds: f32) -> Result<Self> {
         let mut session: *mut VTCompressionSession = std::ptr::null_mut();
 
         unsafe {
@@ -394,16 +389,14 @@ impl CompressionSession {
             )
         }
         .to_result()?;
-        if let Some(idr_interval_seconds) = idr_interval_seconds {
-            unsafe {
-                VTSessionSetProperty(
-                    &session,
-                    kVTCompressionPropertyKey_MaxKeyFrameIntervalDuration,
-                    Some(&CFNumber::new_f64(idr_interval_seconds as f64)),
-                )
-            }
-            .to_result()?;
+        unsafe {
+            VTSessionSetProperty(
+                &session,
+                kVTCompressionPropertyKey_MaxKeyFrameIntervalDuration,
+                Some(&CFNumber::new_f64(idr_interval_seconds as f64)),
+            )
         }
+        .to_result()?;
 
         Ok(CompressionSession { inner: session })
     }
