@@ -131,6 +131,8 @@ impl FFmpegVideoEncoder {
         let height = options.height();
         let cfr = options.fps_hint();
 
+        let idr_interval_seconds = options.idr_interval_seconds();
+
         // encode raw BGRA frames into H.264 stream
         let mut ffmpeg = ffmpeg::Builder::new()
             .use_stdin(true)
@@ -157,7 +159,7 @@ impl FFmpegVideoEncoder {
                     "-b:v",
                     &format!("{}", options.bitrate()),
                     "-force_key_frames",
-                    "expr:gte(t,n_forced*1)",
+                    &format!("expr:gte(t,n_forced*{idr_interval_seconds})"),
                 ],
                 ffmpeg::Destination::Stdout,
             )?;

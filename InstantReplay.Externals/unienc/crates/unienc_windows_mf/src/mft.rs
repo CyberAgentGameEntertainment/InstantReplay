@@ -239,12 +239,16 @@ enum Pipeline {
 }
 
 impl Transform {
+    /// `configure` runs on each candidate MFT after it is activated but before the media types are
+    /// negotiated. It is for optional codec properties: anything it fails to apply must leave the
+    /// transform usable, so it cannot report an error.
     pub fn new(
         category: windows_core::GUID,
         input: MFT_REGISTER_TYPE_INFO,
         output: MFT_REGISTER_TYPE_INFO,
         input_type: IMFMediaType,
         output_type: IMFMediaType,
+        configure: &dyn Fn(&IMFTransform),
         runtime: &impl Runtime,
     ) -> Result<(Self, mpsc::Receiver<UnsafeSend<IMFSample>>)> {
         let mfts = MftIter::new(category, input, output);
@@ -259,7 +263,13 @@ impl Transform {
                 println!("Skipping MFT: {}", Self::get_name(&activate)?);
                 continue;
             }
-            match Self::try_activate(activate, &mut input_type, &mut output_type, runtime) {
+            match Self::try_activate(
+                activate,
+                &mut input_type,
+                &mut output_type,
+                configure,
+                runtime,
+            ) {
                 Ok(r) => {
                     result = Some(r);
                 }
@@ -290,12 +300,15 @@ impl Transform {
         activate: IMFActivate,
         input_type: &mut Option<IMFMediaType>,
         output_type: &mut Option<IMFMediaType>,
+        configure: &dyn Fn(&IMFTransform),
         runtime: &impl Runtime,
     ) -> Result<(Self, mpsc::Receiver<UnsafeSend<IMFSample>>)> {
         println!("Trying MFT: {}", Self::get_name(&activate)?);
 
         let is_async = unsafe { activate.GetUINT32(&MF_TRANSFORM_ASYNC) }.unwrap_or(0) != 0;
         let transform = unsafe { activate.ActivateObject::<IMFTransform>()? };
+
+        configure(&transform);
 
         if is_async {
             let attributes = unsafe { transform.GetAttributes()? };

@@ -144,6 +144,11 @@ namespace UniEnc.Native
         public uint height;
         public uint fps_hint;
         public uint bitrate;
+        /// <summary>
+        ///  Maximum interval between IDR (key) frames, in seconds. Required; the managed side rejects
+        ///  non-positive and non-finite values before the struct crosses the boundary.
+        /// </summary>
+        public float idr_interval_seconds;
     }
 
     [StructLayout(LayoutKind.Sequential)]
