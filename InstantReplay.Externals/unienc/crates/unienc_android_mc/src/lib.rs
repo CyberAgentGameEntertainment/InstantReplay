@@ -6,10 +6,12 @@ use std::sync::OnceLock;
 use unienc_common::{EncodingSystem, TryFromUnityNativeTexturePointer};
 
 pub mod audio;
+pub mod bindings;
 pub mod common;
 pub mod config;
 pub mod error;
 mod java;
+pub mod java_api;
 pub mod mux;
 pub mod video;
 mod vulkan;

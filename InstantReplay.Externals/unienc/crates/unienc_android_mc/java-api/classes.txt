@@ -1,0 +1,25 @@
+# Java classes whose members are declared in `src/bindings.rs`.
+#
+# `cargo run -p android_api_metadata -- --classes crates/unienc_android_mc/java-api/classes.txt \
+#      --out crates/unienc_android_mc/java-api/android-api-versions.txt`
+# extracts these classes and their supertypes from the Android SDK's api-versions.xml.
+#
+# Adding a new class here requires regenerating android-api-versions.txt; adding a new member of a
+# class that is already listed does not.
+
+android/media/MediaCodec
+android/media/MediaCodec$BufferInfo
+android/media/MediaCodecInfo
+android/media/MediaFormat
+android/media/MediaMuxer
+android/media/Image
+android/media/Image$Plane
+android/media/ImageWriter
+android/media/ImageWriter$Builder
+android/hardware/HardwareBuffer
+android/os/Build$VERSION
+android/os/PersistableBundle
+java/nio/ByteBuffer
+java/util/Iterator
+java/util/Set
+java/lang/Object
