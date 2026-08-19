@@ -32,5 +32,10 @@ blocking = "1.6.2"
 
 [features]
 default = []
-unity = ["unienc_common/unity"]
+unity = [
+    "unienc_common/unity",
+    "unienc_windows_mf/unity",
+    "unienc_ffmpeg/unity",
+    "unienc_webcodecs/unity",
+]
 mimalloc = ["unienc_apple_vt/mimalloc"]

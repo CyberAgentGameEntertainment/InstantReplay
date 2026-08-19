@@ -24,3 +24,10 @@ windows = { version = "0.61.3", features = [
     "Win32_System_Com_StructuredStorage",
     "Win32_System_Variant"
 ] }
+
+[features]
+default = []
+# Lets `unienc_common::unity::UnityPlugin` be implemented for this backend. The implementation is
+# empty (this backend has no Unity rendering integration), but it has to exist for the shared
+# `PlatformEncodingSystem::unity_plugin_load` call in `unienc_c` to resolve on this platform.
+unity = ["unienc_common/unity"]

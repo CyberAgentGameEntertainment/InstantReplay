@@ -12,3 +12,10 @@ unienc_common = { workspace = true }
 bincode = { workspace = true }
 futures = "0.3.31"
 muxide = "0.1.4"
+
+[features]
+default = []
+# Lets `unienc_common::unity::UnityPlugin` be implemented for this backend. The implementation is
+# empty (this backend has no Unity rendering integration), but it has to exist for the shared
+# `PlatformEncodingSystem::unity_plugin_load` call in `unienc_c` to resolve on this platform.
+unity = ["unienc_common/unity"]

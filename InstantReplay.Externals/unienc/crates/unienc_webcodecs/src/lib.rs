@@ -20,6 +20,18 @@ pub struct WebCodecsEncodingSystem<
     runtime: R,
 }
 
+/// WebCodecs has no Unity rendering integration, so both hooks keep the trait's empty default
+/// bodies. The implementation still has to exist for `unity_plugin_load` to resolve on wasm, where
+/// the same call site in `unienc_c` is shared with the Metal and Vulkan backends.
+#[cfg(feature = "unity")]
+impl<
+    V: unienc_common::VideoEncoderOptions,
+    A: unienc_common::AudioEncoderOptions,
+    R: unienc_common::Runtime,
+> unienc_common::unity::UnityPlugin for WebCodecsEncodingSystem<V, A, R>
+{
+}
+
 impl<
     V: unienc_common::VideoEncoderOptions,
     A: unienc_common::AudioEncoderOptions,
