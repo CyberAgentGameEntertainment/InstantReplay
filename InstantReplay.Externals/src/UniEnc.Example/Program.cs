@@ -14,8 +14,7 @@ using var encodingSystem = new EncodingSystem(new VideoEncoderOptions
         Width = width,
         Height = height,
         FpsHint = framerate,
-        Bitrate = 2500000, // 2.5Mbps
-        IdrIntervalSeconds = 1f
+        Bitrate = 2500000 // 2.5Mbps
     },
     new AudioEncoderOptions
     {

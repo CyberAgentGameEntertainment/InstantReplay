@@ -88,8 +88,7 @@ namespace InstantReplay.Examples
                         // and a lower bound
                         width * height * LowerBitPerPixel + LowerBitPerPixelBias
                     ),
-                    FpsHint = (uint)fixedFrameRate,
-                    IdrIntervalSeconds = 1f
+                    FpsHint = (uint)fixedFrameRate
                 },
                 AudioOptions = new AudioEncoderOptions
                 {
