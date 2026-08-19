@@ -2,7 +2,7 @@ use bincode::{Decode, Encode};
 use jni::{
     JNIEnv,
     objects::{JByteArray, JObject, JString, JValue},
-    sys::{jboolean, jint, jlong},
+    sys::{jboolean, jfloat, jint, jlong},
 };
 use std::pin::Pin;
 use std::task::{Context, Poll};
@@ -645,6 +645,17 @@ pub fn set_format_integer(env: &JNIEnv, format: &JObject, key: &str, value: jint
         "setInteger",
         "(Ljava/lang/String;I)V",
         &[JValue::Object(&key_str), JValue::Int(value)],
+    )
+}
+
+pub fn set_format_float(env: &JNIEnv, format: &JObject, key: &str, value: jfloat) -> Result<()> {
+    let key_str = to_java_string(env, key)?;
+    call_void_method(
+        env,
+        format,
+        "setFloat",
+        "(Ljava/lang/String;F)V",
+        &[JValue::Object(&key_str), JValue::Float(value)],
     )
 }
 

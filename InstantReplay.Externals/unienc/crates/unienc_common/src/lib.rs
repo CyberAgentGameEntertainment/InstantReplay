@@ -95,6 +95,13 @@ pub trait VideoEncoderOptions: Clone + Copy {
     fn height(&self) -> u32;
     fn fps_hint(&self) -> u32;
     fn bitrate(&self) -> u32;
+
+    /// Maximum interval between IDR (key) frames, in seconds. `None` leaves the interval at the
+    /// platform encoder's own default, which differs per platform and may be considerably longer
+    /// than a second.
+    fn idr_interval_seconds(&self) -> Option<f32> {
+        None
+    }
 }
 
 pub trait AudioEncoderOptions: Clone + Copy {

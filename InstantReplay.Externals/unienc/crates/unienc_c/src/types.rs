@@ -26,6 +26,10 @@ pub struct VideoEncoderOptionsNative {
     pub height: u32,
     pub fps_hint: u32,
     pub bitrate: u32,
+    /// Maximum interval between IDR (key) frames, in seconds. Zero or negative means "leave the
+    /// interval at the platform encoder's default"; `Option<f32>` has no stable `repr(C)` layout,
+    /// so the absent case is carried by the sentinel instead of a separate discriminant field.
+    pub idr_interval_seconds: f32,
 }
 
 #[repr(C)]
@@ -51,6 +55,11 @@ impl VideoEncoderOptions for VideoEncoderOptionsNative {
 
     fn bitrate(&self) -> u32 {
         self.bitrate
+    }
+
+    fn idr_interval_seconds(&self) -> Option<f32> {
+        (self.idr_interval_seconds > 0.0 && self.idr_interval_seconds.is_finite())
+            .then_some(self.idr_interval_seconds)
     }
 }
 

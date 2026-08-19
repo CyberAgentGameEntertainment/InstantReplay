@@ -29,6 +29,12 @@ namespace UniEnc
         public uint Bitrate { get; set; }
 
         /// <summary>
+        ///     Maximum interval between IDR (key) frames, in seconds. <c>null</c> leaves the interval at the platform
+        ///     encoder's own default, which differs per platform and may be considerably longer than a second.
+        /// </summary>
+        public float? IdrIntervalSeconds { get; set; }
+
+        /// <summary>
         ///     Validates the options and throws if invalid.
         /// </summary>
         internal void Validate()
@@ -41,6 +47,11 @@ namespace UniEnc
 
             if (Bitrate == 0)
                 throw new ArgumentException("Bitrate must be greater than 0");
+
+            if (IdrIntervalSeconds is { } idrIntervalSeconds &&
+                (idrIntervalSeconds <= 0f || float.IsNaN(idrIntervalSeconds) ||
+                 float.IsInfinity(idrIntervalSeconds)))
+                throw new ArgumentException("IDR interval must be a finite value greater than 0");
         }
 
         /// <summary>
@@ -54,7 +65,9 @@ namespace UniEnc
                 width = Width,
                 height = Height,
                 fps_hint = FpsHint,
-                bitrate = Bitrate
+                bitrate = Bitrate,
+                // 0 is the sentinel the native side reads as "use the platform default".
+                idr_interval_seconds = IdrIntervalSeconds ?? 0f
             };
         }
     }
