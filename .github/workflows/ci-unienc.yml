@@ -61,6 +61,11 @@ jobs:
       # covered because it requires a Unity graphics device.
       - name: Run tests
         run: cargo test -p unienc -p unienc_common
+      # `cargo test` above does not build the FFI layer, so a change to the
+      # platform backends' signatures would otherwise only break on the manual
+      # build-unienc workflow.
+      - name: Check the FFI layer
+        run: cargo check -p unienc_c
       - name: Upload muxed output
         if: always()
         uses: actions/upload-artifact@v4
