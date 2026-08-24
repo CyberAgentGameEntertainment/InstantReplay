@@ -24,3 +24,48 @@ jobs:
       - run: rustup default stable
       - run: rustup component add rustfmt
       - run: cargo fmt --all -- --check
+
+  test:
+    name: Test (${{ matrix.label }})
+    runs-on: ${{ matrix.runs-on }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: macOS / VideoToolbox
+            runs-on: macos-15
+          - label: Windows / Media Foundation
+            runs-on: windows-2022
+          - label: Linux / FFmpeg
+            runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      RUST_BACKTRACE: 1
+    defaults:
+      run:
+        working-directory: InstantReplay.Externals/unienc
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          submodules: 'recursive'
+      - run: rustup default stable
+      # The FFmpeg backend shells out to the `ffmpeg` executable and needs an
+      # H.264 encoder (libx264) and an AAC encoder, neither of which is present
+      # on the runner image by default. gcc-multilib matches build-unienc.yml.
+      - name: Install FFmpeg
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg gcc-multilib
+      # The e2e test exercises the platform encoding system (video encoder,
+      # audio encoder and muxer) of the host: VideoToolbox on macOS, Media
+      # Foundation on Windows and FFmpeg on Linux. The GPU blit path is not
+      # covered because it requires a Unity graphics device.
+      - name: Run tests
+        run: cargo test -p unienc -p unienc_common
+      - name: Upload muxed output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-output-${{ runner.os }}
+          path: InstantReplay.Externals/unienc/target/tmp/*.mp4
+          if-no-files-found: warn
+          retention-days: 7

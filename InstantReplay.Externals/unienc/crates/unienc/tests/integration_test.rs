@@ -3,6 +3,7 @@ use futures::executor;
 use futures::executor::ThreadPool;
 use futures::task::SpawnExt;
 use rand::RngCore;
+use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use unienc_common::{
     AudioSample, CompletionHandle, EncodedData, Encoder, EncoderInput, EncoderOutput,
@@ -102,6 +103,10 @@ fn test_e2e() {
     let pool = ThreadPool::new().expect("Failed to build pool");
     let runtime = Runtime { pool: pool.clone() };
 
+    // Cargo provides this directory for integration test artifacts, so the
+    // muxed file does not end up in the crate directory.
+    let output_path = Path::new(env!("CARGO_TARGET_TMPDIR")).join("test_e2e.mp4");
+
     executor::block_on(test_e2e_typed(
         PlatformEncodingSystem::new(
             &VideoEncoderOptions {
@@ -118,15 +123,20 @@ fn test_e2e() {
             runtime.clone(),
         ),
         runtime,
+        output_path,
     ));
 }
 
-async fn test_e2e_typed<T: EncodingSystem + Send>(encoding_system: T, runtime: Runtime) {
+async fn test_e2e_typed<T: EncodingSystem + Send>(
+    encoding_system: T,
+    runtime: Runtime,
+    output_path: PathBuf,
+) {
     let video_encoder = encoding_system.new_video_encoder().unwrap();
 
     let audio_encoder = encoding_system.new_audio_encoder().unwrap();
 
-    let muxer = encoding_system.new_muxer("test.mp4".as_ref()).unwrap();
+    let muxer = encoding_system.new_muxer(&output_path).unwrap();
 
     let (mut video_input, mut video_output) = video_encoder.get().unwrap();
     let (mut audio_input, mut audio_output) = audio_encoder.get().unwrap();
