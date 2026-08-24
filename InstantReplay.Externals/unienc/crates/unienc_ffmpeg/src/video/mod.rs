@@ -30,7 +30,10 @@ pub struct FFmpegVideoEncoder<R: Runtime> {
 pub struct FFmpegVideoEncoderInput<R: Runtime> {
     _ffmpeg: Arc<ffmpeg::FFmpeg>,
     input: ffmpeg::Input<R>,
-    cfr: Cfr<VideoFrameBgra32>,
+    cfr: Cfr,
+    /// The most recently written frame, kept so that it can be repeated to fill
+    /// constant-rate slots that no input frame landed in.
+    last_written: Option<VideoFrameBgra32>,
     width: u32,
     height: u32,
 }
@@ -178,6 +181,7 @@ impl<R: Runtime + 'static> FFmpegVideoEncoder<R> {
                 _ffmpeg: ffmpeg.clone(),
                 input,
                 cfr: Cfr::new(cfr),
+                last_written: None,
                 width,
                 height,
             },
@@ -242,23 +246,34 @@ impl<R: Runtime + 'static> EncoderInput for FFmpegVideoEncoderInput<R> {
 
         // raw H.264 frames cannot have timestamps, so we need to assume CFR
         // we need to repeat or discard frames to match frame rate specified as fps_hint
-        let Some((frame, count)) = self.cfr.push(frame, timestamp)? else {
+        let Some(repeats) = self.cfr.advance(timestamp) else {
+            // The frame's slot is already written, so it is dropped to keep the
+            // frame rate constant.
             return Ok(());
         };
 
-        // The frame is handed to the blocking pool and back so that repeating
-        // it does not require copying the pixel buffer.
-        let frame = self
+        // Both frames are handed to the blocking pool and back so that neither
+        // the repeats nor the retained frame require copying the pixel buffer.
+        let previous = self.last_written.take();
+        let (previous, frame) = self
             .input
             .with_writer(move |writer| {
-                for _i in 0..count {
-                    writer.write_all(frame.buffer.data())?;
+                if let Some(previous) = &previous {
+                    for _i in 0..repeats {
+                        writer.write_all(previous.buffer.data())?;
+                    }
                 }
+                writer.write_all(frame.buffer.data())?;
                 writer.flush()?;
-                Ok(frame)
+                Ok((previous, frame))
             })
             .await?;
-        drop(frame);
+        drop(previous);
+
+        // Retained for the repeats of a later gap. Writing the frame as soon as
+        // its slot is known is what keeps the last frame of the stream from
+        // being lost.
+        self.last_written = Some(frame);
 
         Ok(())
     }
