@@ -1,4 +1,4 @@
-use jni::{JNIEnv, objects::JValue, signature::ReturnType, sys::jint};
+use jni::{JNIEnv, sys::jint};
 use std::time::Duration;
 use unienc_common::{AudioSample, Encoder, EncoderInput, EncoderOutput};
 
@@ -216,29 +216,13 @@ fn create_audio_format<A: unienc_common::AudioEncoderOptions>(
     env: &mut JNIEnv,
     options: &A,
 ) -> Result<SafeGlobalRef> {
-    let format_class = env.find_class("android/media/MediaFormat")?;
-
-    let method_id = env.get_static_method_id(
-        &format_class,
-        "createAudioFormat",
-        "(Ljava/lang/String;II)Landroid/media/MediaFormat;",
-    )?;
-
     let mime = to_java_string(env, MIME_TYPE_AUDIO_AAC)?;
-    let format = unsafe {
-        env.call_static_method_unchecked(
-            format_class,
-            method_id,
-            ReturnType::Object,
-            &[
-                JValue::Object(&mime).as_jni(),
-                JValue::Int(options.sample_rate() as jint).as_jni(),
-                JValue::Int(options.channels() as jint).as_jni(),
-            ],
-        )
-    }?;
-
-    let format_obj = format.l()?;
+    let format_obj = crate::bindings::MediaFormat::create_audio_format(
+        env,
+        &mime,
+        options.sample_rate() as jint,
+        options.channels() as jint,
+    )?;
 
     // Set additional parameters
     crate::common::set_format_integer(env, &format_obj, KEY_BITRATE, options.bitrate() as jint)?;

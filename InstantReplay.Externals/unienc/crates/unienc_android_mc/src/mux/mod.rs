@@ -1,8 +1,9 @@
-use jni::{JNIEnv, objects::JValue, sys::jint};
+use jni::{JNIEnv, sys::jint};
 use std::{path::Path, sync::Arc};
 use tokio::sync::{RwLock, oneshot};
 use unienc_common::{CompletionHandle, Muxer, MuxerInput};
 
+use crate::bindings;
 use crate::common::*;
 use crate::config::MUXER_OUTPUT_FORMAT_MPEG_4;
 use crate::error::{AndroidError, Result};
@@ -250,45 +251,37 @@ async fn finish_completion_handle_impl(handle: MediaMuxerCompletionHandle) -> Re
 // Helper functions for MediaMuxer
 
 fn create_media_muxer(env: &mut JNIEnv, output_path: &Path) -> Result<SafeGlobalRef> {
-    let muxer_class = env.find_class("android/media/MediaMuxer")?;
-
     let path_str = output_path
         .to_str()
         .ok_or(AndroidError::InvalidOutputPath)?;
     let path_java = to_java_string(env, path_str)?;
 
-    let muxer = env.new_object(
-        muxer_class,
-        "(Ljava/lang/String;I)V",
-        &[
-            JValue::Object(&path_java),
-            JValue::Int(MUXER_OUTPUT_FORMAT_MPEG_4),
-        ],
-    )?;
+    let muxer = bindings::MediaMuxer::new(env, &path_java, MUXER_OUTPUT_FORMAT_MPEG_4)?;
 
     SafeGlobalRef::new(env, muxer)
 }
 
 fn add_track(env: &mut JNIEnv, muxer: &SafeGlobalRef, format: &SafeGlobalRef) -> Result<jint> {
-    call_int_method(
+    Ok(bindings::MediaMuxer::add_track(
         env,
         muxer.as_obj(),
-        "addTrack",
-        "(Landroid/media/MediaFormat;)I",
-        &[JValue::Object(format.as_obj())],
-    )
+        format.as_obj(),
+    )?)
 }
 
 fn start_muxer(env: &mut JNIEnv, muxer: &SafeGlobalRef) -> Result<()> {
-    call_void_method(env, muxer.as_obj(), "start", "()V", &[])
+    bindings::MediaMuxer::start(env, muxer.as_obj())?;
+    Ok(())
 }
 
 fn stop_muxer(env: &mut JNIEnv, muxer: &SafeGlobalRef) -> Result<()> {
-    call_void_method(env, muxer.as_obj(), "stop", "()V", &[])
+    bindings::MediaMuxer::stop(env, muxer.as_obj())?;
+    Ok(())
 }
 
 fn release_muxer(env: &mut JNIEnv, muxer: &SafeGlobalRef) -> Result<()> {
-    call_void_method(env, muxer.as_obj(), "release", "()V", &[])
+    bindings::MediaMuxer::release(env, muxer.as_obj())?;
+    Ok(())
 }
 
 fn write_sample_data(
@@ -303,30 +296,21 @@ fn write_sample_data(
     let byte_buffer = unsafe { env.new_direct_byte_buffer(data.as_ptr() as *mut u8, data.len()) }?;
 
     // Create MediaCodec.BufferInfo
-    let buffer_info_class = env.find_class("android/media/MediaCodec$BufferInfo")?;
-    let buffer_info = env.new_object(buffer_info_class, "()V", &[])?;
+    let buffer_info = bindings::BufferInfo::new(env)?;
 
     // Set buffer info fields
-    env.set_field(&buffer_info, "offset", "I", JValue::Int(0 as jint))?;
-    env.set_field(&buffer_info, "size", "I", JValue::Int(data.len() as jint))?;
-    env.set_field(
-        &buffer_info,
-        "presentationTimeUs",
-        "J",
-        JValue::Long(timestamp),
-    )?;
-    env.set_field(&buffer_info, "flags", "I", JValue::Int(flags))?;
+    bindings::BufferInfo::set_offset(env, &buffer_info, 0)?;
+    bindings::BufferInfo::set_size(env, &buffer_info, data.len() as jint)?;
+    bindings::BufferInfo::set_presentation_time_us(env, &buffer_info, timestamp)?;
+    bindings::BufferInfo::set_flags(env, &buffer_info, flags)?;
 
     // Write sample
-    call_void_method(
+    bindings::MediaMuxer::write_sample_data(
         env,
         muxer.as_obj(),
-        "writeSampleData",
-        "(ILjava/nio/ByteBuffer;Landroid/media/MediaCodec$BufferInfo;)V",
-        &[
-            JValue::Int(track_index),
-            JValue::Object(&byte_buffer),
-            JValue::Object(&buffer_info),
-        ],
-    )
+        track_index,
+        &byte_buffer,
+        &buffer_info,
+    )?;
+    Ok(())
 }

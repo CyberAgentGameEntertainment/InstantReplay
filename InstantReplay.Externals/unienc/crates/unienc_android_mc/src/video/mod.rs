@@ -1,4 +1,4 @@
-use jni::{JNIEnv, objects::JValue, signature::ReturnType, sys::jint};
+use jni::{JNIEnv, sys::jint};
 use std::sync::Arc;
 use std::time::Duration;
 use unienc_common::{
@@ -373,28 +373,13 @@ fn create_video_format_raw(
     fps_hint: u32,
     use_surface: bool,
 ) -> Result<SafeGlobalRef> {
-    let format_class = env.find_class("android/media/MediaFormat")?;
-    let method_id = env.get_static_method_id(
-        &format_class,
-        "createVideoFormat",
-        "(Ljava/lang/String;II)Landroid/media/MediaFormat;",
-    )?;
-
     let mime = to_java_string(env, MIME_TYPE_VIDEO_AVC)?;
-    let format = unsafe {
-        env.call_static_method_unchecked(
-            format_class,
-            method_id,
-            ReturnType::Object,
-            &[
-                JValue::Object(&mime).as_jni(),
-                JValue::Int(padded_width as jint).as_jni(),
-                JValue::Int(padded_height as jint).as_jni(),
-            ],
-        )
-    }?;
-
-    let format_obj = format.l()?;
+    let format_obj = crate::bindings::MediaFormat::create_video_format(
+        env,
+        &mime,
+        padded_width as jint,
+        padded_height as jint,
+    )?;
 
     // Set additional parameters
     set_format_integer(
