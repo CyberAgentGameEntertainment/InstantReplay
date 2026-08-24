@@ -55,12 +55,13 @@ jobs:
       - name: Install FFmpeg
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y ffmpeg gcc-multilib
-      # The e2e test exercises the platform encoding system (video encoder,
-      # audio encoder and muxer) of the host: VideoToolbox on macOS, Media
-      # Foundation on Windows and FFmpeg on Linux. The GPU blit path is not
-      # covered because it requires a Unity graphics device.
+      # unienc_testkit holds the shared end-to-end run and its assertions, and
+      # exercises the platform encoding system (video encoder, audio encoder and
+      # muxer) of the host: VideoToolbox on macOS, Media Foundation on Windows
+      # and FFmpeg on Linux. The GPU blit path is not covered because it requires
+      # a Unity graphics device.
       - name: Run tests
-        run: cargo test -p unienc -p unienc_common
+        run: cargo test -p unienc_testkit -p unienc_common
       # `cargo test` above does not build the FFI layer, so a change to the
       # platform backends' signatures would otherwise only break on the manual
       # build-unienc workflow.
