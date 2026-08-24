@@ -155,6 +155,14 @@ impl<R: Runtime + 'static> FFmpegVideoEncoder<R> {
                     &format!("{cfr}"),
                     "-c:v",
                     &*FFMPEG_CODEC,
+                    // Raw H.264 has no timestamps and this pipeline carries a
+                    // single timestamp per sample, so it cannot express the
+                    // reordering B-frames require. Left enabled, the encoder
+                    // declares a two frame reordering delay in the SPS, the
+                    // demuxer synthesizes negative timestamps from it while
+                    // muxing, and the tail of the video track is dropped.
+                    "-bf",
+                    "0",
                     "-b:v",
                     &format!("{}", options.bitrate()),
                     "-force_key_frames",

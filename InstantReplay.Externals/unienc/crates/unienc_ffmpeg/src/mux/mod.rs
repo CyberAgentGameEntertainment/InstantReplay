@@ -43,22 +43,7 @@ impl<R: Runtime + 'static> FFmpegMuxer<R> {
             .input(["-f", "aac"])
             .build(
                 [
-                    "-pix_fmt",
-                    "yuv420p",
-                    "-c:v",
-                    "copy",
-                    "-c:a",
-                    "copy",
-                    // The raw H.264 stream carries no timestamps at all, so
-                    // FFmpeg synthesizes them while muxing. Without this the
-                    // default handling of the resulting negative start time
-                    // discards the last frames of the video track instead of
-                    // shifting the timeline, which left the video shorter than
-                    // the audio.
-                    "-avoid_negative_ts",
-                    "make_zero",
-                    "-f",
-                    "mp4",
+                    "-pix_fmt", "yuv420p", "-c:v", "copy", "-c:a", "copy", "-f", "mp4",
                 ],
                 ffmpeg::Destination::Path(output_path.as_ref().as_os_str().to_owned()),
             )?;
