@@ -81,3 +81,103 @@ jobs:
           path: InstantReplay.Externals/unienc/target/tmp/*.mp4
           if-no-files-found: warn
           retention-days: 7
+
+  test-ios-simulator:
+    name: Test (iOS simulator)
+    runs-on: macos-15
+    timeout-minutes: 45
+    env:
+      RUST_BACKTRACE: 1
+    defaults:
+      run:
+        working-directory: InstantReplay.Externals/unienc
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          submodules: 'recursive'
+      - run: rustup default stable
+      # A Rust test binary is a plain executable, so simctl runs it directly and
+      # no signing identity is needed. VideoToolbox does encode H.264 in the
+      # simulator, so this covers the encoder logic and not just the build.
+      - name: Run tests in the simulator
+        run: scripts/ios-simulator-test.sh
+      - name: Upload muxed output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-output-ios-simulator
+          path: InstantReplay.Externals/unienc/target/aarch64-apple-ios-sim/tmp/*.mp4
+          if-no-files-found: warn
+          retention-days: 7
+
+  test-android-emulator:
+    name: Test (Android emulator)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      RUST_BACKTRACE: 1
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          submodules: 'recursive'
+      - run: rustup default stable
+      - run: rustup target add aarch64-linux-android x86_64-linux-android
+      - run: cargo install cargo-ndk
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - run: echo "ANDROID_NDK_HOME=$ANDROID_NDK_LATEST_HOME" >> $GITHUB_ENV
+      # KVM has to be reachable or the emulator falls back to an unusably slow
+      # software CPU.
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"'             | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      # The emulator's encoder is software (c2.android.avc.encoder), so this
+      # covers the MediaCodec and MediaMuxer plumbing rather than any vendor's
+      # hardware encoder. Those still need a real device.
+      - name: Run the harness on an emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          target: google_apis
+          script: InstantReplay.Externals/unienc/scripts/android-device-test.sh
+      - name: Upload muxed output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-output-android-emulator
+          path: InstantReplay.Externals/unienc/target/android-harness/*.mp4
+          if-no-files-found: warn
+          retention-days: 7
+
+  test-web:
+    name: Test (WebAssembly, browser)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      RUST_BACKTRACE: 1
+    defaults:
+      run:
+        working-directory: InstantReplay.Externals/unienc
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          submodules: 'recursive'
+      # build-std needs a nightly toolchain, because the Emscripten target has no
+      # prebuilt std. This matches build-unienc.yml.
+      - run: rustup toolchain install nightly --component rust-src
+      - run: rustup target add wasm32-unknown-emscripten
+      - uses: mymindstorm/setup-emsdk@v14
+      - uses: browser-actions/setup-chrome@v1
+        id: chrome
+      # The WebCodecs backend drives the browser's own encoders, so a real
+      # browser is the only thing that can run this. Chrome's software H.264
+      # encoder (OpenH264) is what does the work on a runner.
+      - name: Run the harness in a browser
+        run: scripts/web-browser-test.sh
+        env:
+          UNIENC_TEST_BROWSER: ${{ steps.chrome.outputs.chrome-path }}
