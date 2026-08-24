@@ -34,10 +34,13 @@ jobs:
         include:
           - label: macOS / VideoToolbox
             runs-on: macos-15
+            backend: unienc_apple_vt
           - label: Windows / Media Foundation
             runs-on: windows-2022
+            backend: unienc_windows_mf
           - label: Linux / FFmpeg
             runs-on: ubuntu-latest
+            backend: unienc_ffmpeg
     timeout-minutes: 30
     env:
       RUST_BACKTRACE: 1
@@ -60,8 +63,11 @@ jobs:
       # muxer) of the host: VideoToolbox on macOS, Media Foundation on Windows
       # and FFmpeg on Linux. The GPU blit path is not covered because it requires
       # a Unity graphics device.
+      #
+      # The backend crate is named per host as well, because a platform backend
+      # only builds for its own platform and so its unit tests can only run here.
       - name: Run tests
-        run: cargo test -p unienc_testkit -p unienc_common
+        run: cargo test -p unienc_testkit -p unienc_common -p ${{ matrix.backend }}
       # `cargo test` above does not build the FFI layer, so a change to the
       # platform backends' signatures would otherwise only break on the manual
       # build-unienc workflow.
