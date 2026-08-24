@@ -8,20 +8,24 @@
 //!
 //! ```no_run
 //! let config = unienc_testkit::E2eConfig::default();
-//! let report = unienc_testkit::e2e::run(&config, std::path::Path::new("out.mp4")).unwrap();
-//! unienc_testkit::verify::verify_report(&report, &config).unwrap();
-//!
-//! let bytes = std::fs::read("out.mp4").unwrap();
-//! let summary = unienc_testkit::mp4::summarize(&bytes).unwrap();
-//! unienc_testkit::verify::verify_mp4(&summary, &config).unwrap();
+//! match unienc_testkit::run_and_verify(&config, std::path::Path::new("out.mp4")) {
+//!     Ok(description) => println!("{description}"),
+//!     Err(message) => panic!("{message}"),
+//! }
 //! ```
 
+pub mod driver;
 pub mod e2e;
 pub mod mp4;
 pub mod options;
 pub mod pattern;
 pub mod runtime;
 pub mod verify;
+#[cfg(target_os = "emscripten")]
+pub mod web;
 
+#[cfg(not(target_os = "emscripten"))]
+pub use driver::run_and_verify;
+pub use driver::verify_output;
 pub use e2e::{E2eConfig, E2eReport};
 pub use runtime::TestRuntime;

@@ -1204,6 +1204,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "unienc_harness_android"
+version = "1.4.1"
+dependencies = [
+ "jni",
+ "unienc",
+ "unienc_testkit",
+]
+
+[[package]]
+name = "unienc_harness_web"
+version = "1.4.1"
+dependencies = [
+ "futures",
+ "unienc_common",
+ "unienc_testkit",
+]
+
+[[package]]
 name = "unienc_testkit"
 version = "1.4.1"
 dependencies = [

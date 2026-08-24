@@ -5,7 +5,10 @@
 //! linked into a device harness, or from an Emscripten `main` in a browser,
 //! without the platforms drifting apart.
 
+// Only `run`, which the web does not have, borrows a path.
+#[cfg(not(target_os = "emscripten"))]
 use std::path::Path;
+use std::path::PathBuf;
 
 use futures::channel::oneshot::Canceled;
 use unienc_common::{
@@ -81,26 +84,47 @@ pub struct E2eReport {
 
 /// Runs the whole pipeline on this platform's encoding system and writes an MP4
 /// to `output_path`.
+///
+/// Absent on the web, where blocking the only thread would stop the event loop
+/// the browser's encoders report through. A driver there owns a `LocalPool`,
+/// builds the future with [`run_with`] and polls both from a main-loop callback;
+/// see `unienc_harness_web`.
+#[cfg(not(target_os = "emscripten"))]
 pub fn run(config: &E2eConfig, output_path: &Path) -> unienc_common::Result<E2eReport> {
     let runtime = TestRuntime::new();
-    let encoding_system = unienc::PlatformEncodingSystem::new(
+    let encoding_system = new_platform_system(config, runtime.clone());
+    futures::executor::block_on(run_with(
+        encoding_system,
+        runtime,
+        *config,
+        output_path.to_path_buf(),
+    ))
+}
+
+/// Builds the encoding system this target selects.
+pub fn new_platform_system(
+    config: &E2eConfig,
+    runtime: TestRuntime,
+) -> unienc::PlatformEncodingSystem<TestVideoOptions, TestAudioOptions, TestRuntime> {
+    unienc::PlatformEncodingSystem::new(
         &TestVideoOptions::from(config),
         &TestAudioOptions::from(config),
-        runtime.clone(),
-    );
-
-    futures::executor::block_on(run_with(encoding_system, runtime, config, output_path))
+        runtime,
+    )
 }
 
 /// Runs the pipeline on a specific encoding system.
 ///
 /// Generic over the system so that a driver can exercise one backend directly
 /// instead of whatever the target selects.
+/// Takes its arguments by value so that the future owns everything it needs. A
+/// driver that has to keep the future alive across main-loop callbacks cannot
+/// lend it anything from a stack frame that will be gone.
 pub async fn run_with<S>(
     encoding_system: S,
     runtime: TestRuntime,
-    config: &E2eConfig,
-    output_path: &Path,
+    config: E2eConfig,
+    output_path: PathBuf,
 ) -> unienc_common::Result<E2eReport>
 where
     S: EncodingSystem<RuntimeType = TestRuntime> + Send,
@@ -109,13 +133,11 @@ where
 {
     let video_encoder = encoding_system.new_video_encoder()?;
     let audio_encoder = encoding_system.new_audio_encoder()?;
-    let muxer = encoding_system.new_muxer(output_path)?;
+    let muxer = encoding_system.new_muxer(&output_path)?;
 
     let (mut video_input, mut video_output) = video_encoder.get()?;
     let (mut audio_input, mut audio_output) = audio_encoder.get()?;
     let (mut mux_video, mut mux_audio, completion) = muxer.get_inputs()?;
-
-    let config = *config;
 
     let emit_video = runtime.spawn_with_result(async move {
         for index in 0..config.video_frames() {
@@ -131,6 +153,7 @@ where
                 })
                 .await?;
         }
+        println!("harness: pushed {} video frames", config.video_frames());
         Ok(config.video_frames())
     });
 
@@ -143,6 +166,7 @@ where
                 })
                 .await?;
         }
+        println!("harness: pushed {} audio chunks", config.duration_secs);
         Ok(config.duration_secs)
     });
 
@@ -158,6 +182,7 @@ where
             pulled += 1;
         }
         mux_video.finish().await?;
+        println!("harness: transferred {pulled} encoded video items");
         Ok(pulled)
     });
 
@@ -169,16 +194,19 @@ where
             pulled += 1;
         }
         mux_audio.finish().await?;
+        println!("harness: transferred {pulled} encoded audio items");
         Ok(pulled)
     });
 
     // The inputs have to be finished before the muxer is waited on, otherwise
-    // FFmpeg and MediaMuxer never see end of stream.
+    // FFmpeg and MediaMuxer never see end of stream. Each stage announces itself
+    // because a harness that hangs on a device gives nothing else to go on.
     let video_frames_pushed = join(emit_video).await?;
     let audio_chunks_pushed = join(emit_audio).await?;
     let video_data_pulled = join(transfer_video).await?;
     let audio_data_pulled = join(transfer_audio).await?;
 
+    println!("harness: waiting for the muxer");
     completion.finish().await?;
 
     Ok(E2eReport {

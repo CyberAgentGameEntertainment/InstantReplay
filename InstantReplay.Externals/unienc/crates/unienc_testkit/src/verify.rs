@@ -191,15 +191,20 @@ fn verify_video_track(
         )
     });
 
-    findings.check(
-        (track.duration - expected_duration).abs() <= DURATION_TOLERANCE_SECS,
-        || {
-            format!(
-                "video track is {:.3} s, expected {:.3} s",
-                track.duration, expected_duration
-            )
-        },
-    );
+    // A muxer that derives sample durations from the gaps between presentation
+    // timestamps has nothing to derive the last one from. MediaMuxer gives it
+    // zero, so the track legitimately ends a frame short, while AVFoundation and
+    // FFmpeg give it a full interval. The frame count above is the strict check;
+    // this one is about the timeline being the right length.
+    let interval = 1.0 / config.fps as f64;
+    let shortest = expected_duration - interval - DURATION_TOLERANCE_SECS;
+    let longest = expected_duration + DURATION_TOLERANCE_SECS;
+    findings.check((shortest..=longest).contains(&track.duration), || {
+        format!(
+            "video track is {:.3} s, expected between {:.3} s and {:.3} s",
+            track.duration, shortest, longest
+        )
+    });
 
     // A decoder joining at the start needs the first sample to be a keyframe.
     findings.check(track.is_sync_sample(1), || {
@@ -207,7 +212,6 @@ fn verify_video_track(
     });
 
     let times = track.sample_times();
-    let interval = 1.0 / config.fps as f64;
     let out_of_order = times.windows(2).position(|pair| pair[1] <= pair[0]);
     findings.check(out_of_order.is_none(), || {
         let at = out_of_order.unwrap();

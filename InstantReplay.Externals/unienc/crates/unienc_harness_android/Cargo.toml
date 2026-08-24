@@ -1,0 +1,15 @@
+[package]
+name = "unienc_harness_android"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+jni = "0.21.1"
+unienc = { workspace = true }
+unienc_testkit = { workspace = true }
