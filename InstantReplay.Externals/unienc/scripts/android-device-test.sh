@@ -102,20 +102,47 @@ echo "==> pushing to $remote"
 "${adb[@]}" push "$staging/classes.dex" "$remote/harness.dex" >/dev/null
 
 echo "==> running"
+# Start from an empty log so the dump below only holds this run, and so a native
+# crash or an ANR is attributable.
+"${adb[@]}" logcat -c 2>/dev/null || true
+
+# The harness runs under the device's own `timeout` rather than a host-side one,
+# because what hangs is the process on the device. Without this a hang holds the
+# job until its overall timeout and leaves nothing to look at. TERM first, then
+# KILL, so a process ignoring TERM still goes.
+#
 # app_process wants a "parent directory" argument it does not use for anything
 # here, and finds the shim through CLASSPATH.
 set +e
-"${adb[@]}" shell "cd $remote && CLASSPATH=$remote/harness.dex app_process $remote jp.co.cyberagent.unienc.harness.Harness $remote/libunienc_harness_android.so $remote/e2e.mp4; echo EXIT:\$?" \
+"${adb[@]}" shell "cd $remote && timeout -s KILL ${UNIENC_TEST_TIMEOUT:-300} env CLASSPATH=$remote/harness.dex app_process $remote jp.co.cyberagent.unienc.harness.Harness $remote/libunienc_harness_android.so $remote/e2e.mp4; echo EXIT:\$?" \
     | tr -d '\r' | tee "$staging/output"
 set -e
 
 status="$(grep '^EXIT:' "$staging/output" | tail -1 | cut -d: -f2)"
+
+# `timeout` reports 137 for a KILL. Say so plainly: the distinction between a
+# hang and a failed check matters more than the exit code.
+if [[ "${status:-1}" == "137" ]]; then
+    echo "==> the harness did not finish within ${UNIENC_TEST_TIMEOUT:-300}s and was killed" >&2
+fi
 
 # Keep the muxed file for inspection whether or not the checks passed.
 if "${adb[@]}" shell "test -f $remote/e2e.mp4" 2>/dev/null; then
     mkdir -p target/android-harness
     "${adb[@]}" pull "$remote/e2e.mp4" target/android-harness/e2e.mp4 >/dev/null
     echo "==> pulled target/android-harness/e2e.mp4"
+fi
+
+# On failure the device log is the only place a native crash, a missing library
+# or an ART complaint shows up; the harness's own output stops at whatever it
+# managed to print.
+if [[ "${status:-1}" != "0" ]]; then
+    mkdir -p target/android-harness
+    "${adb[@]}" logcat -d > target/android-harness/logcat.txt 2>/dev/null || true
+    echo "==> device log saved to target/android-harness/logcat.txt" >&2
+    echo "--- last 40 lines mentioning the harness ---" >&2
+    grep -aiE "unienc|harness|app_process|DEBUG|AndroidRuntime|dalvik|art :" \
+        target/android-harness/logcat.txt | tail -40 >&2 || true
 fi
 
 exit "${status:-1}"

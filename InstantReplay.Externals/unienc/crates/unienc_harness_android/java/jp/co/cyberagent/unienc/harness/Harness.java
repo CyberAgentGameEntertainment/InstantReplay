@@ -21,7 +21,13 @@ public final class Harness {
             System.exit(2);
         }
 
+        // These two lines separate the ways this can produce no output at all:
+        // app_process never reaching main, System.load hanging or failing, and
+        // the native harness itself hanging.
+        System.out.println("harness: loading " + args[0]);
         System.load(args[0]);
+        System.out.println("harness: loaded, starting");
+
         System.exit(run(args[1]));
     }
 }
