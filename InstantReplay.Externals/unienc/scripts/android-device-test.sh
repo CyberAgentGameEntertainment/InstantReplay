@@ -114,7 +114,7 @@ echo "==> running"
 # app_process wants a "parent directory" argument it does not use for anything
 # here, and finds the shim through CLASSPATH.
 set +e
-"${adb[@]}" shell "cd $remote && timeout -s KILL ${UNIENC_TEST_TIMEOUT:-300} env CLASSPATH=$remote/harness.dex app_process $remote jp.co.cyberagent.unienc.harness.Harness $remote/libunienc_harness_android.so $remote/e2e.mp4; echo EXIT:\$?" \
+"${adb[@]}" shell "cd $remote && timeout -s KILL ${UNIENC_TEST_TIMEOUT:-300} env CLASSPATH=$remote/harness.dex ${UNIENC_TEST_THREADS:+UNIENC_TEST_THREADS=$UNIENC_TEST_THREADS} app_process $remote jp.co.cyberagent.unienc.harness.Harness $remote/libunienc_harness_android.so $remote/e2e.mp4; echo EXIT:\$?" \
     | tr -d '\r' | tee "$staging/output"
 set -e
 

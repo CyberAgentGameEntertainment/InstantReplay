@@ -28,8 +28,21 @@ impl TestRuntime {
     /// Builds a runtime backed by a thread pool.
     #[cfg(not(target_os = "emscripten"))]
     pub fn new() -> Self {
+        // The pool is as wide as the machine by default, as it is in production.
+        // `UNIENC_TEST_THREADS` narrows it, because a backend that blocks a
+        // worker while waiting on the encoder behaves differently when there are
+        // fewer workers than concurrent pipeline stages — and a build host
+        // usually has far more cores than a CI runner.
+        let mut builder = futures::executor::ThreadPoolBuilder::new();
+        if let Ok(threads) = std::env::var("UNIENC_TEST_THREADS") {
+            let threads: usize = threads
+                .parse()
+                .expect("UNIENC_TEST_THREADS is not a number");
+            builder.pool_size(threads.max(1));
+        }
+
         Self {
-            pool: futures::executor::ThreadPool::new().expect("Failed to build thread pool"),
+            pool: builder.create().expect("Failed to build thread pool"),
         }
     }
 
