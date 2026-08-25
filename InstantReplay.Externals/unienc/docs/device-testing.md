@@ -134,25 +134,6 @@ errors the runner's HTML forwards to stdout exist for the same reason.
 flags would leave the previous binary in place and appear to have no effect. The
 script records the flags it used and forces a relink when they differ.
 
-### Known open issue
-
-The browser run does not pass yet. It gets as far as encoding both streams — ten
-video frames in and ten encoded frames out, ten audio chunks accepted — and then
-the muxer refuses the first audio frame:
-
-```
-Failed to write encoded frame: audio frame arrived before any video frame:
-write at least one video frame before writing audio
-```
-
-`muxide`, which the WebCodecs backend muxes with, will not take audio before the
-first video frame. The pipeline pushes both streams concurrently, so which
-arrives first depends on the encoders, and on the web the audio wins. The other
-backends' muxers accept either order, so this is specific to this one. Whether to
-hold audio back in `WebCodecsMuxer` until the first video frame lands, or to
-relax the constraint in `muxide`, is a decision about the backend rather than
-about the harness.
-
 ## Real devices
 
 Both mobile harnesses run unchanged on real hardware, but neither is wired into
