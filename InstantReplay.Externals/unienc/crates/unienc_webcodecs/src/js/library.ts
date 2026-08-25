@@ -150,26 +150,49 @@ window["unienc_webcodecs"] = {
         EncodedVideoChunk
     >({
         createEncoder: async (options, onChunk) => {
-            const config: VideoEncoderConfig = {
-                codec: "avc1.640028",
-                width: options.width,
-                height: options.height,
-                bitrate: options.bitrate,
-                framerate: options.framerate,
-                avc: {
-                    format: "annexb",
-                }
-            };
+            // Which H.264 profiles a browser will encode is not fixed: Chrome on
+            // Linux, for one, refuses High. Asking for a single profile means
+            // failing outright wherever it is missing, so these are tried in
+            // descending order of what they buy and the first the browser accepts
+            // is used. Baseline is the most widely playable of the three, so the
+            // fallback costs compression rather than compatibility.
+            //
+            // `isConfigSupported` resolves to a support object rather than a
+            // boolean, so `supported` has to be read from it; negating the object
+            // is always false and lets an unsupported configuration through to
+            // `configure`, where the encoder closes itself and the first `encode`
+            // fails with an unrelated InvalidStateError.
+            const profiles = [
+                "avc1.640028", // High, level 4.0
+                "avc1.4d0028", // Main, level 4.0
+                "avc1.42001f", // Baseline, level 3.1
+            ];
 
-            // `isConfigSupported` resolves to a support object, not a
-            // boolean; negating the object was always false, so an unsupported
-            // configuration went straight on to `configure`. The encoder then
-            // closed itself asynchronously and the first `encode` failed with an
-            // unrelated InvalidStateError.
-            const support = await VideoEncoder.isConfigSupported(config);
-            if (!support.supported) {
+            let config: VideoEncoderConfig | null = null;
+            for (const codec of profiles) {
+                const candidate: VideoEncoderConfig = {
+                    codec,
+                    width: options.width,
+                    height: options.height,
+                    bitrate: options.bitrate,
+                    framerate: options.framerate,
+                    avc: {
+                        format: "annexb",
+                    }
+                };
+                // The candidate is kept rather than the normalized config the
+                // browser returns, because the muxer depends on the annexb
+                // format and a sanitized config need not preserve it.
+                if ((await VideoEncoder.isConfigSupported(candidate)).supported) {
+                    config = candidate;
+                    break;
+                }
+            }
+
+            if (!config) {
                 throw new Error(
-                    `The video encoder configuration is not supported: ${JSON.stringify(config)}`);
+                    `No supported H.264 profile for ${options.width}x${options.height}`
+                    + ` at ${options.bitrate} bps; tried ${profiles.join(", ")}`);
             }
             const init: VideoEncoderInit = {
                 output: (chunk, metadata) => {
