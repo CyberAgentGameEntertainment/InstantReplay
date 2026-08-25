@@ -223,6 +223,13 @@ window["unienc_webcodecs"] = {
                 bitrate: options.bitrate,
                 numberOfChannels: options.channels,
                 sampleRate: options.sampleRate,
+                // The muxer takes ADTS framed AAC, as the other backends
+                // produce. Without this the encoder emits raw AAC and the
+                // muxer rejects every frame for having no header. This is the
+                // audio counterpart of the annexb format asked for above.
+                aac: {
+                    format: "adts",
+                },
             };
 
             if (!await AudioEncoder.isConfigSupported(config)) {
