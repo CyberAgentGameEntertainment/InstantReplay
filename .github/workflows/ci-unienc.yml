@@ -156,7 +156,15 @@ jobs:
 
   test-web:
     name: Test (WebAssembly, browser)
-    runs-on: ubuntu-latest
+    # macOS rather than Linux because of the audio. Chrome reaches WebCodecs'
+    # AAC encoder through `MojoAudioEncoder`, which is gated on the
+    # `media::kPlatformAudioEncoder` feature; `media/base/media_switches.cc`
+    # enables that by default only on Windows, macOS and Android, because those
+    # are the platforms with an OS-level AAC encoder behind it. On Linux the
+    # harness's audio configuration is refused outright, so the backend's audio
+    # path — the one that had never worked before #178 — could not be covered
+    # there at all.
+    runs-on: macos-15
     timeout-minutes: 45
     env:
       RUST_BACKTRACE: 1
@@ -171,13 +179,16 @@ jobs:
       # prebuilt std. This matches build-unienc.yml.
       - run: rustup toolchain install nightly --component rust-src
       - run: rustup target add wasm32-unknown-emscripten
+      # `unienc_webcodecs`'s build script shells out to `tsc`. The Linux runner
+      # image happens to ship TypeScript globally and the macOS one does not, so
+      # install it rather than depend on what an image includes.
+      - run: npm install -g typescript
       - uses: mymindstorm/setup-emsdk@v14
-      - uses: browser-actions/setup-chrome@v1
-        id: chrome
       # The WebCodecs backend drives the browser's own encoders, so a real
-      # browser is the only thing that can run this. Chrome's software H.264
-      # encoder (OpenH264) is what does the work on a runner.
+      # browser is the only thing that can run this, and it has to be Google
+      # Chrome rather than Chromium: Chromium ships without the proprietary
+      # codecs and refuses every H.264 profile the harness offers. The runner
+      # image already carries Chrome at the path `run-in-browser.sh` defaults
+      # to, so nothing needs installing or pointing at.
       - name: Run the harness in a browser
         run: scripts/web-browser-test.sh
-        env:
-          UNIENC_TEST_BROWSER: ${{ steps.chrome.outputs.chrome-path }}
