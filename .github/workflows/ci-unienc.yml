@@ -16,6 +16,15 @@ on:
       - '.github/workflows/ci-unienc.yml'
       - 'InstantReplay.Externals/unienc/**'
 
+# A new push to a branch makes the run already in flight for it pointless, and
+# these jobs are long enough — a simulator boot, an emulator boot, two macOS
+# runners — that leaving it to finish holds runners for a result nobody will
+# read. Runs on the trunk are left alone: each of those is the record for one
+# merged commit, so cancelling one loses the only result that commit ever gets.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
 jobs:
   fmt:
     name: Format
