@@ -161,8 +161,15 @@ window["unienc_webcodecs"] = {
                 }
             };
 
-            if (!await VideoEncoder.isConfigSupported(config)) {
-                throw new Error("The specified video encoder configuration is not supported.");
+            // `isConfigSupported` resolves to a support object, not a
+            // boolean; negating the object was always false, so an unsupported
+            // configuration went straight on to `configure`. The encoder then
+            // closed itself asynchronously and the first `encode` failed with an
+            // unrelated InvalidStateError.
+            const support = await VideoEncoder.isConfigSupported(config);
+            if (!support.supported) {
+                throw new Error(
+                    `The video encoder configuration is not supported: ${JSON.stringify(config)}`);
             }
             const init: VideoEncoderInit = {
                 output: (chunk, metadata) => {
@@ -232,8 +239,11 @@ window["unienc_webcodecs"] = {
                 },
             };
 
-            if (!await AudioEncoder.isConfigSupported(config)) {
-                throw new Error("The specified video encoder configuration is not supported.");
+            // See the note on the video encoder above.
+            const support = await AudioEncoder.isConfigSupported(config);
+            if (!support.supported) {
+                throw new Error(
+                    `The audio encoder configuration is not supported: ${JSON.stringify(config)}`);
             }
             const init: AudioEncoderInit = {
                 output: (chunk, _metadata) => {
