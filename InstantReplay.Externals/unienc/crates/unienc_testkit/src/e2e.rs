@@ -152,8 +152,12 @@ where
                     timestamp: index as f64 / config.fps as f64 + config.timestamp_offset,
                 })
                 .await?;
+
+            if index == 0 {
+                crate::progress!("harness: the video encoder accepted the first frame");
+            }
         }
-        println!("harness: pushed {} video frames", config.video_frames());
+        crate::progress!("harness: pushed {} video frames", config.video_frames());
         Ok(config.video_frames())
     });
 
@@ -165,8 +169,12 @@ where
                     timestamp_in_samples: second * config.sample_rate as u64,
                 })
                 .await?;
+
+            if second == 0 {
+                crate::progress!("harness: the audio encoder accepted the first chunk");
+            }
         }
-        println!("harness: pushed {} audio chunks", config.duration_secs);
+        crate::progress!("harness: pushed {} audio chunks", config.duration_secs);
         Ok(config.duration_secs)
     });
 
@@ -180,9 +188,13 @@ where
             data.set_timestamp(data.timestamp() - offset);
             mux_video.push(data).await?;
             pulled += 1;
+
+            if pulled == 1 {
+                crate::progress!("harness: the video encoder produced its first output");
+            }
         }
         mux_video.finish().await?;
-        println!("harness: transferred {pulled} encoded video items");
+        crate::progress!("harness: transferred {pulled} encoded video items");
         Ok(pulled)
     });
 
@@ -192,9 +204,13 @@ where
             let data = reencode(data)?;
             mux_audio.push(data).await?;
             pulled += 1;
+
+            if pulled == 1 {
+                crate::progress!("harness: the audio encoder produced its first output");
+            }
         }
         mux_audio.finish().await?;
-        println!("harness: transferred {pulled} encoded audio items");
+        crate::progress!("harness: transferred {pulled} encoded audio items");
         Ok(pulled)
     });
 
@@ -206,7 +222,7 @@ where
     let video_data_pulled = join(transfer_video).await?;
     let audio_data_pulled = join(transfer_audio).await?;
 
-    println!("harness: waiting for the muxer");
+    crate::progress!("harness: waiting for the muxer");
     completion.finish().await?;
 
     Ok(E2eReport {

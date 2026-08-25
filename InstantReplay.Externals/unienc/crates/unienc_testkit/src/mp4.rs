@@ -64,6 +64,12 @@ pub struct Track {
     /// True when the sample entry carries a decoder configuration, i.e. an
     /// `avcC` or `esds` box. A track without one does not play back.
     pub has_decoder_config: bool,
+    /// H.264 profile and level, read from `avcC`.
+    ///
+    /// Which profile an encoder produces is not always what was asked for — on
+    /// the web it is negotiated with the browser at run time — so this reports
+    /// what the file actually contains.
+    pub avc_profile: Option<AvcProfile>,
     pub timescale: u32,
     /// Track duration in seconds, from `mdhd`.
     ///
@@ -171,6 +177,7 @@ fn parse_track(trak: &[u8], movie_timescale: u32) -> Result<Track> {
         kind,
         format: entry.format,
         has_decoder_config: entry.has_decoder_config,
+        avc_profile: entry.avc_profile,
         timescale,
         duration: duration as f64 / timescale.max(1) as f64,
         width: entry.width,
@@ -225,10 +232,32 @@ fn parse_leading_empty_edits(elst: &[u8]) -> Result<u64> {
     Ok(delay)
 }
 
+/// The profile and level an H.264 track was encoded at.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct AvcProfile {
+    pub profile: u8,
+    pub level: u8,
+}
+
+impl fmt::Display for AvcProfile {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let name = match self.profile {
+            0x42 => "Baseline",
+            0x4d => "Main",
+            0x58 => "Extended",
+            0x64 => "High",
+            _ => "unknown",
+        };
+        // Levels are tenths, so 0x1f is 3.1.
+        write!(f, "{name} {}.{}", self.level / 10, self.level % 10)
+    }
+}
+
 #[derive(Default)]
 struct SampleEntry {
     format: String,
     has_decoder_config: bool,
+    avc_profile: Option<AvcProfile>,
     width: u32,
     height: u32,
     sample_rate: u32,
@@ -279,8 +308,20 @@ impl SampleEntry {
         };
 
         if let Some(children) = entry.get(children_at..) {
-            parsed.has_decoder_config = iter_boxes(children)
-                .any(|(box_type, _)| &box_type == b"avcC" || &box_type == b"esds");
+            for (box_type, body) in iter_boxes(children) {
+                match &box_type {
+                    b"avcC" => {
+                        parsed.has_decoder_config = true;
+                        // configurationVersion, AVCProfileIndication,
+                        // profile_compatibility, AVCLevelIndication.
+                        if let (Some(&profile), Some(&level)) = (body.get(1), body.get(3)) {
+                            parsed.avc_profile = Some(AvcProfile { profile, level });
+                        }
+                    }
+                    b"esds" => parsed.has_decoder_config = true,
+                    _ => {}
+                }
+            }
         }
 
         Ok(parsed)

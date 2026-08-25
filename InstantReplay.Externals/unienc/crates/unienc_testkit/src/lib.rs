@@ -19,6 +19,7 @@ pub mod e2e;
 pub mod mp4;
 pub mod options;
 pub mod pattern;
+pub mod progress;
 pub mod runtime;
 pub mod verify;
 #[cfg(target_os = "emscripten")]

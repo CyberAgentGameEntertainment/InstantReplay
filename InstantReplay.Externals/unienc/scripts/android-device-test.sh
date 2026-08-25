@@ -140,8 +140,11 @@ if [[ "${status:-1}" != "0" ]]; then
     mkdir -p target/android-harness
     "${adb[@]}" logcat -d > target/android-harness/logcat.txt 2>/dev/null || true
     echo "==> device log saved to target/android-harness/logcat.txt" >&2
-    echo "--- last 40 lines mentioning the harness ---" >&2
-    grep -aiE "unienc|harness|app_process|DEBUG|AndroidRuntime|dalvik|art :" \
+    # Narrow to the codec and process machinery. A `google_apis` image runs Play
+    # services, whose logging drowns out everything else, and the harness's own
+    # output goes to stdout rather than here.
+    echo "--- last 40 relevant lines ---" >&2
+    grep -aiE "unienc|harness|app_process|AndroidRuntime|DEBUG *:|CCodec|Codec2|MediaCodec|OMX|c2\.android|ACodec|BufferQueue" \
         target/android-harness/logcat.txt | tail -40 >&2 || true
 fi
 

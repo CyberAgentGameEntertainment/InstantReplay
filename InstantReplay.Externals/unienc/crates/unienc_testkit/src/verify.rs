@@ -299,14 +299,17 @@ pub fn describe(summary: &Mp4Summary) -> String {
     for track in &summary.tracks {
         out.push_str(&match track.kind {
             TrackKind::Video => format!(
-                "  video: {} {}x{}, {} frames, start {:.3} s, {:.3} s, decoder config: {}\n",
+                "  video: {} {}x{} ({}), {} frames, start {:.3} s, {:.3} s\n",
                 track.format,
                 track.width,
                 track.height,
+                match track.avc_profile {
+                    Some(profile) => profile.to_string(),
+                    None => "no decoder config".to_string(),
+                },
                 track.sample_count,
                 track.start_time,
                 track.duration,
-                track.has_decoder_config
             ),
             TrackKind::Audio => format!(
                 "  audio: {} {} Hz {} ch, {} frames, start {:.3} s, {:.3} s, decoder config: {}\n",

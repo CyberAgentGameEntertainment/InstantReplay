@@ -150,7 +150,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: e2e-output-android-emulator
-          path: InstantReplay.Externals/unienc/target/android-harness/*.mp4
+          path: InstantReplay.Externals/unienc/target/android-harness/
           if-no-files-found: warn
           retention-days: 7
 
