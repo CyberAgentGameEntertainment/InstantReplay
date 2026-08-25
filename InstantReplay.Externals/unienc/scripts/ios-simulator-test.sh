@@ -38,12 +38,15 @@ if [[ -n "$wanted" ]]; then
     # Consumed here so that anything after it reaches cargo.
     shift
 else
-    device="$(xcrun simctl list devices booted | grep -oE '\(([0-9A-F-]{36})\)' | head -1 | tr -d '()')"
+    device="$(xcrun simctl list devices booted | grep -oE '\(([0-9A-F-]{36})\)' | head -1 | tr -d '()' || true)"
     if [[ -z "$device" ]]; then
-        # Newest runtime last, so the last iPhone listed is the newest.
+        # Newest runtime last, so the last iPhone listed is the newest. The
+        # character class is spelled out because BSD grep does not take \s, and
+        # `|| true` keeps a no-match from ending the script through `set -e`
+        # before the message below can explain what is missing.
         device="$(xcrun simctl list devices available \
-            | grep -E '^\s+iPhone' | tail -1 \
-            | grep -oE '\(([0-9A-F-]{36})\)' | head -1 | tr -d '()')"
+            | grep -E '^[[:space:]]+iPhone' | tail -1 \
+            | grep -oE '\(([0-9A-F-]{36})\)' | head -1 | tr -d '()' || true)"
         if [[ -z "$device" ]]; then
             echo "no iPhone simulator is available; install one through Xcode" >&2
             exit 1
