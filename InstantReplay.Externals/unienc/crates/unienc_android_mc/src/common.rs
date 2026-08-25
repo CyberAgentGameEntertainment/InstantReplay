@@ -4,10 +4,10 @@ use jni::{
     objects::{JObject, JString},
     sys::{jint, jlong},
 };
+use std::future::Future;
 use std::pin::Pin;
-use std::task::{Context, Poll};
 use std::{collections::HashMap, fmt::Display, sync::Arc, time::Duration};
-use unienc_common::{EncodedData, UniencSampleKind, VideoFrameBgra32};
+use unienc_common::{EncodedData, SpawnBlocking, UniencSampleKind, VideoFrameBgra32};
 
 use crate::bindings;
 use crate::error::{AndroidError, Result};
@@ -533,82 +533,109 @@ impl EncodedData for CommonEncodedData {
     }
 }
 
-pub(crate) async fn pull_encoded_data_with_codec(
+/// How long a MediaCodec dequeue is allowed to block before it is retried.
+///
+/// The call runs on the blocking pool rather than on an executor worker, so the
+/// wait costs nothing but a parked thread, and a real timeout is what keeps the
+/// retry loop from becoming a busy loop.
+pub(crate) const DEQUEUE_TIMEOUT: Duration = Duration::from_millis(100);
+
+/// Waits for a MediaCodec input buffer without occupying an executor worker.
+///
+/// `MediaCodec.dequeueInputBuffer` blocks its calling thread for up to the
+/// timeout. Awaited directly from a task, it therefore holds the worker the task
+/// is running on, and the executor has no more workers than the machine has
+/// cores. On a two-core device the two push tasks hold both, the pull tasks that
+/// release the codec's output buffers never run, the codec never frees an input
+/// buffer, and the push tasks wait forever. Handing the call to the blocking pool
+/// parks the task instead, which leaves the worker free for the rest of the
+/// pipeline.
+///
+/// Returns an owned future rather than being an `async fn` so that no borrow of
+/// the runtime is held across the await; `Runtime` is `Send` but not `Sync`.
+pub(crate) fn dequeue_input_buffer_off_executor<R: SpawnBlocking>(
+    runtime: &R,
+    codec: &MediaCodec,
+    timeout: Duration,
+) -> Pin<Box<dyn Future<Output = Result<jint>> + Send + 'static>> {
+    let codec = codec.clone();
+    runtime.spawn_blocking(move || codec.dequeue_input_buffer(timeout))
+}
+
+/// The output-side counterpart of [`dequeue_input_buffer_off_executor`], for the
+/// same reason.
+pub(crate) fn dequeue_output_buffer_off_executor<R: SpawnBlocking>(
+    runtime: &R,
+    codec: &MediaCodec,
+    buffer_info: &SafeGlobalRef,
+    timeout: Duration,
+) -> Pin<Box<dyn Future<Output = Result<jint>> + Send + 'static>> {
+    let codec = codec.clone();
+    let buffer_info = buffer_info.clone();
+    let timeout_us = timeout.as_micros() as i64;
+    runtime.spawn_blocking(move || codec.dequeue_output_buffer(&buffer_info, timeout_us))
+}
+
+/// Takes the codec's runtime by value rather than by reference because the
+/// future has to be `Send` and `Runtime` is not `Sync`.
+pub(crate) async fn pull_encoded_data_with_codec<R: SpawnBlocking>(
+    runtime: R,
     codec: &MediaCodec,
     end_of_stream: &mut bool,
 ) -> Result<Option<CommonEncodedData>> {
     if *end_of_stream {
         return Ok(None);
     }
+
+    // One `BufferInfo` serves every iteration: `dequeueOutputBuffer` overwrites
+    // its fields on each successful call.
+    let buffer_info = {
+        let env = &mut attach_current_thread()?;
+        create_buffer_info(env)?
+    };
+
     loop {
-        let mut sleep = false;
-        {
+        let buffer_index =
+            dequeue_output_buffer_off_executor(&runtime, codec, &buffer_info, DEQUEUE_TIMEOUT)
+                .await?;
+
+        if buffer_index >= 0 {
             let env = &mut attach_current_thread()?;
-            let buffer_info = create_buffer_info(env)?;
-            let buffer_index = codec.dequeue_output_buffer(&buffer_info, 0)?;
+            let output_buffer = codec.get_output_buffer(buffer_index)?;
+            let (offset, size, flags, timestamp) = read_buffer_info_common(env, &buffer_info)?;
 
-            if buffer_index >= 0 {
-                let output_buffer = codec.get_output_buffer(buffer_index)?;
-                let (offset, size, flags, timestamp) = read_buffer_info_common(env, &buffer_info)?;
+            // Read encoded data
+            let encoded_data = read_from_buffer(env, &output_buffer, offset, size)?;
 
-                // Read encoded data
-                let encoded_data = read_from_buffer(env, &output_buffer, offset, size)?;
+            let video_data = CommonEncodedData {
+                content: CommonEncodedDataContent::Buffer {
+                    data: encoded_data,
+                    buffer_flag: flags,
+                },
+                timestamp: timestamp as f64 / 1_000_000.0, // Convert from microseconds
+            };
 
-                // println!("new frame data: is_video: {}, flags: {:?}, length: {}, timestamp: {}, offset: {}, {:?}", is_video, flags, encoded_data.len(), timestamp, offset, encoded_data.iter().take(32).collect::<Vec<_>>());
+            codec.release_output_buffer(buffer_index, false)?;
 
-                let video_data = CommonEncodedData {
-                    content: CommonEncodedDataContent::Buffer {
-                        data: encoded_data,
-                        buffer_flag: flags,
-                    },
-                    timestamp: timestamp as f64 / 1_000_000.0, // Convert from microseconds
-                };
-
-                codec.release_output_buffer(buffer_index, false)?;
-
-                if (flags & media_codec_buffer_flag::BUFFER_FLAG_END_OF_STREAM) != 0 {
-                    *end_of_stream = true;
-                }
-                return Ok(Some(video_data));
-            } else if buffer_index == media_codec_errors::INFO_TRY_AGAIN_LATER {
-                sleep = true;
-            } else if buffer_index == media_codec_errors::INFO_OUTPUT_FORMAT_CHANGED {
-                let map = codec.get_output_format()?;
-
-                let metadata = CommonEncodedData {
-                    content: CommonEncodedDataContent::FormatInfo(map),
-                    timestamp: 0.0,
-                };
-                return Ok(Some(metadata));
+            if (flags & media_codec_buffer_flag::BUFFER_FLAG_END_OF_STREAM) != 0 {
+                *end_of_stream = true;
             }
+            return Ok(Some(video_data));
         }
-        if sleep {
-            yield_now().await;
+
+        if buffer_index == media_codec_errors::INFO_OUTPUT_FORMAT_CHANGED {
+            let map = codec.get_output_format()?;
+
+            let metadata = CommonEncodedData {
+                content: CommonEncodedDataContent::FormatInfo(map),
+                timestamp: 0.0,
+            };
+            return Ok(Some(metadata));
         }
+
+        // Anything else, `INFO_TRY_AGAIN_LATER` included, means there is nothing
+        // to take yet. The dequeue above already waited, so retry straight away.
     }
-}
-pub async fn yield_now() {
-    struct YieldNow {
-        yielded: bool,
-    }
-
-    impl Future for YieldNow {
-        type Output = ();
-
-        fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<()> {
-            if self.yielded {
-                return Poll::Ready(());
-            }
-
-            self.yielded = true;
-
-            cx.waker().wake_by_ref();
-
-            Poll::Pending
-        }
-    }
-
-    YieldNow { yielded: false }.await;
 }
 
 pub(crate) fn format_to_map(

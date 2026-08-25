@@ -10,12 +10,12 @@ use crate::{
 
 use crate::java::*;
 
-pub struct MediaCodecAudioEncoder {
-    input: MediaCodecAudioEncoderInput,
-    output: MediaCodecAudioEncoderOutput,
+pub struct MediaCodecAudioEncoder<R: unienc_common::Runtime + 'static> {
+    input: MediaCodecAudioEncoderInput<R>,
+    output: MediaCodecAudioEncoderOutput<R>,
 }
 
-pub struct MediaCodecAudioEncoderInput {
+pub struct MediaCodecAudioEncoderInput<R: unienc_common::Runtime + 'static> {
     codec: MediaCodec,
     sample_rate: u32,
     channels: u32,
@@ -28,26 +28,28 @@ pub struct MediaCodecAudioEncoderInput {
     /// Expected input timestamp (in samples) of the next push, i.e. the previous push's timestamp plus
     /// the number of frames it delivered. Used to detect discontinuities in the input timeline.
     next_input_position: Option<u64>,
+    runtime: R,
 }
 
-unsafe impl Send for MediaCodecAudioEncoderInput {}
+unsafe impl<R: unienc_common::Runtime + 'static> Send for MediaCodecAudioEncoderInput<R> {}
 
-pub struct MediaCodecAudioEncoderOutput {
+pub struct MediaCodecAudioEncoderOutput<R: unienc_common::Runtime + 'static> {
     codec: MediaCodec,
     end_of_stream: bool,
+    runtime: R,
 }
 
-impl Encoder for MediaCodecAudioEncoder {
-    type InputType = MediaCodecAudioEncoderInput;
-    type OutputType = MediaCodecAudioEncoderOutput;
+impl<R: unienc_common::Runtime + 'static> Encoder for MediaCodecAudioEncoder<R> {
+    type InputType = MediaCodecAudioEncoderInput<R>;
+    type OutputType = MediaCodecAudioEncoderOutput<R>;
 
     fn get(self) -> unienc_common::Result<(Self::InputType, Self::OutputType)> {
         Ok((self.input, self.output))
     }
 }
 
-impl MediaCodecAudioEncoder {
-    pub fn new<A: unienc_common::AudioEncoderOptions>(options: &A) -> Result<Self> {
+impl<R: unienc_common::Runtime + 'static> MediaCodecAudioEncoder<R> {
+    pub fn new<A: unienc_common::AudioEncoderOptions>(options: &A, runtime: R) -> Result<Self> {
         let env = &mut attach_current_thread()?;
 
         // Create MediaFormat
@@ -74,19 +76,26 @@ impl MediaCodecAudioEncoder {
                 last_timestamp: 0,
                 position_in_samples: None,
                 next_input_position: None,
+                runtime: runtime.clone(),
             },
             output: MediaCodecAudioEncoderOutput {
                 codec: codec_output,
                 end_of_stream: false,
+                runtime,
             },
         })
     }
 }
 
-impl Drop for MediaCodecAudioEncoderInput {
+impl<R: unienc_common::Runtime + 'static> Drop for MediaCodecAudioEncoderInput<R> {
     fn drop(&mut self) {
         // notify end of stream
         || -> Result<()> {
+            // `Drop` cannot await, so this one wait stays on the calling
+            // thread. It is bounded and happens once per stream, unlike the
+            // per-buffer waits in `push`, but it is the same shape: if the
+            // codec has no free input buffer it needs the pull task to
+            // release an output buffer, and that task needs a worker.
             loop {
                 let buffer_index = self
                     .codec
@@ -112,7 +121,7 @@ impl Drop for MediaCodecAudioEncoderInput {
     }
 }
 
-impl EncoderInput for MediaCodecAudioEncoderInput {
+impl<R: unienc_common::Runtime + 'static> EncoderInput for MediaCodecAudioEncoderInput<R> {
     type Data = AudioSample;
 
     async fn push(&mut self, data: Self::Data) -> unienc_common::Result<()> {
@@ -120,7 +129,10 @@ impl EncoderInput for MediaCodecAudioEncoderInput {
     }
 }
 
-async fn push_impl(this: &mut MediaCodecAudioEncoderInput, data: AudioSample) -> Result<()> {
+async fn push_impl<R: unienc_common::Runtime + 'static>(
+    this: &mut MediaCodecAudioEncoderInput<R>,
+    data: AudioSample,
+) -> Result<()> {
     // Keep the encoded audio contiguous in sample-count terms (see the Apple backend for the rationale):
     // when the input timeline jumps forward (dropped or suspended audio that advances `timestamp_in_samples`
     // by more than the number of samples actually delivered), fill the gap with leading silence so
@@ -149,10 +161,11 @@ async fn push_impl(this: &mut MediaCodecAudioEncoderInput, data: AudioSample) ->
     let mut byte_data = byte_data.as_slice();
 
     while !byte_data.is_empty() {
-        // Get input buffer
-        let buffer_index = this
-            .codec
-            .dequeue_input_buffer(Duration::from_millis(100))?;
+        // Get input buffer. The wait happens on the blocking pool so that this
+        // task does not hold an executor worker while the codec has nothing to
+        // give; see `dequeue_input_buffer_off_executor`.
+        let buffer_index =
+            dequeue_input_buffer_off_executor(&this.runtime, &this.codec, DEQUEUE_TIMEOUT).await?;
         if buffer_index >= 0 {
             let input_buffer = this.codec.get_input_buffer(buffer_index)?;
             {
@@ -190,7 +203,7 @@ async fn push_impl(this: &mut MediaCodecAudioEncoderInput, data: AudioSample) ->
                 this.position_in_samples = Some(position_in_samples + frames_written);
             }
         } else if buffer_index == media_codec_errors::INFO_TRY_AGAIN_LATER {
-            std::thread::sleep(Duration::from_millis(10));
+            // The dequeue above already waited, so retry straight away.
             continue;
         } else {
             return Err(AndroidError::NoInputBuffer);
@@ -200,11 +213,11 @@ async fn push_impl(this: &mut MediaCodecAudioEncoderInput, data: AudioSample) ->
     Ok(())
 }
 
-impl EncoderOutput for MediaCodecAudioEncoderOutput {
+impl<R: unienc_common::Runtime + 'static> EncoderOutput for MediaCodecAudioEncoderOutput<R> {
     type Data = CommonEncodedData;
 
     async fn pull(&mut self) -> unienc_common::Result<Option<Self::Data>> {
-        pull_encoded_data_with_codec(&self.codec, &mut self.end_of_stream)
+        pull_encoded_data_with_codec(self.runtime.clone(), &self.codec, &mut self.end_of_stream)
             .await
             .map_err(Into::into)
     }
