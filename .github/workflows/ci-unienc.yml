@@ -5,7 +5,13 @@ on:
     paths:
       - '.github/workflows/ci-unienc.yml'
       - 'InstantReplay.Externals/unienc/**'
+  # Only the trunk, because a branch with an open pull request is already
+  # covered by the `pull_request` trigger and an unrestricted `push` runs the
+  # whole matrix a second time for the same commit. That cost nothing when this
+  # workflow was one `cargo fmt --check`; it is a duplicate of every job below.
   push:
+    branches:
+      - main
     paths:
       - '.github/workflows/ci-unienc.yml'
       - 'InstantReplay.Externals/unienc/**'
