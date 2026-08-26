@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use crate::bindings;
 use crate::error::{AndroidError, Result};
 use jni::{
     AttachGuard, JNIEnv, JavaVM,
@@ -51,87 +52,6 @@ impl Clone for SafeGlobalRef {
     }
 }
 
-/// Convert JNI exception to Rust error
-pub fn check_jni_exception(env: &JNIEnv) -> Result<()> {
-    if env.exception_check()? {
-        env.exception_describe()?;
-        env.exception_clear()?;
-        return Err(AndroidError::JniException);
-    }
-    Ok(())
-}
-
-/// Helper to call Java void methods with error handling
-pub fn call_void_method(
-    env: &JNIEnv,
-    obj: &JObject,
-    name: &str,
-    sig: &str,
-    args: &[jni::objects::JValue],
-) -> Result<()> {
-    let env = unsafe { &mut env.unsafe_clone() };
-    env.call_method(obj, name, sig, args)
-        .map_err(|_| AndroidError::JniMethodCallFailed(name.to_string()))?;
-    check_jni_exception(env)?;
-    Ok(())
-}
-
-/// Helper to call Java methods returning int
-pub fn call_int_method(
-    env: &mut JNIEnv,
-    obj: &JObject,
-    name: &str,
-    sig: &str,
-    args: &[jni::objects::JValue],
-) -> Result<jni::sys::jint> {
-    let result = env
-        .call_method(obj, name, sig, args)
-        .map_err(|_| AndroidError::JniMethodCallFailed(name.to_string()))?;
-    check_jni_exception(env)?;
-    result
-        .i()
-        .map_err(|_| AndroidError::JniUnexpectedReturnValue { expected: "int" })
-}
-
-/// Helper to call Java methods returning object
-pub fn call_object_method<'a>(
-    env: &mut JNIEnv<'a>,
-    obj: &JObject,
-    name: &str,
-    sig: &str,
-    args: &[jni::objects::JValue],
-) -> Result<JObject<'a>> {
-    let result = env
-        .call_method(obj, name, sig, args)
-        .map_err(|_| AndroidError::JniMethodCallFailed(name.to_string()))?;
-    check_jni_exception(env)?;
-    result
-        .l()
-        .map_err(|_| AndroidError::JniUnexpectedReturnValue { expected: "object" })
-}
-
-/// Helper to get int field
-pub fn get_int_field(env: &mut JNIEnv, obj: &JObject, name: &str) -> Result<jni::sys::jint> {
-    let result = env
-        .get_field(obj, name, "I")
-        .map_err(|_| AndroidError::JniFieldGetFailed(name.to_string()))?;
-    check_jni_exception(env)?;
-    result
-        .i()
-        .map_err(|_| AndroidError::JniUnexpectedReturnValue { expected: "int" })
-}
-
-/// Helper to get long field
-pub fn get_long_field(env: &mut JNIEnv, obj: &JObject, name: &str) -> Result<jni::sys::jlong> {
-    let result = env
-        .get_field(obj, name, "J")
-        .map_err(|_| AndroidError::JniFieldGetFailed(name.to_string()))?;
-    check_jni_exception(env)?;
-    result
-        .j()
-        .map_err(|_| AndroidError::JniUnexpectedReturnValue { expected: "long" })
-}
-
 /// Convert Rust string to Java string
 pub fn to_java_string<'a>(env: &JNIEnv<'a>, s: &str) -> Result<JString<'a>> {
     env.new_string(s)
@@ -156,7 +76,7 @@ pub fn get_direct_buffer_info(
     let capacity = env.get_direct_buffer_capacity(byte_buffer)?;
 
     // Get current position
-    let position = env.call_method(buffer, "position", "()I", &[])?.i()? as usize;
+    let position = bindings::ByteBuffer::position(env, buffer)? as usize;
 
     Ok((base_address, capacity, position))
 }

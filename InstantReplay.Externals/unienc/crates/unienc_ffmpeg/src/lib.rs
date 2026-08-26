@@ -21,7 +21,10 @@ pub struct FFmpegEncodingSystem<
 > {
     video_options: V,
     audio_options: A,
-    _runtime: std::marker::PhantomData<R>,
+    /// The FFmpeg backend talks to the child processes with blocking I/O, which
+    /// it hands to this runtime's blocking pool. It therefore has to keep the
+    /// runtime rather than discard it.
+    runtime: R,
 }
 
 /// FFmpeg has no Unity rendering integration, so both hooks keep the trait's empty default bodies.
@@ -39,14 +42,14 @@ impl<
 impl<
     V: unienc_common::VideoEncoderOptions,
     A: unienc_common::AudioEncoderOptions,
-    R: unienc_common::Runtime,
+    R: unienc_common::Runtime + 'static,
 > EncodingSystem for FFmpegEncodingSystem<V, A, R>
 {
     type VideoEncoderOptionsType = V;
     type AudioEncoderOptionsType = A;
-    type VideoEncoderType = FFmpegVideoEncoder;
-    type AudioEncoderType = FFmpegAudioEncoder;
-    type MuxerType = FFmpegMuxer;
+    type VideoEncoderType = FFmpegVideoEncoder<R>;
+    type AudioEncoderType = FFmpegAudioEncoder<R>;
+    type MuxerType = FFmpegMuxer<R>;
     type BlitSourceType = UnsupportedBlitData;
     type RuntimeType = R;
 
@@ -54,20 +57,25 @@ impl<
         Self {
             video_options: *video_options,
             audio_options: *audio_options,
-            _runtime: std::marker::PhantomData,
+            runtime,
         }
     }
 
     fn new_video_encoder(&self) -> unienc_common::Result<Self::VideoEncoderType> {
-        FFmpegVideoEncoder::new(&self.video_options).map_err(|e| e.into())
+        FFmpegVideoEncoder::new(&self.video_options, self.runtime.clone()).map_err(|e| e.into())
     }
 
     fn new_audio_encoder(&self) -> unienc_common::Result<Self::AudioEncoderType> {
-        FFmpegAudioEncoder::new(&self.audio_options).map_err(|e| e.into())
+        FFmpegAudioEncoder::new(&self.audio_options, self.runtime.clone()).map_err(|e| e.into())
     }
 
     fn new_muxer(&self, output_path: &Path) -> unienc_common::Result<Self::MuxerType> {
-        FFmpegMuxer::new(output_path, &self.video_options, &self.audio_options)
-            .map_err(|e| e.into())
+        FFmpegMuxer::new(
+            output_path,
+            &self.video_options,
+            &self.audio_options,
+            self.runtime.clone(),
+        )
+        .map_err(|e| e.into())
     }
 }
