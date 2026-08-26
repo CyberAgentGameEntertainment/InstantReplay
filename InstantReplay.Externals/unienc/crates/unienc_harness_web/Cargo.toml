@@ -1,13 +1,12 @@
 [package]
-name = "unienc_ffmpeg"
+name = "unienc_harness_web"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 authors.workspace = true
+publish = false
 
 [dependencies]
-thiserror = { workspace = true }
+futures = "0.3.31"
 unienc_common = { workspace = true }
-bincode = { workspace = true }
-libc = "0.2.175"
-cros-codecs = "0.0.6"
+unienc_testkit = { workspace = true }

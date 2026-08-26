@@ -52,7 +52,7 @@ impl<
     type VideoEncoderOptionsType = V;
     type AudioEncoderOptionsType = A;
     type VideoEncoderType = MediaCodecVideoEncoder<R>;
-    type AudioEncoderType = MediaCodecAudioEncoder;
+    type AudioEncoderType = MediaCodecAudioEncoder<R>;
     type MuxerType = MediaMuxer;
     type BlitSourceType = VulkanTexture;
     type RuntimeType = R;
@@ -71,7 +71,8 @@ impl<
     }
 
     fn new_audio_encoder(&self) -> unienc_common::Result<Self::AudioEncoderType> {
-        MediaCodecAudioEncoder::new(&self.audio_options).map_err(Into::into)
+        MediaCodecAudioEncoder::<R>::new(&self.audio_options, self.runtime.clone())
+            .map_err(Into::into)
     }
 
     fn new_muxer(&self, output_path: &Path) -> unienc_common::Result<Self::MuxerType> {

@@ -1,19 +1,18 @@
 use std::{
     ffi::{OsStr, OsString},
-    os::fd::{AsRawFd, FromRawFd},
-    process::{ExitStatus, Stdio},
+    fs::File,
+    io::Write,
+    os::fd::{AsRawFd, FromRawFd, OwnedFd},
+    process::{Child, ChildStdin, ChildStdout, Command, ExitStatus, Stdio},
     sync::LazyLock,
 };
 
-use tokio::{
-    io::AsyncWrite,
-    process::{Child, ChildStdin, ChildStdout, Command},
-};
+use unienc_common::Runtime;
 
 use crate::error::{FFmpegError, Result};
 
 pub static FFMPEG_PATH: LazyLock<OsString> = LazyLock::new(|| {
-    let res: Result<OsString> = std::process::Command::new("which")
+    let res: Result<OsString> = Command::new("which")
         .arg("ffmpeg")
         .output()
         .map_err(|_| FFmpegError::FFmpegNotFound)
@@ -26,7 +25,7 @@ pub static FFMPEG_PATH: LazyLock<OsString> = LazyLock::new(|| {
         });
 
     let res = res.unwrap_or_else(|_| {
-        let fallback: Result<OsString> = std::process::Command::new("/bin/bash")
+        let fallback: Result<OsString> = Command::new("/bin/bash")
             .arg("-cl")
             .arg("which ffmpeg")
             .output()
@@ -46,54 +45,160 @@ pub static FFMPEG_PATH: LazyLock<OsString> = LazyLock::new(|| {
     res
 });
 
+/// One FFmpeg input, either the child's stdin or a dedicated pipe.
+///
+/// These are the blocking standard-library handles. Every operation on them is
+/// performed on the runtime's blocking pool (see [`Input`]) so that this
+/// backend works under any executor. It must not depend on an ambient Tokio
+/// reactor, because `unienc_c` drives the encoder futures on
+/// `futures::executor::ThreadPool` and no Tokio runtime exists in the process.
+pub enum Writer {
+    Pipe(File),
+    Stdin(ChildStdin),
+}
+
+impl Write for Writer {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        match self {
+            Writer::Pipe(file) => file.write(buf),
+            Writer::Stdin(stdin) => stdin.write(buf),
+        }
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        match self {
+            Writer::Pipe(file) => file.flush(),
+            Writer::Stdin(stdin) => stdin.flush(),
+        }
+    }
+}
+
+/// An FFmpeg input that performs its writes on `runtime`'s blocking pool.
+pub struct Input<R: Runtime> {
+    runtime: R,
+    /// Taken while a blocking operation is in flight, and permanently by
+    /// [`Input::close`]. A write whose future is dropped mid-flight therefore
+    /// leaves the input unusable, which is fine because the pipeline only ever
+    /// drops an input together with the encoder that owns it.
+    writer: Option<Writer>,
+}
+
+impl<R: Runtime + 'static> Input<R> {
+    pub fn new(runtime: R, writer: Writer) -> Self {
+        Self {
+            runtime,
+            writer: Some(writer),
+        }
+    }
+
+    /// Runs `f` against the blocking writer on the runtime's blocking pool.
+    ///
+    /// `f` has to own everything it writes, since it is moved to another
+    /// thread. Returning the payload from `f` lets the caller take ownership
+    /// back afterwards, so no buffer needs to be copied to cross the boundary.
+    pub async fn with_writer<T, F>(&mut self, f: F) -> Result<T>
+    where
+        F: FnOnce(&mut Writer) -> std::io::Result<T> + Send + 'static,
+        T: Send + 'static,
+    {
+        let mut writer = self.writer.take().ok_or(FFmpegError::InputNotAvailable)?;
+        let (writer, result) = self
+            .runtime
+            .spawn_blocking(move || {
+                let result = f(&mut writer);
+                (writer, result)
+            })
+            .await;
+        self.writer = Some(writer);
+        Ok(result?)
+    }
+
+    /// Flushes and closes the input, which signals end of stream to FFmpeg.
+    pub async fn close(mut self) -> Result<()> {
+        let Some(mut writer) = self.writer.take() else {
+            return Ok(());
+        };
+        self.runtime
+            .spawn_blocking(move || {
+                let result = writer.flush();
+                // Dropping the handle closes the underlying descriptor, which
+                // is what makes FFmpeg see end of stream.
+                drop(writer);
+                result
+            })
+            .await?;
+        Ok(())
+    }
+}
+
+/// FFmpeg's stdout, read on `runtime`'s blocking pool.
+pub struct Output<R: Runtime> {
+    runtime: R,
+    /// Taken while a blocking read is in flight; see [`Input::writer`].
+    reader: Option<ChildStdout>,
+}
+
+impl<R: Runtime + 'static> Output<R> {
+    pub fn new(runtime: R, reader: ChildStdout) -> Self {
+        Self {
+            runtime,
+            reader: Some(reader),
+        }
+    }
+
+    /// Runs `f` against the blocking reader on the runtime's blocking pool.
+    ///
+    /// As with [`Input::with_writer`], `f` owns its buffer and hands it back so
+    /// that it can be reused without copying.
+    pub async fn with_reader<T, F>(&mut self, f: F) -> Result<T>
+    where
+        F: FnOnce(&mut ChildStdout) -> std::io::Result<T> + Send + 'static,
+        T: Send + 'static,
+    {
+        let mut reader = self.reader.take().ok_or(FFmpegError::OutputNotAvailable)?;
+        let (reader, result) = self
+            .runtime
+            .spawn_blocking(move || {
+                let result = f(&mut reader);
+                (reader, result)
+            })
+            .await;
+        self.reader = Some(reader);
+        Ok(result?)
+    }
+}
+
 #[derive(Default)]
 pub struct Builder {
     inputs: Vec<Vec<OsString>>,
     use_stdin: bool,
 }
 
-pub enum Input {
-    Pipe(tokio::net::unix::pipe::Sender),
-    Stdin(ChildStdin),
-}
-
-impl AsyncWrite for Input {
-    fn poll_write(
-        mut self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-        buf: &[u8],
-    ) -> std::task::Poll<std::result::Result<usize, std::io::Error>> {
-        match &mut *self {
-            Input::Pipe(sender) => std::pin::pin!(sender).poll_write(cx, buf),
-            Input::Stdin(child_stdin) => std::pin::pin!(child_stdin).poll_write(cx, buf),
-        }
-    }
-
-    fn poll_flush(
-        mut self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<std::result::Result<(), std::io::Error>> {
-        match &mut *self {
-            Input::Pipe(sender) => std::pin::pin!(sender).poll_flush(cx),
-            Input::Stdin(child_stdin) => std::pin::pin!(child_stdin).poll_flush(cx),
-        }
-    }
-
-    fn poll_shutdown(
-        mut self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<std::result::Result<(), std::io::Error>> {
-        match &mut *self {
-            Input::Pipe(sender) => std::pin::pin!(sender).poll_shutdown(cx),
-            Input::Stdin(child_stdin) => std::pin::pin!(child_stdin).poll_shutdown(cx),
-        }
-    }
-}
-
-pub struct FFmpeg {
-    child: Child,
-    pub inputs: Option<Vec<Input>>,
+/// A spawned FFmpeg process together with the handles to talk to it.
+pub struct Spawned {
+    pub ffmpeg: FFmpeg,
+    pub inputs: Vec<Writer>,
     pub stdout: Option<ChildStdout>,
+}
+
+/// A running FFmpeg process.
+///
+/// Dropping this kills the process, mirroring the `kill_on_drop` behaviour the
+/// Tokio-based implementation relied on.
+pub struct FFmpeg {
+    /// `None` only after [`FFmpeg::wait`] has taken the child.
+    child: Option<Child>,
+}
+
+impl Drop for FFmpeg {
+    fn drop(&mut self) {
+        if let Some(child) = self.child.as_mut() {
+            // Both calls fail harmlessly if the process already exited; the
+            // wait is what keeps it from lingering as a zombie.
+            let _ = child.kill();
+            let _ = child.wait();
+        }
+    }
 }
 
 pub enum Destination {
@@ -121,12 +226,10 @@ impl Builder {
         self,
         output_options: impl IntoIterator<Item: AsRef<OsStr>>,
         dest: Destination,
-    ) -> Result<FFmpeg> {
+    ) -> Result<Spawned> {
         let mut command = Command::new(FFMPEG_PATH.as_os_str());
 
-        command
-            .kill_on_drop(true)
-            .args(["-y", "-loglevel", "error"]);
+        command.args(["-y", "-loglevel", "error"]);
 
         let mut inputs = Vec::new();
         let mut pending_fd = Vec::new();
@@ -138,8 +241,9 @@ impl Builder {
                 inputs.push(None);
             } else {
                 // use pipe
-                // both tx and rx have O_CLOEXEC by default
-                let (tx, rx) = tokio::net::unix::pipe::pipe()?;
+                // both tx and rx have O_CLOEXEC so that they are not leaked
+                // into any child spawned later
+                let (tx, rx) = pipe()?;
 
                 // dup will remove O_CLOEXEC
                 let rx_dup = unsafe { libc::dup(rx.as_raw_fd()) };
@@ -148,7 +252,7 @@ impl Builder {
                 }
 
                 // keep rx lifetime until fork
-                let rx_dup = unsafe { std::os::fd::OwnedFd::from_raw_fd(rx_dup) };
+                let rx_dup = unsafe { OwnedFd::from_raw_fd(rx_dup) };
 
                 command
                     .args(input)
@@ -174,23 +278,39 @@ impl Builder {
 
         for input in inputs {
             inputs_result.push(match input {
-                Some(tx) => Input::Pipe(tx),
-                None => Input::Stdin(child.stdin.take().ok_or(FFmpegError::StdinNotAvailable)?),
+                Some(tx) => Writer::Pipe(File::from(tx)),
+                None => Writer::Stdin(child.stdin.take().ok_or(FFmpegError::StdinNotAvailable)?),
             });
         }
 
         let stdout = child.stdout.take();
 
-        Ok(FFmpeg {
-            child,
-            inputs: Some(inputs_result),
+        Ok(Spawned {
+            ffmpeg: FFmpeg { child: Some(child) },
+            inputs: inputs_result,
             stdout,
         })
     }
 }
 
 impl FFmpeg {
-    pub async fn wait(mut self) -> Result<ExitStatus> {
-        Ok(self.child.wait().await?)
+    /// Waits for the process to exit, blocking on `runtime`'s blocking pool.
+    ///
+    /// The runtime is taken by value because `Runtime` is not `Sync`, and a
+    /// borrow would make the returned future non-`Send`.
+    pub async fn wait<R: Runtime + 'static>(mut self, runtime: R) -> Result<ExitStatus> {
+        let mut child = self.child.take().ok_or(FFmpegError::ProcessFailed)?;
+        Ok(runtime.spawn_blocking(move || child.wait()).await?)
     }
+}
+
+/// Creates a blocking pipe whose ends are both close-on-exec.
+fn pipe() -> Result<(OwnedFd, OwnedFd)> {
+    let mut fds = [0 as libc::c_int; 2];
+    // SAFETY: `fds` is a two-element array as pipe2 expects.
+    if unsafe { libc::pipe2(fds.as_mut_ptr(), libc::O_CLOEXEC) } < 0 {
+        return Err(FFmpegError::Io(std::io::Error::last_os_error()));
+    }
+    // SAFETY: pipe2 succeeded, so both descriptors are open and owned by us.
+    unsafe { Ok((OwnedFd::from_raw_fd(fds[1]), OwnedFd::from_raw_fd(fds[0]))) }
 }
