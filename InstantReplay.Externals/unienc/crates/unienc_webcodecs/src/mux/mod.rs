@@ -40,23 +40,82 @@ impl Write for FragmentWrite {
     }
 }
 
+/// The muxer, together with the audio it is not ready for yet.
+///
+/// muxide refuses audio until a video frame has been written, and the pipeline
+/// feeds both streams concurrently, so which one produces output first is up to
+/// the encoders rather than up to us. Audio that arrives early is held here and
+/// written as soon as the first video frame lands, which keeps the ordering
+/// requirement inside the muxer instead of imposing it on every caller.
+///
+/// The backlog only spans the gap before the first video frame, which is a frame
+/// interval in the ordinary case.
+struct PendingMuxer {
+    /// `None` once the muxer has been finished.
+    muxer: Option<muxide::api::Muxer<FragmentWrite>>,
+    /// Audio waiting for a video frame to make it acceptable.
+    pending_audio: Vec<AudioEncodedData>,
+    video_written: bool,
+}
+
+impl PendingMuxer {
+    fn new(muxer: muxide::api::Muxer<FragmentWrite>) -> Self {
+        Self {
+            muxer: Some(muxer),
+            pending_audio: Vec::new(),
+            video_written: false,
+        }
+    }
+
+    fn get(&mut self) -> unienc_common::Result<&mut muxide::api::Muxer<FragmentWrite>> {
+        self.muxer.as_mut().context("The muxer is already finished")
+    }
+
+    fn write_video(&mut self, data: &VideoEncodedData) -> unienc_common::Result<()> {
+        self.get()?
+            .write_video(data.timestamp(), &data.data, data.is_key)
+            .context("Failed to write encoded frame")?;
+        self.video_written = true;
+
+        // Anything held back is now acceptable, and goes in before any later
+        // audio so that the stream stays in order.
+        for data in std::mem::take(&mut self.pending_audio) {
+            self.get()?
+                .write_audio(data.timestamp(), &data.data)
+                .context("Failed to write held back audio frame")?;
+        }
+        Ok(())
+    }
+
+    fn write_audio(&mut self, data: AudioEncodedData) -> unienc_common::Result<()> {
+        if !self.video_written {
+            self.pending_audio.push(data);
+            return Ok(());
+        }
+        self.get()?
+            .write_audio(data.timestamp(), &data.data)
+            .context("Failed to write encoded frame")?;
+        Ok(())
+    }
+}
+
 pub struct WebCodecsMuxer {
     video: WebCodecsVideoInput,
     audio: WebCodecsAudioInput,
     completion: WebCodecsCompletionHandle,
 }
 pub struct WebCodecsVideoInput {
-    muxer: Arc<Mutex<Option<muxide::api::Muxer<FragmentWrite>>>>,
+    muxer: Arc<Mutex<PendingMuxer>>,
     finish_tx: Option<oneshot::Sender<()>>,
 }
 pub struct WebCodecsAudioInput {
-    muxer: Arc<Mutex<Option<muxide::api::Muxer<FragmentWrite>>>>,
+    muxer: Arc<Mutex<PendingMuxer>>,
     finish_tx: Option<oneshot::Sender<()>>,
 }
 pub struct WebCodecsCompletionHandle {
     filename: String,
     writer: FragmentWrite,
-    muxer: Arc<Mutex<Option<muxide::api::Muxer<FragmentWrite>>>>,
+    muxer: Arc<Mutex<PendingMuxer>>,
     video_finish_rx: Option<oneshot::Receiver<()>>,
     audio_finish_rx: Option<oneshot::Receiver<()>>,
 }
@@ -74,7 +133,7 @@ impl WebCodecsMuxer {
             .to_string_lossy()
             .to_string();
 
-        let muxer = Arc::new(Mutex::new(Some(
+        let muxer = Arc::new(Mutex::new(PendingMuxer::new(
             MuxerBuilder::new(writer.clone())
                 .video(
                     VideoCodec::H264,
@@ -135,12 +194,7 @@ impl MuxerInput for WebCodecsVideoInput {
     type Data = VideoEncodedData;
 
     async fn push(&mut self, data: Self::Data) -> unienc_common::Result<()> {
-        let mut muxer_guard = self.muxer.lock().unwrap();
-        let muxer = muxer_guard.as_mut().unwrap();
-        muxer
-            .write_video(data.timestamp(), &data.data, data.is_key)
-            .context("Failed to write encoded frame")?;
-        Ok(())
+        self.muxer.lock().unwrap().write_video(&data)
     }
 
     async fn finish(mut self) -> unienc_common::Result<()> {
@@ -157,12 +211,7 @@ impl MuxerInput for WebCodecsAudioInput {
     type Data = AudioEncodedData;
 
     async fn push(&mut self, data: Self::Data) -> unienc_common::Result<()> {
-        let mut muxer_guard = self.muxer.lock().unwrap();
-        let muxer = muxer_guard.as_mut().unwrap();
-        muxer
-            .write_audio(data.timestamp(), &data.data)
-            .context("Failed to write encoded frame")?;
-        Ok(())
+        self.muxer.lock().unwrap().write_audio(data)
     }
 
     async fn finish(mut self) -> unienc_common::Result<()> {
@@ -182,7 +231,19 @@ impl CompletionHandle for WebCodecsCompletionHandle {
             self.audio_finish_rx.take().unwrap()
         );
         let mut muxer_guard = self.muxer.lock().unwrap();
-        let muxer = muxer_guard.take().unwrap();
+        // Held back audio can only be written after a video frame, so if any is
+        // still waiting there never was one and the output would be silent
+        // without saying so.
+        if !muxer_guard.pending_audio.is_empty() {
+            return Err(CommonError::Other(format!(
+                "no video frame was ever written, so {} audio frame(s) could not be muxed",
+                muxer_guard.pending_audio.len()
+            )));
+        }
+        let muxer = muxer_guard
+            .muxer
+            .take()
+            .context("The muxer is already finished")?;
         muxer.finish().context("Failed to finish audio")?;
 
         self.writer

@@ -1,7 +1,7 @@
+use std::io::Write;
 use std::path::Path;
 
-use tokio::io::AsyncWriteExt;
-use unienc_common::{CompletionHandle, Muxer, MuxerInput};
+use unienc_common::{CompletionHandle, Muxer, MuxerInput, Runtime};
 
 use crate::{
     audio::AudioEncodedData,
@@ -10,32 +10,34 @@ use crate::{
     video::VideoEncodedData,
 };
 
-pub struct FFmpegMuxer {
-    video: FFmpegMuxerVideoInput,
-    audio: FFmpegMuxerAudioInput,
-    completion: FFmpegCompletionHandle,
+pub struct FFmpegMuxer<R: Runtime> {
+    video: FFmpegMuxerVideoInput<R>,
+    audio: FFmpegMuxerAudioInput<R>,
+    completion: FFmpegCompletionHandle<R>,
 }
 
-pub struct FFmpegCompletionHandle {
+pub struct FFmpegCompletionHandle<R: Runtime> {
     child: FFmpeg,
+    runtime: R,
 }
 
-pub struct FFmpegMuxerVideoInput {
-    input: Option<ffmpeg::Input>,
+pub struct FFmpegMuxerVideoInput<R: Runtime> {
+    input: Option<ffmpeg::Input<R>>,
 }
 
-pub struct FFmpegMuxerAudioInput {
-    input: Option<ffmpeg::Input>,
+pub struct FFmpegMuxerAudioInput<R: Runtime> {
+    input: Option<ffmpeg::Input<R>>,
 }
 
-impl FFmpegMuxer {
+impl<R: Runtime + 'static> FFmpegMuxer<R> {
     pub fn new<P: AsRef<Path>>(
         output_path: P,
         video_options: &impl unienc_common::VideoEncoderOptions,
         audio_options: &impl unienc_common::AudioEncoderOptions,
+        runtime: R,
     ) -> Result<Self> {
         // raw H.264 frame cannot have timestamp, so we need to assume CFR (encoder also supports CFR)
-        let mut ffmpeg = ffmpeg::Builder::new()
+        let mut spawned = ffmpeg::Builder::new()
             .use_stdin(true)
             .input(["-f", "h264", "-r", &format!("{}", video_options.fps_hint())])
             .input(["-f", "aac"])
@@ -46,29 +48,31 @@ impl FFmpegMuxer {
                 ffmpeg::Destination::Path(output_path.as_ref().as_os_str().to_owned()),
             )?;
 
-        let mut inputs = ffmpeg
-            .inputs
-            .take()
-            .ok_or(FFmpegError::InputsNotAvailable)?;
-        let audio_input = inputs.remove(1);
-        let video_input = inputs.remove(0);
+        if spawned.inputs.len() < 2 {
+            return Err(FFmpegError::InputsNotAvailable);
+        }
+        let audio_input = spawned.inputs.remove(1);
+        let video_input = spawned.inputs.remove(0);
 
         Ok(FFmpegMuxer {
             video: FFmpegMuxerVideoInput {
-                input: Some(video_input),
+                input: Some(ffmpeg::Input::new(runtime.clone(), video_input)),
             },
             audio: FFmpegMuxerAudioInput {
-                input: Some(audio_input),
+                input: Some(ffmpeg::Input::new(runtime.clone(), audio_input)),
             },
-            completion: FFmpegCompletionHandle { child: ffmpeg },
+            completion: FFmpegCompletionHandle {
+                child: spawned.ffmpeg,
+                runtime,
+            },
         })
     }
 }
 
-impl Muxer for FFmpegMuxer {
-    type VideoInputType = FFmpegMuxerVideoInput;
-    type AudioInputType = FFmpegMuxerAudioInput;
-    type CompletionHandleType = FFmpegCompletionHandle;
+impl<R: Runtime + 'static> Muxer for FFmpegMuxer<R> {
+    type VideoInputType = FFmpegMuxerVideoInput<R>;
+    type AudioInputType = FFmpegMuxerAudioInput<R>;
+    type CompletionHandleType = FFmpegCompletionHandle<R>;
 
     fn get_inputs(
         self,
@@ -81,21 +85,22 @@ impl Muxer for FFmpegMuxer {
     }
 }
 
-impl MuxerInput for FFmpegMuxerVideoInput {
+impl<R: Runtime + 'static> MuxerInput for FFmpegMuxerVideoInput<R> {
     type Data = VideoEncodedData;
 
     async fn push(&mut self, data: Self::Data) -> unienc_common::Result<()> {
         let input = self.input.as_mut().ok_or(FFmpegError::InputNotAvailable)?;
-        match data {
-            VideoEncodedData::ParameterSet(payload) => {
-                input.write_all(&payload).await.map_err(FFmpegError::from)?;
-            }
-            VideoEncodedData::Slice { payload, .. } => {
-                input.write_all(&payload).await.map_err(FFmpegError::from)?;
-            }
-        }
+        let payload = match data {
+            VideoEncodedData::ParameterSet(payload) => payload,
+            VideoEncodedData::Slice { payload, .. } => payload,
+        };
 
-        input.flush().await.map_err(FFmpegError::from)?;
+        input
+            .with_writer(move |writer| {
+                writer.write_all(&payload)?;
+                writer.flush()
+            })
+            .await?;
 
         Ok(())
     }
@@ -105,28 +110,24 @@ impl MuxerInput for FFmpegMuxerVideoInput {
         self.input
             .take()
             .ok_or(FFmpegError::InputNotAvailable)?
-            .shutdown()
-            .await
-            .map_err(FFmpegError::from)?;
+            .close()
+            .await?;
         Ok(())
     }
 }
 
-impl MuxerInput for FFmpegMuxerAudioInput {
+impl<R: Runtime + 'static> MuxerInput for FFmpegMuxerAudioInput<R> {
     type Data = AudioEncodedData;
 
     async fn push(&mut self, data: Self::Data) -> unienc_common::Result<()> {
         let input = self.input.as_mut().ok_or(FFmpegError::InputNotAvailable)?;
         input
-            .write_all(&data.header)
-            .await
-            .map_err(FFmpegError::from)?;
-        input
-            .write_all(&data.payload)
-            .await
-            .map_err(FFmpegError::from)?;
-
-        input.flush().await.map_err(FFmpegError::from)?;
+            .with_writer(move |writer| {
+                writer.write_all(&data.header)?;
+                writer.write_all(&data.payload)?;
+                writer.flush()
+            })
+            .await?;
 
         Ok(())
     }
@@ -136,16 +137,16 @@ impl MuxerInput for FFmpegMuxerAudioInput {
         self.input
             .take()
             .ok_or(FFmpegError::InputNotAvailable)?
-            .shutdown()
-            .await
-            .map_err(FFmpegError::from)?;
+            .close()
+            .await?;
         Ok(())
     }
 }
 
-impl CompletionHandle for FFmpegCompletionHandle {
+impl<R: Runtime + 'static> CompletionHandle for FFmpegCompletionHandle<R> {
     async fn finish(self) -> unienc_common::Result<()> {
-        let result = self.child.wait().await?;
+        let FFmpegCompletionHandle { child, runtime } = self;
+        let result = child.wait(runtime).await?;
         println!("FFmpeg exited: {}", result);
         if result.success() {
             Ok(())

@@ -1,7 +1,7 @@
 use crate::emscripten::run_script;
 use futures::channel::oneshot;
 use futures::channel::oneshot::Canceled;
-use std::ffi::{CString, c_char};
+use std::ffi::{CStr, CString, c_char};
 use std::sync::LazyLock;
 use thiserror::Error;
 
@@ -103,7 +103,9 @@ pub fn make_download(parts: &[Vec<u8>], mime: &str, filename: &str) {
 
 #[derive(Error, Debug)]
 pub enum JavaScriptError {
-    #[error("JavaScript execution error")]
+    // The captured message is the only description of what the browser
+    // rejected, so it has to reach the caller.
+    #[error("JavaScript execution error: {0}")]
     ExecutionError(String),
     #[error("JavaScript async completion canceled")]
     AsyncExecutionError(#[from] Canceled),
@@ -120,9 +122,11 @@ impl Library {
     fn run_script(&self, script: &str) -> Result<(), JavaScriptError> {
         extern "system" fn on_error_fn(msg: *const c_char, ctx: *mut Option<JavaScriptError>) {
             unsafe {
-                *ctx = msg
-                    .as_ref()
-                    .map(|msg| JavaScriptError::ExecutionError(msg.to_string()));
+                *ctx = (!msg.is_null()).then(|| {
+                    JavaScriptError::ExecutionError(
+                        CStr::from_ptr(msg).to_string_lossy().into_owned(),
+                    )
+                });
             }
         }
 
@@ -156,10 +160,11 @@ impl Library {
         ) {
             unsafe {
                 Box::from_raw(ctx)
-                    .send(
-                        msg.as_ref()
-                            .map(|msg| JavaScriptError::ExecutionError(msg.to_string())),
-                    )
+                    .send((!msg.is_null()).then(|| {
+                        JavaScriptError::ExecutionError(
+                            CStr::from_ptr(msg).to_string_lossy().into_owned(),
+                        )
+                    }))
                     .unwrap();
             }
         }
@@ -325,12 +330,12 @@ impl Library {
             "
             const bitrate = {bitrate};
             const channels = {channels};
-            const sample_rate = {sample_rate};
+            const sampleRate = {sample_rate};
             const onOutput = {on_output};
             const onOutputCtx = {on_output_ctx};
             const onComplete = {on_complete};
             const onCompleteCtx = {on_complete_ctx};
-            window.unienc_webcodecs.video.new({{ bitrate, channels, sample_rate }}, onOutput, onOutputCtx, onComplete, onCompleteCtx);
+            await window.unienc_webcodecs.audio.new({{ bitrate, channels, sampleRate }}, onOutput, onOutputCtx, onComplete, onCompleteCtx);
             "
         );
         self.run_script_async(&script).await?;
@@ -354,10 +359,10 @@ impl Library {
             const dataPtr = {data_ptr};
             const dataLength = {data_length};
             const channels = {channels};
-            const sample_rate = {sample_rate};
+            const sampleRate = {sample_rate};
             const timestamp = {timestamp};
             const dataArray = new Uint8Array(Module.HEAPU8.buffer, dataPtr, dataLength);
-            window.unienc_webcodecs.video.push(encoderIndex, dataArray, {{channels, sample_rate, timestamp}});
+            window.unienc_webcodecs.audio.push(encoderIndex, dataArray, {{channels, sampleRate, timestamp}});
             ",
             data_ptr = data.as_ptr() as usize,
             data_length = data.len(),

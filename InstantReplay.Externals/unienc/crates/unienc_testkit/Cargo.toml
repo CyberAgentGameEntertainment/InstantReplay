@@ -1,0 +1,14 @@
+[package]
+name = "unienc_testkit"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+publish = false
+
+[dependencies]
+futures = { version = "0.3.31", features = ["thread-pool"] }
+blocking = "1.6.2"
+bincode = { workspace = true }
+unienc = { workspace = true }
+unienc_common = { workspace = true }
