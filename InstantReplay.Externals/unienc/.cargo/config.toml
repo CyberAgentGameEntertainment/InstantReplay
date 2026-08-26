@@ -1,2 +1,18 @@
 [target.'cfg(windows)']
 rustflags = ["-C", "link-args=/Brepro"]
+
+# A Rust test binary is a plain executable, so the iOS simulator can run one
+# directly through simctl. No app bundle, no provisioning profile and no code
+# signing are involved, which is what keeps `cargo test --target
+# aarch64-apple-ios-sim` usable as an everyday command. A simulator has to be
+# booted first; scripts/ios-simulator-test.sh does that.
+#
+# This covers the encoders' own logic on the Apple platform. It does not cover
+# the static library link, where the iOS build differs from macOS most (see the
+# mimalloc symbol localization in build-unienc.yml), nor the hardware encoder of
+# a real device.
+[target.aarch64-apple-ios-sim]
+runner = ["xcrun", "simctl", "spawn", "--standalone", "booted"]
+
+[target.x86_64-apple-ios]
+runner = ["xcrun", "simctl", "spawn", "--standalone", "booted"]

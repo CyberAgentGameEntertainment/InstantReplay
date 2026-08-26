@@ -150,19 +150,49 @@ window["unienc_webcodecs"] = {
         EncodedVideoChunk
     >({
         createEncoder: async (options, onChunk) => {
-            const config: VideoEncoderConfig = {
-                codec: "avc1.640028",
-                width: options.width,
-                height: options.height,
-                bitrate: options.bitrate,
-                framerate: options.framerate,
-                avc: {
-                    format: "annexb",
-                }
-            };
+            // Which H.264 profiles a browser will encode is not fixed: Chrome on
+            // Linux, for one, refuses High. Asking for a single profile means
+            // failing outright wherever it is missing, so these are tried in
+            // descending order of what they buy and the first the browser accepts
+            // is used. Baseline is the most widely playable of the three, so the
+            // fallback costs compression rather than compatibility.
+            //
+            // `isConfigSupported` resolves to a support object rather than a
+            // boolean, so `supported` has to be read from it; negating the object
+            // is always false and lets an unsupported configuration through to
+            // `configure`, where the encoder closes itself and the first `encode`
+            // fails with an unrelated InvalidStateError.
+            const profiles = [
+                "avc1.640028", // High, level 4.0
+                "avc1.4d0028", // Main, level 4.0
+                "avc1.42001f", // Baseline, level 3.1
+            ];
 
-            if (!await VideoEncoder.isConfigSupported(config)) {
-                throw new Error("The specified video encoder configuration is not supported.");
+            let config: VideoEncoderConfig | null = null;
+            for (const codec of profiles) {
+                const candidate: VideoEncoderConfig = {
+                    codec,
+                    width: options.width,
+                    height: options.height,
+                    bitrate: options.bitrate,
+                    framerate: options.framerate,
+                    avc: {
+                        format: "annexb",
+                    }
+                };
+                // The candidate is kept rather than the normalized config the
+                // browser returns, because the muxer depends on the annexb
+                // format and a sanitized config need not preserve it.
+                if ((await VideoEncoder.isConfigSupported(candidate)).supported) {
+                    config = candidate;
+                    break;
+                }
+            }
+
+            if (!config) {
+                throw new Error(
+                    `No supported H.264 profile for ${options.width}x${options.height}`
+                    + ` at ${options.bitrate} bps; tried ${profiles.join(", ")}`);
             }
             const init: VideoEncoderInit = {
                 output: (chunk, metadata) => {
@@ -234,10 +264,20 @@ window["unienc_webcodecs"] = {
                 bitrate: options.bitrate,
                 numberOfChannels: options.channels,
                 sampleRate: options.sampleRate,
+                // The muxer takes ADTS framed AAC, as the other backends
+                // produce. Without this the encoder emits raw AAC and the
+                // muxer rejects every frame for having no header. This is the
+                // audio counterpart of the annexb format asked for above.
+                aac: {
+                    format: "adts",
+                },
             };
 
-            if (!await AudioEncoder.isConfigSupported(config)) {
-                throw new Error("The specified video encoder configuration is not supported.");
+            // See the note on the video encoder above.
+            const support = await AudioEncoder.isConfigSupported(config);
+            if (!support.supported) {
+                throw new Error(
+                    `The audio encoder configuration is not supported: ${JSON.stringify(config)}`);
             }
             const init: AudioEncoderInit = {
                 output: (chunk, _metadata) => {

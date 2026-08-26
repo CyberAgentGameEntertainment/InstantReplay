@@ -11,20 +11,8 @@ pub enum AndroidError {
     #[error("Failed to attach current thread to JVM: {0}")]
     JvmAttachFailed(String),
 
-    #[error("JNI exception occurred")]
-    JniException,
-
     #[error("Failed to create global reference")]
     JniGlobalRefFailed,
-
-    #[error("Failed to call method '{0}'")]
-    JniMethodCallFailed(String),
-
-    #[error("Expected {expected} return value")]
-    JniUnexpectedReturnValue { expected: &'static str },
-
-    #[error("Failed to get field '{0}'")]
-    JniFieldGetFailed(String),
 
     #[error("Failed to create Java string")]
     JniStringCreationFailed,
@@ -35,6 +23,9 @@ pub enum AndroidError {
     // MediaCodec related errors
     #[error("Image is null")]
     ImageNull,
+
+    #[error("requires Android API level {required} or later")]
+    UnsupportedApiLevel { required: u32 },
 
     #[error("No input buffer available")]
     NoInputBuffer,
@@ -160,13 +151,10 @@ impl CategorizedError for AndroidError {
             AndroidError::ContextNotInitialized => ErrorCategory::Initialization,
 
             // Platform/JNI errors
-            AndroidError::JniException => ErrorCategory::Platform,
             AndroidError::JniGlobalRefFailed => ErrorCategory::Platform,
-            AndroidError::JniMethodCallFailed(_) => ErrorCategory::Platform,
-            AndroidError::JniUnexpectedReturnValue { .. } => ErrorCategory::Platform,
-            AndroidError::JniFieldGetFailed(_) => ErrorCategory::Platform,
             AndroidError::JniStringCreationFailed => ErrorCategory::Platform,
             AndroidError::Jni(_) => ErrorCategory::Platform,
+            AndroidError::UnsupportedApiLevel { .. } => ErrorCategory::Platform,
 
             // Resource allocation errors
             AndroidError::NotDirectBuffer => ErrorCategory::ResourceAllocation,

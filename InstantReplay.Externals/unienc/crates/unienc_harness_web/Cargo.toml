@@ -1,0 +1,12 @@
+[package]
+name = "unienc_harness_web"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+publish = false
+
+[dependencies]
+futures = "0.3.31"
+unienc_common = { workspace = true }
+unienc_testkit = { workspace = true }

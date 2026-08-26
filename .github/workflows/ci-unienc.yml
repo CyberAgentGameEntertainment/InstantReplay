@@ -5,10 +5,25 @@ on:
     paths:
       - '.github/workflows/ci-unienc.yml'
       - 'InstantReplay.Externals/unienc/**'
+  # Only the trunk, because a branch with an open pull request is already
+  # covered by the `pull_request` trigger and an unrestricted `push` runs the
+  # whole matrix a second time for the same commit. That cost nothing when this
+  # workflow was one `cargo fmt --check`; it is a duplicate of every job below.
   push:
+    branches:
+      - main
     paths:
       - '.github/workflows/ci-unienc.yml'
       - 'InstantReplay.Externals/unienc/**'
+
+# A new push to a branch makes the run already in flight for it pointless, and
+# these jobs are long enough — a simulator boot, an emulator boot, two macOS
+# runners — that leaving it to finish holds runners for a result nobody will
+# read. Runs on the trunk are left alone: each of those is the record for one
+# merged commit, so cancelling one loses the only result that commit ever gets.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   fmt:
@@ -24,3 +39,171 @@ jobs:
       - run: rustup default stable
       - run: rustup component add rustfmt
       - run: cargo fmt --all -- --check
+
+  test:
+    name: Test (${{ matrix.label }})
+    runs-on: ${{ matrix.runs-on }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: macOS / VideoToolbox
+            runs-on: macos-15
+            backend: unienc_apple_vt
+          - label: Windows / Media Foundation
+            runs-on: windows-2022
+            backend: unienc_windows_mf
+          - label: Linux / FFmpeg
+            runs-on: ubuntu-latest
+            backend: unienc_ffmpeg
+    timeout-minutes: 30
+    env:
+      RUST_BACKTRACE: 1
+    defaults:
+      run:
+        working-directory: InstantReplay.Externals/unienc
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          submodules: 'recursive'
+      - run: rustup default stable
+      # The FFmpeg backend shells out to the `ffmpeg` executable and needs an
+      # H.264 encoder (libx264) and an AAC encoder, neither of which is present
+      # on the runner image by default. gcc-multilib matches build-unienc.yml.
+      - name: Install FFmpeg
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg gcc-multilib
+      # unienc_testkit holds the shared end-to-end run and its assertions, and
+      # exercises the platform encoding system (video encoder, audio encoder and
+      # muxer) of the host: VideoToolbox on macOS, Media Foundation on Windows
+      # and FFmpeg on Linux. The GPU blit path is not covered because it requires
+      # a Unity graphics device.
+      #
+      # The backend crate is named per host as well, because a platform backend
+      # only builds for its own platform and so its unit tests can only run here.
+      - name: Run tests
+        run: cargo test -p unienc_testkit -p unienc_common -p ${{ matrix.backend }}
+      # `cargo test` above does not build the FFI layer, so a change to the
+      # platform backends' signatures would otherwise only break on the manual
+      # build-unienc workflow.
+      - name: Check the FFI layer
+        run: cargo check -p unienc_c
+      - name: Upload muxed output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-output-${{ runner.os }}
+          path: InstantReplay.Externals/unienc/target/tmp/*.mp4
+          if-no-files-found: warn
+          retention-days: 7
+
+  test-ios-simulator:
+    name: Test (iOS simulator)
+    runs-on: macos-15
+    timeout-minutes: 45
+    env:
+      RUST_BACKTRACE: 1
+    defaults:
+      run:
+        working-directory: InstantReplay.Externals/unienc
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          submodules: 'recursive'
+      - run: rustup default stable
+      # A Rust test binary is a plain executable, so simctl runs it directly and
+      # no signing identity is needed. VideoToolbox does encode H.264 in the
+      # simulator, so this covers the encoder logic and not just the build.
+      - name: Run tests in the simulator
+        run: scripts/ios-simulator-test.sh
+      - name: Upload muxed output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-output-ios-simulator
+          path: InstantReplay.Externals/unienc/target/aarch64-apple-ios-sim/tmp/*.mp4
+          if-no-files-found: warn
+          retention-days: 7
+
+  test-android-emulator:
+    name: Test (Android emulator)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      RUST_BACKTRACE: 1
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          submodules: 'recursive'
+      - run: rustup default stable
+      - run: rustup target add aarch64-linux-android x86_64-linux-android
+      - run: cargo install cargo-ndk
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - run: echo "ANDROID_NDK_HOME=$ANDROID_NDK_LATEST_HOME" >> $GITHUB_ENV
+      # KVM has to be reachable or the emulator falls back to an unusably slow
+      # software CPU.
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"'             | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      # The emulator's encoder is software (c2.android.avc.encoder), so this
+      # covers the MediaCodec and MediaMuxer plumbing rather than any vendor's
+      # hardware encoder. Those still need a real device.
+      - name: Run the harness on an emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          target: google_apis
+          script: InstantReplay.Externals/unienc/scripts/android-device-test.sh
+      - name: Upload muxed output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-output-android-emulator
+          path: InstantReplay.Externals/unienc/target/android-harness/
+          if-no-files-found: warn
+          retention-days: 7
+
+  test-web:
+    name: Test (WebAssembly, browser)
+    # macOS rather than Linux because of the audio. Chrome reaches WebCodecs'
+    # AAC encoder through `MojoAudioEncoder`, which is gated on the
+    # `media::kPlatformAudioEncoder` feature; `media/base/media_switches.cc`
+    # enables that by default only on Windows, macOS and Android, because those
+    # are the platforms with an OS-level AAC encoder behind it. On Linux the
+    # harness's audio configuration is refused outright, so the backend's audio
+    # path — the one that had never worked before #178 — could not be covered
+    # there at all.
+    runs-on: macos-15
+    timeout-minutes: 45
+    env:
+      RUST_BACKTRACE: 1
+    defaults:
+      run:
+        working-directory: InstantReplay.Externals/unienc
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          submodules: 'recursive'
+      # build-std needs a nightly toolchain, because the Emscripten target has no
+      # prebuilt std. This matches build-unienc.yml.
+      - run: rustup toolchain install nightly --component rust-src
+      - run: rustup target add wasm32-unknown-emscripten
+      # `unienc_webcodecs`'s build script shells out to `tsc`. The Linux runner
+      # image happens to ship TypeScript globally and the macOS one does not, so
+      # install it rather than depend on what an image includes.
+      - run: npm install -g typescript
+      - uses: mymindstorm/setup-emsdk@v14
+      # The WebCodecs backend drives the browser's own encoders, so a real
+      # browser is the only thing that can run this, and it has to be Google
+      # Chrome rather than Chromium: Chromium ships without the proprietary
+      # codecs and refuses every H.264 profile the harness offers. The runner
+      # image already carries Chrome at the path `run-in-browser.sh` defaults
+      # to, so nothing needs installing or pointing at.
+      - name: Run the harness in a browser
+        run: scripts/web-browser-test.sh
