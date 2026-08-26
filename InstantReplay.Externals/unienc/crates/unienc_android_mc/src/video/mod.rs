@@ -1,7 +1,5 @@
 use jni::{
     JNIEnv,
-    objects::JValue,
-    signature::ReturnType,
     sys::{jfloat, jint},
 };
 use std::sync::Arc;
@@ -21,7 +19,7 @@ use crate::{
 
 pub struct MediaCodecVideoEncoder<R: unienc_common::Runtime + 'static> {
     input: MediaCodecVideoEncoderInput<R>,
-    output: MediaCodecVideoEncoderOutput,
+    output: MediaCodecVideoEncoderOutput<R>,
 }
 
 #[allow(dead_code)]
@@ -51,15 +49,16 @@ enum MediaCodecVideoEncoderInputProcessor {
 
 unsafe impl<R: unienc_common::Runtime + 'static> Send for MediaCodecVideoEncoderInput<R> {}
 
-pub struct MediaCodecVideoEncoderOutput {
+pub struct MediaCodecVideoEncoderOutput<R: unienc_common::Runtime + 'static> {
     codec: MediaCodec,
     end_of_stream: bool,
     initialization: Option<tokio::sync::oneshot::Receiver<()>>,
+    runtime: R,
 }
 
 impl<R: unienc_common::Runtime + 'static> Encoder for MediaCodecVideoEncoder<R> {
     type InputType = MediaCodecVideoEncoderInput<R>;
-    type OutputType = MediaCodecVideoEncoderOutput;
+    type OutputType = MediaCodecVideoEncoderOutput<R>;
 
     fn get(self) -> unienc_common::Result<(Self::InputType, Self::OutputType)> {
         Ok((self.input, self.output))
@@ -72,6 +71,11 @@ impl<R: unienc_common::Runtime + 'static> Drop for MediaCodecVideoEncoderInput<R
         || -> Result<()> {
             match &self.processor {
                 MediaCodecVideoEncoderInputProcessor::Uninitialized(_) => Ok(()),
+                // `Drop` cannot await, so this one wait stays on the calling
+                // thread. It is bounded and happens once per stream, unlike the
+                // per-buffer waits in `push`, but it is the same shape: if the
+                // codec has no free input buffer it needs the pull task to
+                // release an output buffer, and that task needs a worker.
                 MediaCodecVideoEncoderInputProcessor::Buffer() => loop {
                     let buffer_index = self
                         .codec
@@ -141,12 +145,13 @@ impl<R: unienc_common::Runtime + 'static> MediaCodecVideoEncoder<R> {
                         idr_interval_seconds: options.idr_interval_seconds(),
                     },
                 ),
-                runtime,
+                runtime: runtime.clone(),
             },
             output: MediaCodecVideoEncoderOutput {
                 codec: codec_output,
                 end_of_stream: false,
                 initialization: rx.into(),
+                runtime,
             },
         })
     }
@@ -201,26 +206,20 @@ async fn push_video_impl<R: unienc_common::Runtime + 'static>(
                 }
             }
 
-            let mut buffer_index;
-            loop {
-                let sleep;
-                {
-                    // Get input buffer
-                    buffer_index = this
-                        .codec
-                        .dequeue_input_buffer(Duration::from_millis(100))?;
-                    if buffer_index == media_codec_errors::INFO_TRY_AGAIN_LATER {
-                        sleep = true;
-                    } else if buffer_index < 0 {
-                        return Err(AndroidError::NoInputBuffer);
-                    } else {
-                        break;
-                    }
+            let buffer_index = loop {
+                // Get input buffer. The wait happens on the blocking pool so that
+                // this task does not hold an executor worker while the codec has
+                // nothing to give; see `dequeue_input_buffer_off_executor`.
+                let buffer_index =
+                    dequeue_input_buffer_off_executor(&this.runtime, &this.codec, DEQUEUE_TIMEOUT)
+                        .await?;
+                if buffer_index >= 0 {
+                    break buffer_index;
                 }
-                if sleep {
-                    yield_now().await;
+                if buffer_index != media_codec_errors::INFO_TRY_AGAIN_LATER {
+                    return Err(AndroidError::NoInputBuffer);
                 }
-            }
+            };
 
             let buffer = this.codec.get_input_buffer(buffer_index)?;
             let env = &mut attach_current_thread()?;
@@ -353,7 +352,7 @@ async fn push_video_impl<R: unienc_common::Runtime + 'static>(
     }
 }
 
-impl EncoderOutput for MediaCodecVideoEncoderOutput {
+impl<R: unienc_common::Runtime + 'static> EncoderOutput for MediaCodecVideoEncoderOutput<R> {
     type Data = CommonEncodedData;
 
     async fn pull(&mut self) -> unienc_common::Result<Option<Self::Data>> {
@@ -361,15 +360,15 @@ impl EncoderOutput for MediaCodecVideoEncoderOutput {
     }
 }
 
-async fn pull_video_output_impl(
-    this: &mut MediaCodecVideoEncoderOutput,
+async fn pull_video_output_impl<R: unienc_common::Runtime + 'static>(
+    this: &mut MediaCodecVideoEncoderOutput<R>,
 ) -> Result<Option<CommonEncodedData>> {
     if let Some(rx) = &mut this.initialization {
         rx.await?;
         this.initialization = None;
     }
 
-    pull_encoded_data_with_codec(&this.codec, &mut this.end_of_stream).await
+    pull_encoded_data_with_codec(this.runtime.clone(), &this.codec, &mut this.end_of_stream).await
 }
 
 // Helper functions for JNI MediaCodec calls
@@ -383,28 +382,13 @@ fn create_video_format_raw(
     idr_interval_seconds: f32,
     use_surface: bool,
 ) -> Result<SafeGlobalRef> {
-    let format_class = env.find_class("android/media/MediaFormat")?;
-    let method_id = env.get_static_method_id(
-        &format_class,
-        "createVideoFormat",
-        "(Ljava/lang/String;II)Landroid/media/MediaFormat;",
-    )?;
-
     let mime = to_java_string(env, MIME_TYPE_VIDEO_AVC)?;
-    let format = unsafe {
-        env.call_static_method_unchecked(
-            format_class,
-            method_id,
-            ReturnType::Object,
-            &[
-                JValue::Object(&mime).as_jni(),
-                JValue::Int(padded_width as jint).as_jni(),
-                JValue::Int(padded_height as jint).as_jni(),
-            ],
-        )
-    }?;
-
-    let format_obj = format.l()?;
+    let format_obj = crate::bindings::MediaFormat::create_video_format(
+        env,
+        &mime,
+        padded_width as jint,
+        padded_height as jint,
+    )?;
 
     // Set additional parameters
     set_format_integer(

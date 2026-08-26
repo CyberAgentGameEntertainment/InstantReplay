@@ -1,4 +1,5 @@
 use std::{
+    io::{Read, Write},
     process::Command,
     sync::{Arc, LazyLock},
     vec,
@@ -6,13 +7,10 @@ use std::{
 
 use bincode::{Decode, Encode};
 use cros_codecs::codec::h264::parser::NaluType;
-use tokio::{
-    io::{AsyncReadExt, AsyncWriteExt},
-    process::ChildStdout,
-};
 use unienc_common::{
-    EncodedData, Encoder, EncoderInput, EncoderOutput, UniencSampleKind, UnsupportedBlitData,
-    VideoEncoderOptions, VideoFrame, VideoFrameBgra32, VideoSample, buffer::SharedBuffer,
+    EncodedData, Encoder, EncoderInput, EncoderOutput, Runtime, UniencSampleKind,
+    UnsupportedBlitData, VideoEncoderOptions, VideoFrame, VideoFrameBgra32, VideoSample,
+    buffer::SharedBuffer,
 };
 
 use crate::{
@@ -24,15 +22,18 @@ use crate::{
 
 mod nalu;
 
-pub struct FFmpegVideoEncoder {
-    input: FFmpegVideoEncoderInput,
-    output: FFmpegVideoEncoderOutput,
+pub struct FFmpegVideoEncoder<R: Runtime> {
+    input: FFmpegVideoEncoderInput<R>,
+    output: FFmpegVideoEncoderOutput<R>,
 }
 
-pub struct FFmpegVideoEncoderInput {
+pub struct FFmpegVideoEncoderInput<R: Runtime> {
     _ffmpeg: Arc<ffmpeg::FFmpeg>,
-    input: ffmpeg::Input,
-    cfr: Cfr<VideoFrameBgra32>,
+    input: ffmpeg::Input<R>,
+    cfr: Cfr,
+    /// The most recently written frame, kept so that it can be repeated to fill
+    /// constant-rate slots that no input frame landed in.
+    last_written: Option<VideoFrameBgra32>,
     width: u32,
     height: u32,
 }
@@ -41,9 +42,9 @@ struct ReaderState {
     buffer_tx: std::sync::mpsc::Sender<VideoEncodedData>,
     frame_index: u64,
 }
-pub struct FFmpegVideoEncoderOutput {
+pub struct FFmpegVideoEncoderOutput<R: Runtime> {
     _ffmpeg: Arc<ffmpeg::FFmpeg>,
-    output: ChildStdout,
+    output: ffmpeg::Output<R>,
     reader_state: Option<ReaderState>,
     buffer_rx: std::sync::mpsc::Receiver<VideoEncodedData>,
     cfr: u32,
@@ -125,8 +126,8 @@ static FFMPEG_CODEC: LazyLock<String> = LazyLock::new(|| {
     .unwrap_or("h264".to_string())
 });
 
-impl FFmpegVideoEncoder {
-    pub fn new<V: VideoEncoderOptions>(options: &V) -> Result<Self> {
+impl<R: Runtime + 'static> FFmpegVideoEncoder<R> {
+    pub fn new<V: VideoEncoderOptions>(options: &V, runtime: R) -> Result<Self> {
         let width = options.width();
         let height = options.height();
         let cfr = options.fps_hint();
@@ -134,7 +135,7 @@ impl FFmpegVideoEncoder {
         let idr_interval_seconds = options.idr_interval_seconds();
 
         // encode raw BGRA frames into H.264 stream
-        let mut ffmpeg = ffmpeg::Builder::new()
+        let mut spawned = ffmpeg::Builder::new()
             .use_stdin(true)
             .input([
                 "-f",
@@ -156,6 +157,14 @@ impl FFmpegVideoEncoder {
                     &format!("{cfr}"),
                     "-c:v",
                     &*FFMPEG_CODEC,
+                    // Raw H.264 has no timestamps and this pipeline carries a
+                    // single timestamp per sample, so it cannot express the
+                    // reordering B-frames require. Left enabled, the encoder
+                    // declares a two frame reordering delay in the SPS, the
+                    // demuxer synthesizes negative timestamps from it while
+                    // muxing, and the tail of the video track is dropped.
+                    "-bf",
+                    "0",
                     "-b:v",
                     &format!("{}", options.bitrate()),
                     "-force_key_frames",
@@ -164,25 +173,25 @@ impl FFmpegVideoEncoder {
                 ffmpeg::Destination::Stdout,
             )?;
 
-        let input = ffmpeg
-            .inputs
-            .take()
-            .ok_or(FFmpegError::InputNotAvailable)?
-            .remove(0);
-        let output = ffmpeg
-            .stdout
-            .take()
-            .ok_or(FFmpegError::OutputNotAvailable)?;
+        let input = ffmpeg::Input::new(runtime.clone(), spawned.inputs.remove(0));
+        let output = ffmpeg::Output::new(
+            runtime,
+            spawned
+                .stdout
+                .take()
+                .ok_or(FFmpegError::OutputNotAvailable)?,
+        );
 
         let (buffer_tx, buffer_rx) = std::sync::mpsc::channel();
 
-        let ffmpeg = Arc::new(ffmpeg);
+        let ffmpeg = Arc::new(spawned.ffmpeg);
 
         Ok(Self {
             input: FFmpegVideoEncoderInput {
                 _ffmpeg: ffmpeg.clone(),
                 input,
                 cfr: Cfr::new(cfr),
+                last_written: None,
                 width,
                 height,
             },
@@ -201,16 +210,16 @@ impl FFmpegVideoEncoder {
     }
 }
 
-impl Encoder for FFmpegVideoEncoder {
-    type InputType = FFmpegVideoEncoderInput;
-    type OutputType = FFmpegVideoEncoderOutput;
+impl<R: Runtime + 'static> Encoder for FFmpegVideoEncoder<R> {
+    type InputType = FFmpegVideoEncoderInput<R>;
+    type OutputType = FFmpegVideoEncoderOutput<R>;
 
     fn get(self) -> unienc_common::Result<(Self::InputType, Self::OutputType)> {
         Ok((self.input, self.output))
     }
 }
 
-impl EncoderInput for FFmpegVideoEncoderInput {
+impl<R: Runtime + 'static> EncoderInput for FFmpegVideoEncoderInput<R> {
     type Data = VideoSample<UnsupportedBlitData>;
 
     async fn push(&mut self, data: Self::Data) -> unienc_common::Result<()> {
@@ -247,25 +256,40 @@ impl EncoderInput for FFmpegVideoEncoderInput {
 
         // raw H.264 frames cannot have timestamps, so we need to assume CFR
         // we need to repeat or discard frames to match frame rate specified as fps_hint
-        let Some((frame, count)) = self.cfr.push(frame, timestamp)? else {
+        let Some(repeats) = self.cfr.advance(timestamp) else {
+            // The frame's slot is already written, so it is dropped to keep the
+            // frame rate constant.
             return Ok(());
         };
 
-        for _i in 0..count {
-            self.input
-                .write_all(frame.buffer.data())
-                .await
-                .map_err(FFmpegError::from)?;
-        }
-        drop(frame);
+        // Both frames are handed to the blocking pool and back so that neither
+        // the repeats nor the retained frame require copying the pixel buffer.
+        let previous = self.last_written.take();
+        let (previous, frame) = self
+            .input
+            .with_writer(move |writer| {
+                if let Some(previous) = &previous {
+                    for _i in 0..repeats {
+                        writer.write_all(previous.buffer.data())?;
+                    }
+                }
+                writer.write_all(frame.buffer.data())?;
+                writer.flush()?;
+                Ok((previous, frame))
+            })
+            .await?;
+        drop(previous);
 
-        self.input.flush().await.map_err(FFmpegError::from)?;
+        // Retained for the repeats of a later gap. Writing the frame as soon as
+        // its slot is known is what keeps the last frame of the stream from
+        // being lost.
+        self.last_written = Some(frame);
 
         Ok(())
     }
 }
 
-impl EncoderOutput for FFmpegVideoEncoderOutput {
+impl<R: Runtime + 'static> EncoderOutput for FFmpegVideoEncoderOutput<R> {
     type Data = VideoEncodedData;
 
     async fn pull(&mut self) -> unienc_common::Result<Option<Self::Data>> {
@@ -284,13 +308,16 @@ impl EncoderOutput for FFmpegVideoEncoderOutput {
 
             // read H.264 stream
             // H.264 byte stream is sequence of NAL units and each frame is a NAL unit
-            let mut buf = vec![0; 65536];
+            let buf = vec![0; 65536];
 
-            let read = self
+            let (buf, read) = self
                 .output
-                .read(&mut buf)
-                .await
-                .map_err(FFmpegError::from)?;
+                .with_reader(move |reader| {
+                    let mut buf = buf;
+                    let read = reader.read(&mut buf)?;
+                    Ok((buf, read))
+                })
+                .await?;
 
             fn create_emit<'a>(state: &'a mut ReaderState, cfr: u32) -> impl FnMut(&NalUnit) + 'a {
                 move |nalu: &NalUnit| {

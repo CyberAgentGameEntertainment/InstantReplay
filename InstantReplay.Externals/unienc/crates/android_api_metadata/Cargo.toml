@@ -1,0 +1,12 @@
+[package]
+name = "android_api_metadata"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+publish = false
+description = "Extracts a compact subset of the Android SDK's api-versions.xml for use by java_api_macros."
+
+[[bin]]
+name = "android-api-metadata"
+path = "src/main.rs"
