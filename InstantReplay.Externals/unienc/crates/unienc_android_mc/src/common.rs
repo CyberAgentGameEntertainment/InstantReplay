@@ -2,7 +2,7 @@ use bincode::{Decode, Encode};
 use jni::{
     JNIEnv,
     objects::{JObject, JString},
-    sys::{jint, jlong},
+    sys::{jfloat, jint, jlong},
 };
 use std::future::Future;
 use std::pin::Pin;
@@ -493,6 +493,18 @@ pub fn set_format_integer(
 ) -> Result<()> {
     let key_str = to_java_string(env, key)?;
     bindings::MediaFormat::set_integer(env, format, &key_str, value)?;
+    Ok(())
+}
+
+/// Set float parameter on MediaFormat
+pub fn set_format_float(
+    env: &mut JNIEnv,
+    format: &JObject,
+    key: &str,
+    value: jfloat,
+) -> Result<()> {
+    let key_str = to_java_string(env, key)?;
+    bindings::MediaFormat::set_float(env, format, &key_str, value)?;
     Ok(())
 }
 

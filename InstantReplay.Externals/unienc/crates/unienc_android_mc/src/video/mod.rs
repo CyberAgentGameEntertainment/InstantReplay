@@ -1,4 +1,7 @@
-use jni::{JNIEnv, sys::jint};
+use jni::{
+    JNIEnv,
+    sys::{jfloat, jint},
+};
 use std::sync::Arc;
 use std::time::Duration;
 use unienc_common::{
@@ -35,6 +38,7 @@ struct UninitializedState {
     tx: tokio::sync::oneshot::Sender<()>,
     bitrate: u32,
     fps_hint: u32,
+    idr_interval_seconds: f32,
 }
 
 enum MediaCodecVideoEncoderInputProcessor {
@@ -138,6 +142,7 @@ impl<R: unienc_common::Runtime + 'static> MediaCodecVideoEncoder<R> {
                         tx,
                         bitrate: options.bitrate(),
                         fps_hint: options.fps_hint(),
+                        idr_interval_seconds: options.idr_interval_seconds(),
                     },
                 ),
                 runtime: runtime.clone(),
@@ -186,6 +191,7 @@ async fn push_video_impl<R: unienc_common::Runtime + 'static>(
                         this.padded_height,
                         state.bitrate,
                         state.fps_hint,
+                        state.idr_interval_seconds,
                         false, // use_surface = false for buffer mode
                     )?;
                     this.codec.configure(&format)?;
@@ -272,6 +278,7 @@ async fn push_video_impl<R: unienc_common::Runtime + 'static>(
                     this.padded_height,
                     state.bitrate,
                     state.fps_hint,
+                    state.idr_interval_seconds,
                     true, // use_surface = true for hardware buffer mode
                 )?;
                 this.codec.configure(&format)?;
@@ -372,6 +379,7 @@ fn create_video_format_raw(
     padded_height: u32,
     bitrate: u32,
     fps_hint: u32,
+    idr_interval_seconds: f32,
     use_surface: bool,
 ) -> Result<SafeGlobalRef> {
     let mime = to_java_string(env, MIME_TYPE_VIDEO_AVC)?;
@@ -396,7 +404,14 @@ fn create_video_format_raw(
 
     set_format_integer(env, &format_obj, KEY_BITRATE, bitrate as jint)?;
     set_format_integer(env, &format_obj, KEY_FRAME_RATE, fps_hint as jint)?;
-    set_format_integer(env, &format_obj, KEY_I_FRAME_INTERVAL, 1)?;
+    // MediaFormat.KEY_I_FRAME_INTERVAL accepts a float since API 25, and `min_api` is 26, so the
+    // sub-second range is available without a version guard.
+    set_format_float(
+        env,
+        &format_obj,
+        KEY_I_FRAME_INTERVAL,
+        idr_interval_seconds as jfloat,
+    )?;
 
     set_format_integer(env, &format_obj, KEY_PRIORITY, 0)?;
     set_format_integer(env, &format_obj, KEY_OPERATING_RATE, fps_hint as jint)?;
