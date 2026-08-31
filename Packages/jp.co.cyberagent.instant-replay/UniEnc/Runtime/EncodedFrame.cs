@@ -29,7 +29,7 @@ namespace UniEnc
         /// <summary>
         ///     Creates a new EncodedFrame with data copied from the source.
         /// </summary>
-        internal static EncodedFrame CreateWithCopy(ReadOnlySpan<byte> sourceData, double timestamp,
+        public static EncodedFrame CreateWithCopy(ReadOnlySpan<byte> sourceData, double timestamp,
             UniencSampleKind kind)
         {
             var rentedArray = ArrayPool<byte>.Shared.Rent(sourceData.Length);
