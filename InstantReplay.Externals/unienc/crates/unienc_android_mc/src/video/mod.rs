@@ -401,5 +401,19 @@ fn create_video_format_raw(
     set_format_integer(env, &format_obj, KEY_PRIORITY, 0)?;
     set_format_integer(env, &format_obj, KEY_OPERATING_RATE, fps_hint as jint)?;
 
+    // Tag the stream as BT.709 limited range. Without these the encoder leaves the color
+    // information unspecified, so the muxed file gives players nothing to go on. The values match
+    // the conversion `VideoFrameBgra32::to_yuv420_planes` performs on the buffer input path, and
+    // on the surface input path they additionally tell MediaCodec which coefficients to use when
+    // it converts the frames the Vulkan preprocessor hands it.
+    set_format_integer(env, &format_obj, KEY_COLOR_STANDARD, COLOR_STANDARD_BT709)?;
+    set_format_integer(
+        env,
+        &format_obj,
+        KEY_COLOR_TRANSFER,
+        COLOR_TRANSFER_SDR_VIDEO,
+    )?;
+    set_format_integer(env, &format_obj, KEY_COLOR_RANGE, COLOR_RANGE_LIMITED)?;
+
     SafeGlobalRef::new(env, format_obj)
 }
