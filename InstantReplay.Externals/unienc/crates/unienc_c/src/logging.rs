@@ -30,11 +30,10 @@ static LOGGER: UniencLogger = UniencLogger;
 /// first one to run: `UnityPluginLoad`, `JNI_OnLoad`, and `unienc_new_runtime`.
 pub fn init() {
     INIT.call_once(|| {
-        // `debug!`/`trace!` are development aids; keep them out of release builds by default.
         log::set_max_level(if cfg!(debug_assertions) {
             LevelFilter::Debug
         } else {
-            LevelFilter::Info
+            LevelFilter::Warn
         });
         // A logger installed by the host application wins; UniEnc must not fight it.
         let _ = log::set_logger(&LOGGER);
