@@ -25,9 +25,11 @@ namespace UniEnc
     public static class NativeLogging
     {
         /// <summary>
-        ///     Discards native log records below the given level. Native records are written to the Unity player log on
-        ///     Unity platforms, and to logcat on Android. Without an explicit call the default is <see cref="NativeLogLevel.Warn" />
-        ///     for release builds of the native library and <see cref="NativeLogLevel.Debug" /> for debug builds.
+        ///     Discards native log records below the given level. Native records go to the Unity log, so they reach the
+        ///     Editor console and the player log — which on Android is logcat, under Unity's own tag. Records emitted
+        ///     before Unity has loaded the plugin fall back to logcat under an <c>unienc</c> tag on Android, and to
+        ///     stdout/stderr elsewhere. Without an explicit call the default is <see cref="NativeLogLevel.Warn" /> for
+        ///     release builds of the native library and <see cref="NativeLogLevel.Debug" /> for debug builds.
         /// </summary>
         public static void SetLevel(NativeLogLevel level)
         {

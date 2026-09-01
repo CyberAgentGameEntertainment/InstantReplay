@@ -3,18 +3,24 @@
 //! Every crate emits diagnostics through the `log` facade. This module installs the single
 //! `log::Log` implementation that decides where those records actually go:
 //!
-//! - On Android, always straight to logcat through `__android_log_write` under the `unienc` tag.
-//!   The Android entry point (`JNI_OnLoad`) runs long before Unity loads the plugin, the encoder
-//!   logs from MediaCodec and Vulkan threads that are not Unity's, and logcat is the surface where
-//!   native-side failures are diagnosed. Routing Android through Unity would lose the early records
-//!   and add a dependency on Unity still being alive exactly when it may not be.
-//! - Otherwise, when the `unity` feature is on and Unity has handed us `IUnityLog`, into the Unity
-//!   player log, so records show up alongside the managed-side messages.
+//! - When the `unity` feature is on and Unity has handed us `IUnityLog`, into the Unity log. That
+//!   reaches more than the log file: the Editor console, and the console of an Editor attached to a
+//!   development player. Android included — Unity's own log destination there *is* logcat, under
+//!   the `Unity` tag, so nothing is given up by preferring this over writing to logcat ourselves.
+//! - Otherwise on Android, straight to logcat through `__android_log_write` under the `unienc` tag.
+//!   `JNI_OnLoad` runs long before `UnityPluginLoad`, and Android discards a process's stdout, so
+//!   without this the earliest records — and any emitted after `UnityPluginUnload` — would be lost
+//!   outright rather than merely landing somewhere less convenient.
 //! - Otherwise (NuGet package, CLI tests, or before Unity has loaded the plugin) to stdout/stderr.
 //!
 //! The sink is chosen per record rather than at install time, so records emitted before Unity calls
 //! `UnityPluginLoad` fall back instead of being dropped, and records emitted after
 //! `UnityPluginUnload` stop using an interface that is no longer ours to use.
+//!
+//! One cost to be aware of on the Unity sink: Unity captures a managed stack trace per record
+//! wherever `Application.GetStackTraceLogType` says to, which is `ScriptOnly` for `LogType.Log` in
+//! a development build and `None` in a release one. High-volume `debug!`/`trace!` output from the
+//! encoder therefore pays a stack walk per record in a development build.
 
 use log::{LevelFilter, Log, Metadata, Record};
 use std::sync::Once;
@@ -57,18 +63,16 @@ impl Log for UniencLogger {
             return;
         }
 
+        #[cfg(feature = "unity")]
+        if unity::write(record) {
+            return;
+        }
+
         #[cfg(target_os = "android")]
         android::write(record);
 
         #[cfg(not(target_os = "android"))]
-        {
-            #[cfg(feature = "unity")]
-            if unity::write(record) {
-                return;
-            }
-
-            write_to_stdio(record);
-        }
+        write_to_stdio(record);
     }
 
     fn flush(&self) {}
@@ -139,7 +143,7 @@ mod android {
     }
 }
 
-#[cfg(all(feature = "unity", not(target_os = "android")))]
+#[cfg(feature = "unity")]
 mod unity {
     use super::{LOG_TAG, format_body, to_c_string};
     use log::{Level, Record};
@@ -187,8 +191,5 @@ mod unity {
 /// Notifies the logger that Unity has provided (or withdrawn) its plugin interfaces.
 #[cfg(feature = "unity")]
 pub fn set_unity_interfaces_available(available: bool) {
-    #[cfg(not(target_os = "android"))]
     unity::set_available(available);
-    #[cfg(target_os = "android")]
-    let _ = available;
 }
