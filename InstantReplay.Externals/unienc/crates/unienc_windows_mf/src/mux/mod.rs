@@ -371,6 +371,13 @@ impl Stream {
 
     /// Feeds the stream sink until it has taken everything, then reports that
     /// the stream drained through `finish_tx`.
+    ///
+    /// Once there is nothing left to send, the stream is told so with an
+    /// end-of-segment marker, and the sink answers with `MEStreamSinkMarker`
+    /// after it has consumed everything placed before it. That answer is what
+    /// `finish_tx` reports, and it is the only thing that makes finalization
+    /// safe to start: finalization writes the `moov` box over a stream the sink
+    /// must already be done with.
     async fn pump(
         kind: &'static str,
         stream: &UnsafeSend<IMFStreamSink>,
@@ -378,6 +385,7 @@ impl Stream {
         finish_tx: &mut Option<oneshot::Sender<Result<()>>>,
     ) -> Result<()> {
         let mut accepted = 0u64;
+        let mut end_of_segment_placed = false;
 
         loop {
             let event = match stream.get_event().await {
@@ -395,36 +403,47 @@ impl Stream {
             match MF_EVENT_TYPE(event_type as i32) {
                 #[allow(non_upper_case_globals)]
                 MEStreamSinkRequestSample => {
+                    // The sink asks for samples ahead of consuming them, so
+                    // requests are still queued after the segment has ended.
+                    // Answering one of those with a second marker would place it
+                    // on a sink that may already be finalizing.
+                    if end_of_segment_placed {
+                        log::debug!(
+                            "Ignoring a sample request on the {kind} stream after end of segment"
+                        );
+                        continue;
+                    }
+
                     if let Some(sample) = sample_rx.recv().await {
                         unsafe { stream.ProcessSample(&*sample)? };
                         accepted += 1;
-                    } else {
-                        // Some Windows builds (observed on 26200 with
-                        // mfmp4srcsnk.dll 10.0.26100.8457) reject PlaceMarker with
-                        // MF_E_INVALIDTYPE for every marker type. The marker only
-                        // tells us the sink consumed everything; treat failure as
-                        // non-fatal so finalization still runs and writes the moov.
-                        if let Err(e) = unsafe {
-                            stream.PlaceMarker(
-                                MFSTREAMSINK_MARKER_ENDOFSEGMENT,
-                                std::ptr::null(),
-                                std::ptr::null(),
-                            )
-                        } {
-                            log::warn!(
-                                "{kind} PlaceMarker(ENDOFSEGMENT) failed (non-fatal): {e:?}"
-                            );
-                        }
-                        if let Some(finish_tx) = finish_tx.take() {
-                            // How much actually reached the sink separates "the
-                            // export wrote nothing" from "the export wrote
-                            // everything and then failed to finalize".
-                            log::info!("{kind} stream drained after {accepted} samples");
-                            finish_tx
-                                .send(Ok(()))
-                                .map_err(|_e| WindowsError::FinishSignalSendFailed)?
-                        };
+                        continue;
                     }
+
+                    end_of_segment_placed = true;
+
+                    if let Err(e) = unsafe {
+                        stream.PlaceMarker(
+                            MFSTREAMSINK_MARKER_ENDOFSEGMENT,
+                            std::ptr::null(),
+                            std::ptr::null(),
+                        )
+                    } {
+                        // Some Windows builds (observed on 26200 with
+                        // mfmp4srcsnk.dll 10.0.26100.8457) reject PlaceMarker
+                        // with MF_E_INVALIDTYPE. No MEStreamSinkMarker will
+                        // follow, so report the stream drained on the strength of
+                        // ProcessSample having returned for every sample, and let
+                        // finalization run rather than failing the export.
+                        log::warn!("{kind} PlaceMarker(ENDOFSEGMENT) failed (non-fatal): {e:?}");
+                        Self::report_drained(kind, accepted, finish_tx)?;
+                    }
+                }
+                #[allow(non_upper_case_globals)]
+                MEStreamSinkMarker => {
+                    // The only marker this loop places is the end-of-segment one,
+                    // so this says the sink has taken everything.
+                    Self::report_drained(kind, accepted, finish_tx)?;
                 }
                 _ => {
                     log::debug!(
@@ -434,6 +453,24 @@ impl Stream {
                 }
             }
         }
+    }
+
+    /// Tells the muxer task this stream is done with, once.
+    fn report_drained(
+        kind: &'static str,
+        accepted: u64,
+        finish_tx: &mut Option<oneshot::Sender<Result<()>>>,
+    ) -> Result<()> {
+        if let Some(finish_tx) = finish_tx.take() {
+            // How much actually reached the sink separates "the export wrote
+            // nothing" from "the export wrote everything and then failed to
+            // finalize".
+            log::info!("{kind} stream drained after {accepted} samples");
+            finish_tx
+                .send(Ok(()))
+                .map_err(|_e| WindowsError::FinishSignalSendFailed)?;
+        }
+        Ok(())
     }
 }
 
