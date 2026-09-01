@@ -20,10 +20,12 @@ namespace UniEnc.Unity.Editor
     {
         private const string LevelKey = "UniEnc.NativeLogLevel";
 
+        private const string BakeKey = "UniEnc.BakeNativeLogLevel";
+
         /// <summary>
         ///     Stored value meaning "leave the level the native library picked for itself".
         /// </summary>
-        private const int Unset = -1;
+        internal const int Unset = -1;
 
         /// <summary>
         ///     Indexed by <see cref="NativeLogLevel" /> plus one, with <see cref="Unset" /> first.
@@ -36,10 +38,24 @@ namespace UniEnc.Unity.Editor
         private static readonly GUIContent LevelLabel = new("Native Log Level",
             "Native log records below this level are discarded.");
 
-        private static int StoredLevel
+        private static readonly GUIContent BakeLabel = new("Bake Into Player Builds",
+            "Writes the level into every player you build from this Editor, so it is in effect from the "
+            + "first frame instead of waiting for a player connection.");
+
+        internal static int StoredLevel
         {
             get => EditorPrefs.GetInt(LevelKey, Unset);
-            set => EditorPrefs.SetInt(LevelKey, value);
+            private set => EditorPrefs.SetInt(LevelKey, value);
+        }
+
+        /// <summary>
+        ///     Off by default: a level chosen to debug the Editor should not silently follow a build out of
+        ///     the door.
+        /// </summary>
+        internal static bool BakeIntoBuilds
+        {
+            get => EditorPrefs.GetBool(BakeKey, false);
+            private set => EditorPrefs.SetBool(BakeKey, value);
         }
 
         [InitializeOnLoadMethod]
@@ -136,10 +152,21 @@ namespace UniEnc.Unity.Editor
                     Send(stored);
                 }
 
+                using (new EditorGUI.DisabledScope(stored == Unset))
+                {
+                    EditorGUI.BeginChangeCheck();
+                    var bake = EditorGUILayout.Toggle(BakeLabel, stored != Unset && BakeIntoBuilds);
+                    if (EditorGUI.EndChangeCheck()) BakeIntoBuilds = bake;
+                }
+
                 EditorGUILayout.HelpBox(
                     "Applies to the Editor's own copy of the native plugin, and is pushed to every connected " +
                     "development player. \"Default\" leaves the level the native library picked for itself: " +
-                    "Info for a release build of the plugin, Debug for a debug build.",
+                    "Info for a release build of the plugin, Debug for a debug build.\n\n" +
+                    "A player connection can only deliver a level once the player is running, which is too " +
+                    "late for the records a session emits while starting up. Bake the level in to catch " +
+                    "those. Baking applies to release builds too, and is per-Editor: a machine that never " +
+                    "set a level here — a build machine, say — bakes nothing.",
                     MessageType.None);
 
                 DrawConnectedPlayers(stored);
