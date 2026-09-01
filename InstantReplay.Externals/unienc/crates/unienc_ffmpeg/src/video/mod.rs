@@ -89,7 +89,7 @@ static FFMPEG_CODEC: LazyLock<String> = LazyLock::new(|| {
         // ffmpeg -encoders returns encoders including not actually available on the system
         // so we need to verify by trying to create a simple command line
         let encoder = encoder_candidates.find(|e| {
-            println!("Testing ffmpeg H.264 encoder: {}", e);
+            log::debug!("Testing ffmpeg H.264 encoder: {}", e);
             let res = Command::new(ffmpeg::FFMPEG_PATH.as_os_str())
                 .args([
                     "-y",
@@ -115,12 +115,12 @@ static FFMPEG_CODEC: LazyLock<String> = LazyLock::new(|| {
 
         let encoder = encoder.ok_or(FFmpegError::NoSuitableEncoder)?;
 
-        println!("Using H.264 encoder: {}", encoder);
+        log::info!("Using H.264 encoder: {}", encoder);
 
         Ok(encoder.to_string())
     })()
     .map_err(|e| {
-        println!("Error determining ffmpeg H.264 encoder: {}", e);
+        log::error!("Error determining ffmpeg H.264 encoder: {}", e);
         e
     })
     .unwrap_or("h264".to_string())
@@ -347,7 +347,7 @@ impl<R: Runtime + 'static> EncoderOutput for FFmpegVideoEncoderOutput<R> {
                             });
                         }
                         _ => {
-                            println!("Ignoring NALU type: {:?}", nalu.nalu.header.type_);
+                            log::trace!("Ignoring NALU type: {:?}", nalu.nalu.header.type_);
                         }
                     };
                 }

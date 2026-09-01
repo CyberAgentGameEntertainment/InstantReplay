@@ -26,5 +26,10 @@ unienc_webcodecs = { workspace = true }
 
 [features]
 default = []
-unity = ["unienc_common/unity"]
+unity = [
+    "unienc_common/unity",
+    "unienc_windows_mf/unity",
+    "unienc_ffmpeg/unity",
+    "unienc_webcodecs/unity",
+]
 mimalloc = ["unienc_apple_vt/mimalloc"]

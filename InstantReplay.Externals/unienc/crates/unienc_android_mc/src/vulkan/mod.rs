@@ -83,7 +83,7 @@ impl<'a> Drop for MarkerGuard<'a> {
 }
 
 pub(crate) fn unity_plugin_load(interfaces: &unity_native_plugin::interface::UnityInterfaces) {
-    println!("unienc: unity_plugin_load");
+    log::info!("unity_plugin_load");
     let graphics = interfaces.interface::<UnityGraphics>().unwrap();
     let profiler = interfaces.interface::<UnityProfiler>().unwrap();
     if profiler.is_available() {
@@ -135,12 +135,12 @@ pub(crate) fn unity_plugin_load(interfaces: &unity_native_plugin::interface::Uni
 }
 
 extern "system" fn on_device_event(ev_type: GfxDeviceEventType) {
-    println!("unienc: on_device_event {ev_type:?}");
+    log::debug!("on_device_event {ev_type:?}");
     match ev_type {
         GfxDeviceEventType::Initialize => {
             let graphics = GRAPHICS.get().unwrap().lock().unwrap();
             let renderer = graphics.renderer();
-            println!("unienc: {renderer:?}");
+            log::debug!("{renderer:?}");
 
             if renderer != unity_native_plugin::graphics::GfxRenderer::Vulkan {
                 return;
@@ -149,7 +149,7 @@ extern "system" fn on_device_event(ev_type: GfxDeviceEventType) {
             let event_id = graphics.reserve_event_id_range(1);
 
             EVENT_ID.set(event_id).unwrap();
-            println!("unienc: reserved event id {event_id}");
+            log::debug!("reserved event id {event_id}");
 
             let interfaces = unity_native_plugin::interface::UnityInterfaces::get();
             let vulkan = interfaces.interface::<UnityGraphicsVulkanV2>().unwrap();
