@@ -10,5 +10,6 @@ publish = false
 futures = { version = "0.3.31", features = ["thread-pool"] }
 blocking = "1.6.2"
 bincode = { workspace = true }
+log = { workspace = true }
 unienc = { workspace = true }
 unienc_common = { workspace = true }

@@ -114,7 +114,7 @@ impl CompletionHandle for AVFMuxerCompletionHandle {
             writer.finishWritingWithCompletionHandler(&RcBlock::new(move || {
                 if let Some(tx) = tx.borrow_mut().take() {
                     if let Some(err) = writer1.error() {
-                        println!("Failed to finish writing: {}", err.to_friendly_string());
+                        log::error!("Failed to finish writing: {}", err.to_friendly_string());
                         tx.send(Err(CommonError::Other(err.to_friendly_string())))
                             .unwrap();
                     } else {
@@ -263,7 +263,7 @@ impl AVFMuxer {
                                 let err_msg = unsafe { writer.error() }
                                     .map(|e| e.to_friendly_string())
                                     .unwrap_or_else(|| "unknown error".to_string());
-                                println!("{label_clone}: appendSampleBuffer failed: {err_msg}");
+                                log::error!("{label_clone}: appendSampleBuffer failed: {err_msg}");
                                 if let Some(finish_tx) = finish_tx.borrow_mut().take() {
                                     if finish_tx
                                         .send(Err(AppleError::AssetWriterAppendFailed(
@@ -272,12 +272,12 @@ impl AVFMuxer {
                                         )))
                                         .is_err()
                                     {
-                                        println!(
+                                        log::error!(
                                             "{label_clone}: failed to send error to finish_tx: channel closed"
                                         );
                                     }
                                 } else {
-                                    println!(
+                                    log::error!(
                                         "{label_clone}: failed to send error to finish_tx: already taken"
                                     );
                                 }
@@ -291,7 +291,9 @@ impl AVFMuxer {
                             if let Some(finish_tx) = finish_tx.borrow_mut().take() {
                                 input_clone.markAsFinished();
                                 finish_tx.send(Ok(())).unwrap_or_else(|e| {
-                                    println!("{label_clone}: failed to send finish signal: {e:?}");
+                                    log::error!(
+                                        "{label_clone}: failed to send finish signal: {e:?}"
+                                    );
                                 });
                             }
                             return;

@@ -28,7 +28,7 @@ static JAVA_VM: OnceLock<jni::JavaVM> = OnceLock::new();
 pub unsafe fn set_java_vm(vm: *mut jni::sys::JavaVM, _reserved: *mut c_void) -> c_int {
     unsafe {
         JAVA_VM.set(JavaVM::from_raw(vm).unwrap()).unwrap();
-        println!("JNI_OnLoad: {:?}", vm);
+        log::info!("JNI_OnLoad: {:?}", vm);
         JNI_VERSION_1_6
     }
 }

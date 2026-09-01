@@ -17,6 +17,7 @@ unienc_ffmpeg = {  path = "./crates/unienc_ffmpeg" }
 unienc_webcodecs = {  path = "./crates/unienc_webcodecs" }
 unienc_testkit = { path = "./crates/unienc_testkit" }
 unity-native-plugin = "0.9.0"
+log = "0.4"
 
 [patch.crates-io]
 muxide = { path = "./external/muxide" }

@@ -147,7 +147,7 @@ impl<R: Runtime + 'static> CompletionHandle for FFmpegCompletionHandle<R> {
     async fn finish(self) -> unienc_common::Result<()> {
         let FFmpegCompletionHandle { child, runtime } = self;
         let result = child.wait(runtime).await?;
-        println!("FFmpeg exited: {}", result);
+        log::debug!("FFmpeg exited: {}", result);
         if result.success() {
             Ok(())
         } else {

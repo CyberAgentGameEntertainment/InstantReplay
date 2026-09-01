@@ -267,7 +267,7 @@ impl Stream {
             // to travel down that channel; dropping the sender instead is what
             // used to surface as a bare "channel closed" with the HRESULT lost.
             if let Err(e) = &result {
-                println!("Media sink stream loop failed: {:?}", e);
+                log::error!("Media sink stream loop failed: {:?}", e);
                 loop_errors.set(e.clone());
                 if let Some(finish_tx) = finish_tx.take() {
                     let _ = finish_tx.send(Err(e.clone()));
@@ -318,7 +318,7 @@ impl Stream {
                                 std::ptr::null(),
                             )
                         } {
-                            println!("PlaceMarker(ENDOFSEGMENT) failed (non-fatal): {:?}", e);
+                            log::warn!("PlaceMarker(ENDOFSEGMENT) failed (non-fatal): {:?}", e);
                         }
                         if let Some(finish_tx) = finish_tx.take() {
                             finish_tx
@@ -328,7 +328,7 @@ impl Stream {
                     }
                 }
                 _ => {
-                    println!("Unhandled media sink event type: {:?}", event_type);
+                    log::debug!("Unhandled media sink event type: {:?}", event_type);
                 }
             }
         }
