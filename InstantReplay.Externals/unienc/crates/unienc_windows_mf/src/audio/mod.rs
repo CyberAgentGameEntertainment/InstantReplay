@@ -71,6 +71,7 @@ impl Encoder for MediaFoundationAudioEncoder {
 
     fn get(self) -> unienc_common::Result<(Self::InputType, Self::OutputType)> {
         let media_type = Some(UnsafeSend(self.transform.output_type()?.clone()));
+        let errors = self.transform.errors();
         Ok((
             AudioEncoderInputImpl {
                 transform: self.transform,
@@ -80,6 +81,7 @@ impl Encoder for MediaFoundationAudioEncoder {
             AudioEncoderOutputImpl {
                 receiver: self.output_rx,
                 media_type,
+                errors,
             },
         ))
     }
@@ -94,6 +96,7 @@ pub struct AudioEncoderInputImpl {
 pub struct AudioEncoderOutputImpl {
     media_type: Option<UnsafeSend<IMFMediaType>>,
     receiver: mpsc::Receiver<UnsafeSend<IMFSample>>,
+    errors: ErrorSlot,
 }
 
 impl EncoderInput for AudioEncoderInputImpl {
@@ -162,9 +165,16 @@ impl EncoderOutput for AudioEncoderOutputImpl {
                 payload: Payload::Format(media_type),
             }));
         }
-        Ok(self.receiver.recv().await.map(|sample| AudioEncodedData {
-            payload: Payload::Sample(sample),
-        }))
+        match self.receiver.recv().await {
+            Some(sample) => Ok(Some(AudioEncodedData {
+                payload: Payload::Sample(sample),
+            })),
+            // End of output and a dead encoder loop look identical from here.
+            None => match self.errors.get() {
+                Some(error) => Err(error.into()),
+                None => Ok(None),
+            },
+        }
     }
 }
 

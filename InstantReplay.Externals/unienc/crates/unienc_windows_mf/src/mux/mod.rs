@@ -1,4 +1,4 @@
-use crate::error::{OptionExt, Result, WindowsError};
+use crate::error::{Result, WindowsError};
 use std::path::Path;
 use tokio::sync::mpsc;
 use tokio::sync::oneshot;
@@ -11,7 +11,7 @@ use windows_core::HSTRING;
 use windows_core::IUnknown;
 
 use crate::audio::AudioEncodedData;
-use crate::common::{Payload, UnsafeSend};
+use crate::common::{ErrorSlot, Payload, UnsafeSend};
 use crate::mft::AsyncCallback;
 use crate::mft::MediaEventGeneratorCustom;
 use crate::video::VideoEncodedData;
@@ -88,92 +88,29 @@ impl MediaFoundationMuxer {
         let runtime_clone = runtime.clone();
 
         runtime.spawn_ret(async move {
-            let result: Result<()> = async move {
-                let runtime_clone = runtime_clone.clone();
+            let mut video_stream_tx = Some(video_stream_tx);
+            let mut audio_stream_tx = Some(audio_stream_tx);
 
-                let video_type = video_type_rx.await??;
-                let audio_type = audio_type_rx.await??;
-
-                let sink = UnsafeSend(unsafe {
-                    MFCreateMPEG4MediaSink(&*file, &*video_type, &*audio_type)?
-                });
-                let sink_inner = UnsafeSend(sink.clone());
-                let result: Result<()> = async move {
-                    let sink = sink_inner;
-                    assert_eq!(
-                        unsafe { sink.GetCharacteristics()? } & MEDIASINK_RATELESS,
-                        MEDIASINK_RATELESS
-                    );
-                    let finalizable = sink.cast::<IMFFinalizableMediaSink>().ok().map(UnsafeSend);
-                    let sink_count = unsafe { sink.GetStreamSinkCount()? };
-                    assert_eq!(sink_count, 2);
-                    let (video_stream, video_finish_rx) =
-                        Stream::new(unsafe { sink.GetStreamSinkByIndex(0)? }, &runtime_clone)?;
-                    let (audio_stream, audio_finish_rx) =
-                        Stream::new(unsafe { sink.GetStreamSinkByIndex(1)? }, &runtime_clone)?;
-
-                    {
-                        let presentation_clock = unsafe { MFCreatePresentationClock()? };
-                        let time_source = unsafe { MFCreateSystemTimeSource()? };
-                        unsafe { presentation_clock.SetTimeSource(&time_source)? };
-                        unsafe { sink.SetPresentationClock(&presentation_clock)? };
-
-                        unsafe { presentation_clock.Start(0)? };
-                    }
-
-                    video_stream_tx
-                        .send(Ok(video_stream))
-                        .map_err(|_| WindowsError::StreamSendFailed)?;
-                    audio_stream_tx
-                        .send(Ok(audio_stream))
-                        .map_err(|_| WindowsError::StreamSendFailed)?;
-
-                    video_finish_rx.await?;
-                    audio_finish_rx.await?;
-
-                    if let Some(finalizable) = finalizable {
-                        let finalizable = UnsafeSend(finalizable);
-
-                        let finalizable_clone = UnsafeSend(finalizable.clone());
-                        let (done_tx, done_rx) = oneshot::channel();
-
-                        {
-                            let callback: IMFAsyncCallback =
-                                AsyncCallback::new(move |result| unsafe {
-                                    let result: windows_core::Result<()> = (move || {
-                                        finalizable_clone.EndFinalize(result.ok()?)?;
-                                        Ok(())
-                                    })(
-                                    );
-                                    let _ = done_tx.send(result);
-                                })
-                                .into();
-
-                            unsafe {
-                                finalizable.BeginFinalize(&callback, Option::<&IUnknown>::None)
-                            }?;
-                        }
-
-                        done_rx
-                            .await
-                            .map_err(|e| WindowsError::Other(e.to_string()))??;
-
-                        let _ = unsafe { sink.Shutdown() };
-                    }
-
-                    Result::<()>::Ok(())
-                }
-                .await;
-
-                // Release the output file even when muxing fails; otherwise the
-                // sink keeps the file handle open until the process exits.
-                if result.is_err() {
-                    let _ = unsafe { sink.Shutdown() };
-                }
-
-                result
-            }
+            let result = Self::mux(
+                file,
+                runtime_clone,
+                video_type_rx,
+                audio_type_rx,
+                &mut video_stream_tx,
+                &mut audio_stream_tx,
+            )
             .await;
+
+            // A caller blocked in `LazyStream::get` would otherwise see nothing
+            // but a dropped sender. Hand it the failure that actually happened.
+            if let Err(e) = &result {
+                for tx in [video_stream_tx.take(), audio_stream_tx.take()]
+                    .into_iter()
+                    .flatten()
+                {
+                    let _ = tx.send(Err(e.clone()));
+                }
+            }
 
             let _ = finish_tx.send(result);
         });
@@ -193,65 +130,208 @@ impl MediaFoundationMuxer {
             finish_rx,
         })
     }
+
+    /// Drives the MPEG-4 media sink for one output file, from the media types
+    /// the encoders announce through to the finalized `moov`.
+    async fn mux<R: Runtime + 'static>(
+        file: UnsafeSend<IMFByteStream>,
+        runtime: R,
+        video_type_rx: oneshot::Receiver<Result<UnsafeSend<IMFMediaType>>>,
+        audio_type_rx: oneshot::Receiver<Result<UnsafeSend<IMFMediaType>>>,
+        video_stream_tx: &mut Option<oneshot::Sender<Result<Stream>>>,
+        audio_stream_tx: &mut Option<oneshot::Sender<Result<Stream>>>,
+    ) -> Result<()> {
+        let video_type = video_type_rx.await??;
+        let audio_type = audio_type_rx.await??;
+
+        let sink =
+            UnsafeSend(unsafe { MFCreateMPEG4MediaSink(&*file, &*video_type, &*audio_type)? });
+
+        let result = Self::run_sink(&sink, runtime, video_stream_tx, audio_stream_tx).await;
+
+        // Release the output file even when muxing fails; otherwise the
+        // sink keeps the file handle open until the process exits.
+        if result.is_err() {
+            let _ = unsafe { sink.Shutdown() };
+        }
+
+        result
+    }
+
+    async fn run_sink<R: Runtime + 'static>(
+        sink: &UnsafeSend<IMFMediaSink>,
+        runtime: R,
+        video_stream_tx: &mut Option<oneshot::Sender<Result<Stream>>>,
+        audio_stream_tx: &mut Option<oneshot::Sender<Result<Stream>>>,
+    ) -> Result<()> {
+        assert_eq!(
+            unsafe { sink.GetCharacteristics()? } & MEDIASINK_RATELESS,
+            MEDIASINK_RATELESS
+        );
+        let finalizable = sink.cast::<IMFFinalizableMediaSink>().ok().map(UnsafeSend);
+        let sink_count = unsafe { sink.GetStreamSinkCount()? };
+        assert_eq!(sink_count, 2);
+        let (video_stream, video_finish_rx) =
+            Stream::new(unsafe { sink.GetStreamSinkByIndex(0)? }, &runtime)?;
+        let (audio_stream, audio_finish_rx) =
+            Stream::new(unsafe { sink.GetStreamSinkByIndex(1)? }, &runtime)?;
+
+        {
+            let presentation_clock = unsafe { MFCreatePresentationClock()? };
+            let time_source = unsafe { MFCreateSystemTimeSource()? };
+            unsafe { presentation_clock.SetTimeSource(&time_source)? };
+            unsafe { sink.SetPresentationClock(&presentation_clock)? };
+
+            unsafe { presentation_clock.Start(0)? };
+        }
+
+        video_stream_tx
+            .take()
+            .ok_or(WindowsError::StreamSendFailed)?
+            .send(Ok(video_stream))
+            .map_err(|_| WindowsError::StreamSendFailed)?;
+        audio_stream_tx
+            .take()
+            .ok_or(WindowsError::StreamSendFailed)?
+            .send(Ok(audio_stream))
+            .map_err(|_| WindowsError::StreamSendFailed)?;
+
+        video_finish_rx.await??;
+        audio_finish_rx.await??;
+
+        if let Some(finalizable) = finalizable {
+            let finalizable = UnsafeSend(finalizable);
+
+            let finalizable_clone = UnsafeSend(finalizable.clone());
+            let (done_tx, done_rx) = oneshot::channel();
+
+            {
+                let callback: IMFAsyncCallback = AsyncCallback::new(move |result| unsafe {
+                    let result: windows_core::Result<()> = (move || {
+                        finalizable_clone.EndFinalize(result.ok()?)?;
+                        Ok(())
+                    })();
+                    let _ = done_tx.send(result);
+                })
+                .into();
+
+                unsafe { finalizable.BeginFinalize(&callback, Option::<&IUnknown>::None) }?;
+            }
+
+            done_rx
+                .await
+                .map_err(|_| WindowsError::FinalizeResultLost)??;
+
+            let _ = unsafe { sink.Shutdown() };
+        }
+
+        Ok(())
+    }
 }
 
 struct Stream {
     sample_tx: mpsc::Sender<UnsafeSend<IMFSample>>,
+    errors: ErrorSlot,
 }
 
 impl Stream {
+    /// Hands a sample to the sink, reporting why the sink stopped listening
+    /// rather than just that it did.
+    async fn push(&self, sample: UnsafeSend<IMFSample>) -> Result<()> {
+        self.sample_tx.send(sample).await.map_err(|e| {
+            self.errors
+                .get_or(WindowsError::MuxerSendFailed(e.to_string()))
+        })
+    }
+
     pub fn new(
         stream: IMFStreamSink,
         runtime: &impl Runtime,
-    ) -> Result<(Self, oneshot::Receiver<()>)> {
+    ) -> Result<(Self, oneshot::Receiver<Result<()>>)> {
         let stream = UnsafeSend(stream);
         let stream_cap = UnsafeSend(stream.clone());
 
         let (sample_tx, sample_rx) = mpsc::channel::<UnsafeSend<IMFSample>>(32);
-        let (finish_tx, finish_rx) = oneshot::channel::<()>();
+        let (finish_tx, finish_rx) = oneshot::channel::<Result<()>>();
+        let errors = ErrorSlot::default();
+        let loop_errors = errors.clone();
 
         runtime.spawn_ret(async move {
             let mut sample_rx = sample_rx;
             let mut finish_tx = Some(finish_tx);
-            while let Ok(event) = stream_cap.get_event().await {
-                let event_type: u32 = unsafe { event.GetType()? };
-                match MF_EVENT_TYPE(event_type as i32) {
-                    #[allow(non_upper_case_globals)]
-                    MEStreamSinkRequestSample => {
-                        if let Some(sample) = sample_rx.recv().await {
-                            unsafe { stream_cap.ProcessSample(&*sample)? };
-                        } else {
-                            // Some Windows builds (observed on 26200 with
-                            // mfmp4srcsnk.dll 10.0.26100.8457) reject PlaceMarker with
-                            // MF_E_INVALIDTYPE for every marker type. The marker only
-                            // tells us the sink consumed everything; treat failure as
-                            // non-fatal so finalization still runs and writes the moov.
-                            if let Err(e) = unsafe {
-                                stream_cap.PlaceMarker(
-                                    MFSTREAMSINK_MARKER_ENDOFSEGMENT,
-                                    std::ptr::null(),
-                                    std::ptr::null(),
-                                )
-                            } {
-                                println!("PlaceMarker(ENDOFSEGMENT) failed (non-fatal): {:?}", e);
-                            }
-                            if let Some(finish_tx) = finish_tx.take() {
-                                finish_tx
-                                    .send(())
-                                    .map_err(|_e| WindowsError::FinishSignalSendFailed)?
-                            };
-                        }
-                    }
-                    _ => {
-                        println!("Unhandled media sink event type: {:?}", event_type);
-                    }
+
+            let result = Self::pump(&stream_cap, &mut sample_rx, &mut finish_tx).await;
+
+            // The muxer task learns of this loop only through `finish_tx`. If it
+            // is still waiting, the loop's error is the export's error and has
+            // to travel down that channel; dropping the sender instead is what
+            // used to surface as a bare "channel closed" with the HRESULT lost.
+            if let Err(e) = &result {
+                println!("Media sink stream loop failed: {:?}", e);
+                loop_errors.set(e.clone());
+                if let Some(finish_tx) = finish_tx.take() {
+                    let _ = finish_tx.send(Err(e.clone()));
                 }
             }
 
-            Result::<()>::Ok(())
+            result
         });
 
-        Ok((Self { sample_tx }, finish_rx))
+        Ok((Self { sample_tx, errors }, finish_rx))
+    }
+
+    /// Feeds the stream sink until it has taken everything, then reports that
+    /// the stream drained through `finish_tx`.
+    async fn pump(
+        stream: &UnsafeSend<IMFStreamSink>,
+        sample_rx: &mut mpsc::Receiver<UnsafeSend<IMFSample>>,
+        finish_tx: &mut Option<oneshot::Sender<Result<()>>>,
+    ) -> Result<()> {
+        loop {
+            let event = match stream.get_event().await {
+                Ok(event) => event,
+                Err(e) => {
+                    // Shutting the sink down stops its event generator, which is
+                    // how this loop is meant to end — but only once the muxer
+                    // task has been told the stream drained. Before that, losing
+                    // the event stream is a failure like any other.
+                    return if finish_tx.is_none() { Ok(()) } else { Err(e) };
+                }
+            };
+
+            let event_type: u32 = unsafe { event.GetType()? };
+            match MF_EVENT_TYPE(event_type as i32) {
+                #[allow(non_upper_case_globals)]
+                MEStreamSinkRequestSample => {
+                    if let Some(sample) = sample_rx.recv().await {
+                        unsafe { stream.ProcessSample(&*sample)? };
+                    } else {
+                        // Some Windows builds (observed on 26200 with
+                        // mfmp4srcsnk.dll 10.0.26100.8457) reject PlaceMarker with
+                        // MF_E_INVALIDTYPE for every marker type. The marker only
+                        // tells us the sink consumed everything; treat failure as
+                        // non-fatal so finalization still runs and writes the moov.
+                        if let Err(e) = unsafe {
+                            stream.PlaceMarker(
+                                MFSTREAMSINK_MARKER_ENDOFSEGMENT,
+                                std::ptr::null(),
+                                std::ptr::null(),
+                            )
+                        } {
+                            println!("PlaceMarker(ENDOFSEGMENT) failed (non-fatal): {:?}", e);
+                        }
+                        if let Some(finish_tx) = finish_tx.take() {
+                            finish_tx
+                                .send(Ok(()))
+                                .map_err(|_e| WindowsError::FinishSignalSendFailed)?
+                        };
+                    }
+                }
+                _ => {
+                    println!("Unhandled media sink event type: {:?}", event_type);
+                }
+            }
+        }
     }
 }
 
@@ -302,11 +382,7 @@ impl MuxerInput for VideoMuxerInputImpl {
                     .stream
                     .some()
                     .ok_or(WindowsError::StreamNotInitialized)?;
-                stream
-                    .sample_tx
-                    .send(sample)
-                    .await
-                    .map_err(|e| WindowsError::MuxerSendFailed(e.to_string()))?;
+                stream.push(sample).await?;
                 Ok(())
             }
         }
@@ -339,11 +415,7 @@ impl MuxerInput for AudioMuxerInputImpl {
                     .stream
                     .some()
                     .ok_or(WindowsError::StreamNotInitialized)?;
-                stream
-                    .sample_tx
-                    .send(sample)
-                    .await
-                    .map_err(|e| WindowsError::MuxerSendFailed(e.to_string()))?;
+                stream.push(sample).await?;
                 Ok(())
             }
         }
@@ -363,7 +435,11 @@ impl CompletionHandle for MuxerCompletionHandleImpl {
     async fn finish(self) -> unienc_common::Result<()> {
         self.receiver
             .await
-            .map_err(|e| WindowsError::MuxerCompletionWaitFailed(e.to_string()))?
+            .map_err(|_| {
+                WindowsError::MuxerCompletionWaitFailed(
+                    "the muxer task ended without reporting a result".into(),
+                )
+            })?
             .map_err(|e| e.into())
     }
 }

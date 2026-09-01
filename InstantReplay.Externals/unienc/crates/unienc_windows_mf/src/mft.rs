@@ -2,7 +2,7 @@ use tokio::sync::{mpsc, oneshot};
 use windows::Win32::Media::MediaFoundation::{IMFSample, IMFTransform, MFT_OUTPUT_STREAM_INFO};
 use windows::Win32::System::Com::CoTaskMemFree;
 
-use crate::common::UnsafeSend;
+use crate::common::{ErrorSlot, UnsafeSend};
 use crate::error::{Result, WindowsError};
 use std::cell::Cell;
 use std::future::Future;
@@ -24,13 +24,17 @@ impl MediaEventGeneratorCustom for IMFMediaEventGenerator {
         let result: std::result::Result<(), Error> = {
             let generator = UnsafeSend(self.clone());
             let callback: IMFAsyncCallback = AsyncCallback::new(move |result| {
-                tx.send(unsafe {
+                // Media Foundation invokes this on one of its own work queue
+                // threads, and it may do so after the awaiting task is already
+                // gone. Nobody is left to hear the result then, and panicking
+                // here would abort the host process from a thread we do not
+                // own, so the closed receiver is not an error.
+                let _ = tx.send(unsafe {
                     generator
                         .EndGetEvent(result.unwrap())
                         .map(UnsafeSend::<IMFMediaEvent>::from)
                         .map_err(WindowsError::from)
-                })
-                .unwrap();
+                });
             })
             .into();
 
@@ -84,11 +88,32 @@ where
     }
 }
 
+/// What one `ProcessOutput` call yielded.
+enum Output {
+    Sample(UnsafeSend<IMFSample>),
+    /// The MFT renegotiated its output type. The new type has already been
+    /// accepted; the caller has to refresh its cached stream info and ask for
+    /// output again.
+    FormatChanged,
+}
+
+/// Accepts the output type an MFT switched to.
+///
+/// An encoder that reports `MF_E_TRANSFORM_STREAM_CHANGE` produces nothing at
+/// all until the new type is set — Intel's Quick Sync H.264 encoder does this on
+/// its very first output, before any sample — so this is not an optional
+/// nicety, it is what keeps the encoder running on those machines.
+fn accept_new_output_type(transform: &IMFTransform, output_id: u32) -> Result<()> {
+    let media_type = unsafe { transform.GetOutputAvailableType(output_id, 0)? };
+    unsafe { transform.SetOutputType(output_id, &media_type, 0)? };
+    Ok(())
+}
+
 fn process_output(
     transform: &IMFTransform,
     output_info: &MFT_OUTPUT_STREAM_INFO,
     output_id: u32,
-) -> Result<UnsafeSend<IMFSample>> {
+) -> Result<Output> {
     let mut buffers = [MFT_OUTPUT_DATA_BUFFER::default(); 1];
     {
         let buffer = &mut buffers[0];
@@ -127,11 +152,18 @@ fn process_output(
     let sample = unsafe { ManuallyDrop::take(&mut buffer.pSample) };
     drop(unsafe { ManuallyDrop::take(&mut buffer.pEvents) });
 
+    if let Err(err) = &result
+        && err.code() == MF_E_TRANSFORM_STREAM_CHANGE
+    {
+        accept_new_output_type(transform, output_id)?;
+        return Ok(Output::FormatChanged);
+    }
+
     result?;
 
     let sample = sample.ok_or(WindowsError::OutputGetFailed)?;
 
-    Ok(sample.into())
+    Ok(Output::Sample(sample.into()))
 }
 
 struct MftIter {
@@ -224,6 +256,7 @@ pub struct Transform {
     #[allow(dead_code)]
     input_type: UnsafeSend<IMFMediaType>,
     output_type: UnsafeSend<IMFMediaType>,
+    errors: ErrorSlot,
 }
 enum Pipeline {
     Async {
@@ -342,6 +375,7 @@ impl Transform {
         let output_info = unsafe { transform.GetOutputStreamInfo(output_id)? };
 
         let (output_tx, output_rx) = mpsc::channel::<UnsafeSend<IMFSample>>(32);
+        let errors = ErrorSlot::default();
 
         if is_async {
             let generator: UnsafeSend<IMFMediaEventGenerator> =
@@ -352,56 +386,80 @@ impl Transform {
             let (sample_tx, sample_rx) = mpsc::channel::<UnsafeSend<IMFSample>>(32);
 
             let transform = UnsafeSend(transform);
+            let loop_errors = errors.clone();
 
             runtime.spawn_ret(async move {
                 let mut sample_rx = sample_rx;
-                loop {
-                    match generator.get_event().await {
-                        Ok(event) => {
-                            let event_type: u32 = unsafe { event.GetType()? };
-                            match MF_EVENT_TYPE(event_type as i32) {
-                                #[allow(non_upper_case_globals)]
-                                METransformNeedInput => {
-                                    let Some(sample) = sample_rx.recv().await else {
-                                        unsafe {
-                                            transform.ProcessMessage(
-                                                MFT_MESSAGE_NOTIFY_END_OF_STREAM,
-                                                0,
-                                            )?
+                let mut output_info = output_info;
+                let result: Result<()> = async {
+                    loop {
+                        match generator.get_event().await {
+                            Ok(event) => {
+                                let event_type: u32 = unsafe { event.GetType()? };
+                                match MF_EVENT_TYPE(event_type as i32) {
+                                    #[allow(non_upper_case_globals)]
+                                    METransformNeedInput => {
+                                        let Some(sample) = sample_rx.recv().await else {
+                                            unsafe {
+                                                transform.ProcessMessage(
+                                                    MFT_MESSAGE_NOTIFY_END_OF_STREAM,
+                                                    0,
+                                                )?
+                                            };
+                                            unsafe {
+                                                transform
+                                                    .ProcessMessage(MFT_MESSAGE_COMMAND_DRAIN, 0)?
+                                            };
+                                            continue;
                                         };
                                         unsafe {
-                                            transform
-                                                .ProcessMessage(MFT_MESSAGE_COMMAND_DRAIN, 0)?
+                                            transform.ProcessInput(input_id, &*sample, 0)?;
                                         };
-                                        continue;
-                                    };
-                                    unsafe {
-                                        transform.ProcessInput(input_id, &*sample, 0)?;
-                                    };
-                                }
-                                #[allow(non_upper_case_globals)]
-                                METransformHaveOutput => {
-                                    let data = process_output(&transform, &output_info, output_id)?;
-                                    output_tx.send(data).await?;
-                                }
-                                #[allow(non_upper_case_globals)]
-                                METransformDrainComplete => {
-                                    println!("Transform drain complete");
-                                    // end - generator and transform are dropped here
-                                    break;
-                                }
-                                _ => {
-                                    println!("Unhandled media event type: {:?}", event_type);
+                                    }
+                                    #[allow(non_upper_case_globals)]
+                                    METransformHaveOutput => {
+                                        match process_output(&transform, &output_info, output_id)? {
+                                            Output::Sample(data) => output_tx.send(data).await?,
+                                            Output::FormatChanged => {
+                                                // The new type can change the
+                                                // buffer the MFT expects us to
+                                                // supply, so the cached stream
+                                                // info is stale from here on.
+                                                output_info = unsafe {
+                                                    transform.GetOutputStreamInfo(output_id)?
+                                                };
+                                            }
+                                        }
+                                    }
+                                    #[allow(non_upper_case_globals)]
+                                    METransformDrainComplete => {
+                                        println!("Transform drain complete");
+                                        // end - generator and transform are dropped here
+                                        break;
+                                    }
+                                    _ => {
+                                        println!("Unhandled media event type: {:?}", event_type);
+                                    }
                                 }
                             }
-                        }
-                        Err(e) => {
-                            println!("Error receiving media event: {:?}", e);
-                            break;
+                            Err(e) => {
+                                println!("Error receiving media event: {:?}", e);
+                                break;
+                            }
                         }
                     }
+                    Ok(())
                 }
-                Result::<()>::Ok(())
+                .await;
+
+                // Leave the reason behind before the channels close: to everyone
+                // else this loop's death looks like nothing but a closed channel.
+                if let Err(e) = &result {
+                    println!("Transform event loop failed: {:?}", e);
+                    loop_errors.set(e.clone());
+                }
+
+                result
             });
 
             Ok((
@@ -411,6 +469,7 @@ impl Transform {
                     output_type: UnsafeSend(
                         output_type.take().ok_or(WindowsError::OutputTypeNone)?,
                     ),
+                    errors,
                 },
                 output_rx,
             ))
@@ -430,18 +489,27 @@ impl Transform {
                     output_type: UnsafeSend(
                         output_type.take().ok_or(WindowsError::OutputTypeNone)?,
                     ),
+                    errors,
                 },
                 output_rx,
             ))
         }
     }
 
+    /// The errors the transform's own background loop leaves behind, so a
+    /// consumer that only sees a closed channel can still report the cause.
+    pub fn errors(&self) -> ErrorSlot {
+        self.errors.clone()
+    }
+
     pub async fn push(&mut self, sample: UnsafeSend<IMFSample>) -> Result<()> {
         match &mut self.pipeline {
-            Pipeline::Async { sample_tx } => sample_tx
-                .send(sample)
-                .await
-                .map_err(|e| WindowsError::SampleSendFailed(e.to_string())),
+            Pipeline::Async { sample_tx } => sample_tx.send(sample).await.map_err(|e| {
+                // The receiving loop is gone. Its own error, if it recorded one,
+                // is the real failure; this send is only where it became visible.
+                self.errors
+                    .get_or(WindowsError::SampleSendFailed(e.to_string()))
+            }),
             Pipeline::Sync {
                 output_tx,
                 transform,
@@ -452,19 +520,23 @@ impl Transform {
                 unsafe { transform.ProcessInput(*input_id, &*sample, 0)? };
                 loop {
                     match process_output(transform, output_info, *output_id) {
-                        Ok(data) => {
+                        Ok(Output::Sample(data)) => {
                             output_tx.send(data).await?;
                             continue;
                         }
-                        Err(err) => {
-                            if let WindowsError::Windows(err) = err {
-                                if err.code() == MF_E_TRANSFORM_NEED_MORE_INPUT {
-                                    return Ok(());
-                                } else {
-                                    return Err(err.into());
-                                }
-                            }
+                        Ok(Output::FormatChanged) => {
+                            *output_info = unsafe { transform.GetOutputStreamInfo(*output_id)? };
+                            continue;
                         }
+                        Err(WindowsError::Windows(err))
+                            if err.code() == MF_E_TRANSFORM_NEED_MORE_INPUT =>
+                        {
+                            return Ok(());
+                        }
+                        // Anything else ends the call. Falling through to
+                        // another iteration here would spin on the same failing
+                        // ProcessOutput forever.
+                        Err(err) => return Err(err),
                     }
                 }
             }
@@ -504,26 +576,31 @@ impl Drop for Transform {
 
             let transform = UnsafeSend(transform.clone());
             let output_tx = output_tx.clone();
-            let output_info = *output_info;
+            let mut output_info = *output_info;
             let output_id = *output_id;
 
             loop {
                 match process_output(&transform, &output_info, output_id) {
-                    Ok(data) => {
+                    Ok(Output::Sample(data)) => {
                         let Ok(_) = output_tx.try_send(data) else {
                             return; // channel is already closed
                         };
                         continue;
                     }
-                    Err(err) => {
-                        if let WindowsError::Windows(err) = err {
-                            if err.code() == MF_E_TRANSFORM_NEED_MORE_INPUT {
-                                return;
-                            } else {
-                                panic!("{:?}", err)
-                            }
+                    Ok(Output::FormatChanged) => {
+                        match unsafe { transform.GetOutputStreamInfo(output_id) } {
+                            Ok(info) => output_info = info,
+                            // Drop has nobody to return an error to.
+                            Err(err) => panic!("{:?}", err),
                         }
+                        continue;
                     }
+                    Err(WindowsError::Windows(err))
+                        if err.code() == MF_E_TRANSFORM_NEED_MORE_INPUT =>
+                    {
+                        return;
+                    }
+                    Err(err) => panic!("{:?}", err),
                 }
             }
         }
