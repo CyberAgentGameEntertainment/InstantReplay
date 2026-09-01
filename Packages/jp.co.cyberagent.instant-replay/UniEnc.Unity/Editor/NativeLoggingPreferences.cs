@@ -162,7 +162,7 @@ namespace UniEnc.Unity.Editor
                 EditorGUILayout.HelpBox(
                     "Applies to the Editor's own copy of the native plugin, and is pushed to every connected " +
                     "development player. \"Default\" leaves the level the native library picked for itself: " +
-                    "Info for a release build of the plugin, Debug for a debug build.\n\n" +
+                    "Warn for a release build of the plugin, Debug for a debug build.\n\n" +
                     "A player connection can only deliver a level once the player is running, which is too " +
                     "late for the records a session emits while starting up. Bake the level in to catch " +
                     "those. Baking applies to release builds too, and is per-Editor: a machine that never " +
