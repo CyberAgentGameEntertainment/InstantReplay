@@ -155,6 +155,7 @@ fn process_output(
     if let Err(err) = &result
         && err.code() == MF_E_TRANSFORM_STREAM_CHANGE
     {
+        log::info!("Encoder MFT renegotiated its output type");
         accept_new_output_type(transform, output_id)?;
         return Ok(Output::FormatChanged);
     }
@@ -288,16 +289,21 @@ impl Transform {
         let mut result = None;
 
         for activate in mfts {
+            let name = Self::get_name(&activate)?;
             if let Some(_r) = &result {
-                log::debug!("Skipping MFT: {}", Self::get_name(&activate)?);
+                log::debug!("Skipping MFT: {name}");
                 continue;
             }
             match Self::try_activate(activate, &mut input_type, &mut output_type, runtime) {
                 Ok(r) => {
+                    // Which encoder the machine picked is the first thing worth
+                    // knowing when an export misbehaves on one machine only:
+                    // hardware MFTs differ from each other and from software.
+                    log::info!("Using MFT: {name}");
                     result = Some(r);
                 }
                 Err(err) => {
-                    log::warn!("Failed to activate MFT: {:?}", err);
+                    log::warn!("Failed to activate MFT {name}: {err:?}");
                 }
             };
         }
