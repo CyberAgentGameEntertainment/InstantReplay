@@ -46,6 +46,43 @@ where
     }
 }
 
+/// Where a spawned loop leaves the error that ended it.
+///
+/// A loop that dies is only observable to its peers as a closed channel, and a
+/// closed channel carries no HRESULT. Whoever notices the closure reads the slot
+/// instead, so the failure is reported as the Media Foundation error that caused
+/// it rather than as "channel closed" at an unrelated call site.
+#[derive(Clone, Default)]
+pub struct ErrorSlot(std::sync::Arc<std::sync::Mutex<Option<WindowsError>>>);
+
+impl ErrorSlot {
+    /// Records `error` unless an earlier one is already stored; the first
+    /// failure is the one that explains the rest.
+    pub fn set(&self, error: WindowsError) {
+        let mut slot = self.lock();
+        if slot.is_none() {
+            *slot = Some(error);
+        }
+    }
+
+    /// The recorded error, if the loop ended with one.
+    pub fn get(&self) -> Option<WindowsError> {
+        self.lock().clone()
+    }
+
+    /// The recorded error, or `fallback` when the loop ended without one.
+    pub fn get_or(&self, fallback: WindowsError) -> WindowsError {
+        self.get().unwrap_or(fallback)
+    }
+
+    fn lock(&self) -> std::sync::MutexGuard<'_, Option<WindowsError>> {
+        // A poisoned lock means a panic already unwound past it, which the
+        // abort-on-panic profile makes unreachable; take the value either way
+        // rather than turning a diagnostic into a second failure.
+        self.0.lock().unwrap_or_else(|e| e.into_inner())
+    }
+}
+
 #[derive(Clone)]
 pub enum Payload {
     Sample(UnsafeSend<IMFSample>),
