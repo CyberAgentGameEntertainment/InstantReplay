@@ -1,3 +1,18 @@
+## [1.6.9] - 2026/08/31
+
+### Fixed
+
+- Fixed recording hanging indefinitely on some Android devices, caused by the recording pipeline never releasing its worker threads back to the shared thread pool.
+- Fixed a crash on Android caused by an internal timer error occurring while the video encoder retried acquiring an input buffer.
+- Fixed a crash (`NoSuchMethodError`) on Android API level 28 or lower caused by calling APIs that require a later API level.
+- Fixed exported videos on iOS and macOS occasionally containing corrupted frames when the video encoder's internal buffer momentarily filled up.
+- Fixed the last fraction of a second of audio being cut off at the end of recordings on iOS and macOS.
+- Fixed export failures during realtime recording not always being reported, and the session not always transitioning to a failed state when export failed.
+- Fixed video export on Linux (FFmpeg backend) producing files with dropped frames or a several-second audio/video offset.
+- Fixed a crash on Linux (FFmpeg backend) caused by an internal timer error.
+- Fixed audio never being included in exported videos on WebGL.
+- Fixed video export on WebGL failing in browsers that do not support the H.264 High profile; a compatible profile is now negotiated automatically.
+
 ## [1.6.8] - 2026/07/24
 
 ### Fixed
