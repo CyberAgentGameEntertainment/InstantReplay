@@ -26,7 +26,7 @@ namespace UniEnc
     {
         /// <summary>
         ///     Discards native log records below the given level. Native records are written to the Unity player log on
-        ///     Unity platforms, and to logcat on Android. Without an explicit call the default is <see cref="NativeLogLevel.Info" />
+        ///     Unity platforms, and to logcat on Android. Without an explicit call the default is <see cref="NativeLogLevel.Warn" />
         ///     for release builds of the native library and <see cref="NativeLogLevel.Debug" /> for debug builds.
         /// </summary>
         public static void SetLevel(NativeLogLevel level)
