@@ -124,6 +124,9 @@ pub enum AndroidError {
     #[error("IUnityGraphicsVulkan::AccessQueue callback was never invoked")]
     QueueAccessCallbackDropped,
 
+    #[error("HardwareBuffer blit pipeline has stopped after an earlier error")]
+    BlitPipelineFailed,
+
     // External error conversions
     #[error(transparent)]
     Jni(#[from] jni::errors::Error),
@@ -202,6 +205,7 @@ impl CategorizedError for AndroidError {
             AndroidError::RenderThreadSendFailed => ErrorCategory::Communication,
             AndroidError::AccessTextureFailed => ErrorCategory::ResourceAllocation,
             AndroidError::QueueAccessCallbackDropped => ErrorCategory::Communication,
+            AndroidError::BlitPipelineFailed => ErrorCategory::Encoding,
             AndroidError::EventIdNotReserved => ErrorCategory::Communication,
 
             // Invalid input errors
