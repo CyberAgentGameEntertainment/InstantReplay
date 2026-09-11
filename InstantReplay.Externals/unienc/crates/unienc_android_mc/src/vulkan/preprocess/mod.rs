@@ -1,8 +1,7 @@
 use crate::error::{AndroidError, Result, ResultExt};
-use crate::vulkan::format::GRAPHICS_FORMAT_TO_VULKAN;
 use crate::vulkan::hardware_buffer_surface::HardwareBufferFrame;
 use crate::vulkan::types::{
-    VulkanCommandBuffer, VulkanCommandPoolHandle, VulkanDescriptorPoolHandle, VulkanDescriptorSet,
+    VulkanCommandPoolHandle, VulkanDescriptorPoolHandle, VulkanDescriptorSet,
     VulkanDescriptorSetLayoutHandle, VulkanImageViewHandle, VulkanPipelineHandle,
     VulkanPipelineLayoutHandle, VulkanRenderPassHandle, VulkanSamplerHandle,
     VulkanShaderModuleHandle,
@@ -10,9 +9,11 @@ use crate::vulkan::types::{
 use crate::vulkan::utils::{FenceGuard, create_shader_module};
 use crate::vulkan::{GlobalContext, MARKERS, ProfilerMarkerDescExt};
 use ash::vk;
+use std::ffi::c_void;
 use std::future::Future;
-use std::sync::{Arc, Mutex};
-use unity_native_plugin::vulkan::IUnityGraphicsVulkan;
+use std::os::raw::c_int;
+use std::sync::{Arc, Mutex, MutexGuard};
+use unity_native_plugin::vulkan::{IUnityGraphicsVulkan, VulkanResourceAccessMode};
 
 const VERT: &[u8] = include_bytes!("preprocess.vert.glsl.spv");
 const FRAG: &[u8] = include_bytes!("preprocess.frag.glsl.spv");
@@ -27,7 +28,10 @@ pub struct PreprocessRenderPass {
     desc_sets: Arc<DescriptorSetPool>,
     sampler: VulkanSamplerHandle,
     pub(crate) render_pass: VulkanRenderPassHandle,
-    command_pool: Arc<VulkanCommandPoolHandle>,
+    command_buffers: Arc<CommandBufferPool>,
+    /// Queue family of Unity's graphics queue; the queue family that owns the
+    /// HardwareBuffer image until it is released to the encoder.
+    queue_family_index: u32,
 }
 
 struct DescriptorSetPool {
@@ -73,6 +77,122 @@ impl DescriptorSetGuard {
     }
 }
 
+/// Command buffers for the blit.
+///
+/// A `VkCommandPool` and the command buffers allocated from it are externally synchronized
+/// objects: allocation, recording and reuse must not overlap on the host. Recording happens on
+/// Unity's render thread while completed blits are torn down on a blocking-pool thread, so every
+/// host access goes through `inner`. Command buffers are never freed; a completed one is returned
+/// to `free` (see `PooledCommandBuffer`) and reused by a later blit, which avoids issuing Vulkan
+/// calls against the pool from the teardown thread at all.
+struct CommandBufferPool {
+    device: Arc<ash::Device>,
+    inner: Mutex<CommandBufferPoolInner>,
+}
+
+struct CommandBufferPoolInner {
+    pool: VulkanCommandPoolHandle,
+    free: Vec<vk::CommandBuffer>,
+}
+
+/// A command buffer in the recording state. Keeps the pool locked until `end` is called; if it is
+/// dropped without `end` (an error while recording) the command buffer goes back to the free
+/// list, and the next `vkBeginCommandBuffer` implicitly resets it.
+struct RecordingCommandBuffer<'a> {
+    inner: MutexGuard<'a, CommandBufferPoolInner>,
+    pool: &'a Arc<CommandBufferPool>,
+    command_buffer: vk::CommandBuffer,
+    ended: bool,
+}
+
+/// A recorded command buffer that is owned by a pending blit. Returned to the pool on drop, which
+/// must happen only after the GPU has finished executing it.
+struct PooledCommandBuffer {
+    command_buffer: vk::CommandBuffer,
+    pool: Arc<CommandBufferPool>,
+}
+
+impl CommandBufferPool {
+    fn new(device: Arc<ash::Device>, queue_family_index: u32) -> Result<Self> {
+        let pool = VulkanCommandPoolHandle::new(
+            unsafe {
+                device.create_command_pool(
+                    &vk::CommandPoolCreateInfo::default()
+                        .queue_family_index(queue_family_index)
+                        .flags(vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER),
+                    None,
+                )
+            }?,
+            device.clone(),
+        );
+        Ok(Self {
+            device,
+            inner: Mutex::new(CommandBufferPoolInner {
+                pool,
+                free: Vec::new(),
+            }),
+        })
+    }
+
+    fn begin(self: &Arc<Self>) -> Result<RecordingCommandBuffer<'_>> {
+        let mut inner = self.inner.lock().map_err(|_| AndroidError::MutexPoisoned)?;
+        let command_buffer = match inner.free.pop() {
+            Some(command_buffer) => command_buffer,
+            None => unsafe {
+                self.device.allocate_command_buffers(
+                    &vk::CommandBufferAllocateInfo::default()
+                        .command_pool(*inner.pool)
+                        .level(vk::CommandBufferLevel::PRIMARY)
+                        .command_buffer_count(1),
+                )
+            }?[0],
+        };
+        let recording = RecordingCommandBuffer {
+            inner,
+            pool: self,
+            command_buffer,
+            ended: false,
+        };
+        // Implicitly resets a previously recorded command buffer (RESET_COMMAND_BUFFER pool).
+        unsafe {
+            self.device
+                .begin_command_buffer(command_buffer, &vk::CommandBufferBeginInfo::default())
+        }?;
+        Ok(recording)
+    }
+}
+
+impl RecordingCommandBuffer<'_> {
+    fn handle(&self) -> vk::CommandBuffer {
+        self.command_buffer
+    }
+
+    fn end(mut self) -> Result<PooledCommandBuffer> {
+        unsafe { self.pool.device.end_command_buffer(self.command_buffer) }?;
+        self.ended = true;
+        Ok(PooledCommandBuffer {
+            command_buffer: self.command_buffer,
+            pool: self.pool.clone(),
+        })
+    }
+}
+
+impl Drop for RecordingCommandBuffer<'_> {
+    fn drop(&mut self) {
+        if !self.ended {
+            self.inner.free.push(self.command_buffer);
+        }
+    }
+}
+
+impl Drop for PooledCommandBuffer {
+    fn drop(&mut self) {
+        if let Ok(mut inner) = self.pool.inner.lock() {
+            inner.free.push(self.command_buffer);
+        }
+    }
+}
+
 #[repr(C)]
 struct VertPushConstants {
     scale_and_tiling: [f32; 4],
@@ -94,7 +214,9 @@ pub fn create_pass(
                     .stencil_load_op(vk::AttachmentLoadOp::DONT_CARE)
                     .stencil_store_op(vk::AttachmentStoreOp::DONT_CARE)
                     .initial_layout(vk::ImageLayout::UNDEFINED)
-                    .final_layout(vk::ImageLayout::PRESENT_SRC_KHR)])
+                    // The barrier recorded after the render pass releases the image to the
+                    // encoder and expects it in this layout.
+                    .final_layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL)])
                 .subpasses(&[vk::SubpassDescription::default()
                     .pipeline_bind_point(vk::PipelineBindPoint::GRAPHICS)
                     .color_attachments(&[vk::AttachmentReference::default()
@@ -288,17 +410,7 @@ pub fn create_pass(
         .collect(),
     ));
 
-    let command_pool = VulkanCommandPoolHandle::new(
-        unsafe {
-            device.create_command_pool(
-                &vk::CommandPoolCreateInfo::default()
-                    .queue_family_index(queue_family_index)
-                    .flags(vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER),
-                None,
-            )
-        }?,
-        device.clone(),
-    );
+    let command_buffers = Arc::new(CommandBufferPool::new(device.clone(), queue_family_index)?);
 
     Ok(PreprocessRenderPass {
         pipelines,
@@ -309,31 +421,78 @@ pub fn create_pass(
         desc_sets,
         sampler,
         render_pass: VulkanRenderPassHandle::new(render_pass, device.clone()),
-        command_pool: Arc::new(command_pool),
+        command_buffers,
+        queue_family_index,
     })
 }
 
 /// Resources for HardwareBuffer blit that need to be kept alive until GPU completes
 #[allow(dead_code)]
 struct HardwareBufferBlitResources {
-    command_buffer: VulkanCommandBuffer,
+    command_buffer: PooledCommandBuffer,
     pass: Arc<PreprocessRenderPass>,
     src_view: VulkanImageViewHandle,
     fence: FenceGuard,
     desc_set: DescriptorSetGuard,
 }
 
+/// A recorded blit waiting for Unity to grant access to the graphics queue.
+///
+/// Unity hands this back in the `AccessQueue` callback, which may run synchronously or later on
+/// Unity's submission thread. The callback only submits; waiting for the GPU happens on the
+/// receiving side of `tx` so that no runtime work is done on Unity's thread.
+struct QueueSubmission {
+    device: Arc<ash::Device>,
+    queue: vk::Queue,
+    resources: HardwareBufferBlitResources,
+    tx: tokio::sync::oneshot::Sender<Result<HardwareBufferBlitResources>>,
+}
+
+impl QueueSubmission {
+    fn submit(self) {
+        let markers = MARKERS.get();
+        let _guard = markers.map(|m| m.preprocess_blit_submit.get());
+
+        let result = unsafe {
+            self.device.queue_submit(
+                self.queue,
+                &[vk::SubmitInfo::default()
+                    .command_buffers(&[self.resources.command_buffer.command_buffer])],
+                **self.resources.fence.get(),
+            )
+        }
+        .context("queue_submit failed");
+
+        // The receiver has gone away only if the encoder was torn down; the resources are then
+        // dropped here, which is safe because nothing was submitted or the fence is unused.
+        let _ = self.tx.send(result.map(|()| self.resources));
+    }
+}
+
+unsafe extern "system" fn queue_access_callback(_event_id: c_int, user_data: *mut c_void) {
+    let submission = unsafe { Box::from_raw(user_data as *mut QueueSubmission) };
+    submission.submit();
+}
+
 /// Blit source image to a HardwareBuffer-backed frame
 /// Returns a Future that completes when GPU work is done
+///
+/// Must be called from a plugin event callback configured with
+/// `VulkanGraphicsQueueAccess::DontCare`: the source texture is acquired through Unity's
+/// `AccessTexture`, which records the layout transition into Unity's command buffer and
+/// forbids queue access in the same callback. Submission is deferred to `AccessQueue` with
+/// `flush = true`, so Unity's pending command buffers (including that transition) reach the queue
+/// before the blit does.
+#[allow(clippy::too_many_arguments)]
 pub fn blit_to_hardware_buffer<R: unienc_common::Runtime + 'static>(
     cx: &GlobalContext,
-    src: &vk::Image,
+    native_texture: *mut c_void,
     src_width: u32,
     src_height: u32,
-    src_graphics_format: u32,
     flip_vertically: bool,
     is_gamma_workflow: bool,
     frame: &HardwareBufferFrame,
+    event_id: c_int,
     runtime: R,
 ) -> Result<impl Future<Output = Result<()>> + use<R>> {
     let markers = MARKERS.get();
@@ -346,16 +505,25 @@ pub fn blit_to_hardware_buffer<R: unienc_common::Runtime + 'static>(
         return Err(AndroidError::NoAvailableDescriptorSets);
     };
 
-    let (src_view, queue, mut command_buffers, fence) = {
+    let (src_view, queue, fence) = {
         let _guard = markers.map(|m| m.preprocess_blit_resources.get());
 
-        let format = *GRAPHICS_FORMAT_TO_VULKAN
-            .get(src_graphics_format as usize)
-            .iter()
-            .copied()
-            .flatten()
-            .next()
-            .ok_or(AndroidError::UnsupportedGraphicsFormat(src_graphics_format))?;
+        // Let Unity transition the source to the layout the fragment shader samples it in and
+        // make the preceding writes visible. Unity keeps tracking the layout afterwards, so the
+        // next write to the texture is fenced against this read as well.
+        let src = unsafe {
+            vulkan.access_texture(
+                native_texture,
+                None,
+                vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+                vk::PipelineStageFlags::FRAGMENT_SHADER,
+                vk::AccessFlags::SHADER_READ,
+                VulkanResourceAccessMode::PipelineBarrier,
+            )
+        }
+        .ok_or(AndroidError::AccessTextureFailed)?;
+
+        let format = src.format();
 
         // A format of AHardwareBuffer doesn't seem to be mapped to SRGB formats directly while MediaCodec accepts sRGB pixels.
         // (mapping table: https://docs.vulkan.org/spec/latest/chapters/memory.html#memory-external-android-hardware-buffer-formats)
@@ -377,7 +545,7 @@ pub fn blit_to_hardware_buffer<R: unienc_common::Runtime + 'static>(
             unsafe {
                 device.create_image_view(
                     &vk::ImageViewCreateInfo::default()
-                        .image(*src)
+                        .image(src.image())
                         .view_type(vk::ImageViewType::TYPE_2D)
                         .format(view_format)
                         .components(
@@ -418,31 +586,15 @@ pub fn blit_to_hardware_buffer<R: unienc_common::Runtime + 'static>(
 
         let queue = vulkan.instance().graphics_queue();
 
-        let command_buffers = unsafe {
-            device.allocate_command_buffers(
-                &vk::CommandBufferAllocateInfo::default()
-                    .command_pool(**pass.command_pool)
-                    .level(vk::CommandBufferLevel::PRIMARY)
-                    .command_buffer_count(1),
-            )
-        }
-        .map(|v| {
-            v.iter()
-                .map(|c| VulkanCommandBuffer::new(pass.command_pool.clone(), *c, device.clone()))
-                .collect::<Vec<VulkanCommandBuffer>>()
-        })?;
-
         let fence = cx.fence_pool.pop()?;
 
-        (src_view, queue, command_buffers, fence)
+        (src_view, queue, fence)
     };
 
-    let command_buffer = command_buffers.swap_remove(0);
-    {
+    let command_buffer = {
         let _guard = markers.map(|m| m.preprocess_blit_commands.get());
-        let cb = &command_buffer.command_buffer;
-
-        unsafe { device.begin_command_buffer(*cb, &vk::CommandBufferBeginInfo::default()) }?;
+        let recording = pass.command_buffers.begin()?;
+        let cb = recording.handle();
 
         let width = frame.width;
         let height = frame.height;
@@ -450,7 +602,7 @@ pub fn blit_to_hardware_buffer<R: unienc_common::Runtime + 'static>(
         // Transition HardwareBuffer image to COLOR_ATTACHMENT_OPTIMAL
         unsafe {
             device.cmd_pipeline_barrier(
-                *cb,
+                cb,
                 vk::PipelineStageFlags::TOP_OF_PIPE,
                 vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT,
                 vk::DependencyFlags::empty(),
@@ -476,7 +628,7 @@ pub fn blit_to_hardware_buffer<R: unienc_common::Runtime + 'static>(
 
         unsafe {
             device.cmd_begin_render_pass(
-                *cb,
+                cb,
                 &vk::RenderPassBeginInfo::default()
                     .render_pass(*pass.render_pass)
                     .framebuffer(frame.vk_framebuffer())
@@ -507,12 +659,12 @@ pub fn blit_to_hardware_buffer<R: unienc_common::Runtime + 'static>(
         };
 
         unsafe {
-            device.cmd_bind_pipeline(*cb, vk::PipelineBindPoint::GRAPHICS, *pass.pipelines[0])
+            device.cmd_bind_pipeline(cb, vk::PipelineBindPoint::GRAPHICS, *pass.pipelines[0])
         };
 
         unsafe {
             device.cmd_push_constants(
-                *cb,
+                cb,
                 *pass.pipeline_layout,
                 vk::ShaderStageFlags::VERTEX,
                 0,
@@ -524,7 +676,7 @@ pub fn blit_to_hardware_buffer<R: unienc_common::Runtime + 'static>(
 
         unsafe {
             device.cmd_bind_descriptor_sets(
-                *cb,
+                cb,
                 vk::PipelineBindPoint::GRAPHICS,
                 *pass.pipeline_layout,
                 0,
@@ -543,7 +695,7 @@ pub fn blit_to_hardware_buffer<R: unienc_common::Runtime + 'static>(
         };
 
         unsafe {
-            device.cmd_set_viewport(*cb, 0, &[viewport]);
+            device.cmd_set_viewport(cb, 0, &[viewport]);
         }
 
         let scissor = vk::Rect2D {
@@ -552,21 +704,23 @@ pub fn blit_to_hardware_buffer<R: unienc_common::Runtime + 'static>(
         };
 
         unsafe {
-            device.cmd_set_scissor(*cb, 0, &[scissor]);
+            device.cmd_set_scissor(cb, 0, &[scissor]);
         }
 
         unsafe {
-            device.cmd_draw(*cb, 3, 1, 0, 0);
+            device.cmd_draw(cb, 3, 1, 0, 0);
         }
 
         unsafe {
-            device.cmd_end_render_pass(*cb);
+            device.cmd_end_render_pass(cb);
         }
 
-        // Transition HardwareBuffer image to GENERAL for external access
+        // Release the HardwareBuffer image to the encoder: a queue family ownership transfer
+        // from Unity's graphics queue family to VK_QUEUE_FAMILY_EXTERNAL, leaving the image in
+        // GENERAL. The old layout is the render pass' final layout.
         unsafe {
             device.cmd_pipeline_barrier(
-                *cb,
+                cb,
                 vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT,
                 vk::PipelineStageFlags::BOTTOM_OF_PIPE,
                 vk::DependencyFlags::empty(),
@@ -577,7 +731,7 @@ pub fn blit_to_hardware_buffer<R: unienc_common::Runtime + 'static>(
                     .dst_access_mask(vk::AccessFlags::empty())
                     .old_layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL)
                     .new_layout(vk::ImageLayout::GENERAL)
-                    .src_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
+                    .src_queue_family_index(pass.queue_family_index)
                     .dst_queue_family_index(vk::QUEUE_FAMILY_EXTERNAL)
                     .image(frame.vk_image_handle())
                     .subresource_range(vk::ImageSubresourceRange {
@@ -590,22 +744,9 @@ pub fn blit_to_hardware_buffer<R: unienc_common::Runtime + 'static>(
             );
         }
 
-        unsafe { device.end_command_buffer(*cb) }?;
+        recording.end()?
+    };
 
-        {
-            let _guard = markers.map(|m| m.preprocess_blit_submit.get());
-            unsafe {
-                device.queue_submit(
-                    queue,
-                    &[vk::SubmitInfo::default().command_buffers(&[*cb])],
-                    **fence.get(),
-                )
-            }
-            .context("queue_submit failed")?;
-        }
-    }
-
-    let device = device.clone();
     let resources = HardwareBufferBlitResources {
         command_buffer,
         pass: pass.clone(),
@@ -614,14 +755,38 @@ pub fn blit_to_hardware_buffer<R: unienc_common::Runtime + 'static>(
         desc_set,
     };
 
-    let runtime = runtime.clone();
-    let join_handle = runtime.spawn_blocking(move || {
-        let _ = unsafe { device.wait_for_fences(&[**resources.fence.get()], true, u64::MAX) };
-        drop(resources);
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    let submission = Box::new(QueueSubmission {
+        device: device.clone(),
+        queue,
+        resources,
+        tx,
     });
 
+    // `flush = true`: Unity submits its own pending command buffers first, so the blit is
+    // ordered after the layout transition recorded by `access_texture` above.
+    unsafe {
+        vulkan.access_queue(
+            Some(queue_access_callback),
+            event_id,
+            Box::into_raw(submission) as *mut c_void,
+            true,
+        )
+    };
+
+    let device = device.clone();
     Ok(async move {
-        join_handle.await;
-        Ok(())
+        let resources = rx
+            .await
+            .map_err(|_| AndroidError::QueueAccessCallbackDropped)??;
+        runtime
+            .spawn_blocking(move || {
+                let result =
+                    unsafe { device.wait_for_fences(&[**resources.fence.get()], true, u64::MAX) }
+                        .map_err(AndroidError::Vulkan);
+                drop(resources);
+                result
+            })
+            .await
     })
 }

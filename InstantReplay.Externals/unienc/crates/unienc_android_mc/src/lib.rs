@@ -100,19 +100,21 @@ impl<
     fn unity_plugin_unload() {}
 }
 
+/// The pointer returned by `Texture.GetNativeTexturePtr()`. It is not dereferenced here; Unity
+/// resolves it to a `VkImage` in `IUnityGraphicsVulkan::AccessTexture`, which also records the
+/// layout transition the blit relies on.
 pub struct VulkanTexture {
-    tex: ash::vk::Image,
+    native: *mut c_void,
 }
+
+// An opaque handle that is only handed back to Unity on its render thread.
+unsafe impl Send for VulkanTexture {}
 
 impl TryFromUnityNativeTexturePointer for VulkanTexture {
     fn try_from_unity_native_texture_ptr(ptr: *mut c_void) -> unienc_common::Result<Self> {
-        // ptr is VkImage*
-        let ptr = ptr as *mut ash::vk::Image;
         if ptr.is_null() {
             return Err(AndroidError::NullVulkanTexture.into());
         }
-        Ok(VulkanTexture {
-            tex: unsafe { *ptr },
-        })
+        Ok(VulkanTexture { native: ptr })
     }
 }

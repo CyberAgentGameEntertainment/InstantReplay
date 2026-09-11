@@ -118,6 +118,12 @@ pub enum AndroidError {
     #[error("Failed to send from render thread")]
     RenderThreadSendFailed,
 
+    #[error("IUnityGraphicsVulkan::AccessTexture failed")]
+    AccessTextureFailed,
+
+    #[error("IUnityGraphicsVulkan::AccessQueue callback was never invoked")]
+    QueueAccessCallbackDropped,
+
     // External error conversions
     #[error(transparent)]
     Jni(#[from] jni::errors::Error),
@@ -194,6 +200,8 @@ impl CategorizedError for AndroidError {
             AndroidError::ChannelSendFailed(_) => ErrorCategory::Communication,
             AndroidError::OneshotRecv(_) => ErrorCategory::Communication,
             AndroidError::RenderThreadSendFailed => ErrorCategory::Communication,
+            AndroidError::AccessTextureFailed => ErrorCategory::ResourceAllocation,
+            AndroidError::QueueAccessCallbackDropped => ErrorCategory::Communication,
             AndroidError::EventIdNotReserved => ErrorCategory::Communication,
 
             // Invalid input errors

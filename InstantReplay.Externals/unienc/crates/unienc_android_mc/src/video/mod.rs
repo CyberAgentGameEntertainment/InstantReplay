@@ -249,7 +249,7 @@ async fn push_video_impl<R: unienc_common::Runtime + 'static>(
             texture_token,
             width,
             height,
-            graphics_format,
+            graphics_format: _,
             flip_vertically,
             is_gamma_workflow,
             event_issuer,
@@ -311,12 +311,10 @@ async fn push_video_impl<R: unienc_common::Runtime + 'static>(
                         crate::VulkanTexture::try_from_unity_native_texture_ptr(native_texture_ptr)
                             .map_err(|_| AndroidError::NullVulkanTexture)
                             .and_then(|texture| {
-                                let image = texture.tex;
                                 crate::vulkan::blit_to_hardware_buffer(
-                                    &image,
+                                    texture.native,
                                     width,
                                     height,
-                                    graphics_format,
                                     flip_vertically,
                                     is_gamma_workflow,
                                     &frame,
