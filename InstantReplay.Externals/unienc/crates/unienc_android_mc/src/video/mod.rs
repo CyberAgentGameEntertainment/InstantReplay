@@ -354,7 +354,7 @@ async fn push_video_impl<R: unienc_common::Runtime + 'static>(
                     if tx.send((result, frame)).is_err() {
                         // The completion task is gone (encoder torn down); the frame is dropped
                         // here together with its Vulkan resources.
-                        println!("unienc: blit completion task is gone, dropping frame");
+                        log::error!("unienc: blit completion task is gone, dropping frame");
                     }
                 }),
                 *crate::vulkan::EVENT_ID
