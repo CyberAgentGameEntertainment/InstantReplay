@@ -54,6 +54,9 @@ pub enum WindowsError {
     #[error("Failed to wait for muxer completion: {0}")]
     MuxerCompletionWaitFailed(String),
 
+    #[error("The media sink was released before finalization reported a result")]
+    FinalizeResultLost,
+
     // Channel related errors
     #[error("Failed to send to channel")]
     ChannelSendFailed,
@@ -65,7 +68,10 @@ pub enum WindowsError {
     #[error(transparent)]
     Common(#[from] unienc_common::CommonError),
 
-    #[error(transparent)]
+    // Not transparent: `RecvError` renders as a bare "channel closed", which
+    // says nothing about which task went away or why. Naming the sender here is
+    // what makes such a report actionable at all.
+    #[error("A worker task ended without reporting its result ({0})")]
     OneshotRecv(#[from] tokio::sync::oneshot::error::RecvError),
 
     #[error("Failed to convert UTF-16 into String")]
@@ -106,6 +112,7 @@ impl CategorizedError for WindowsError {
             // Muxing errors
             WindowsError::MuxerSendFailed(_) => ErrorCategory::Muxing,
             WindowsError::MuxerCompletionWaitFailed(_) => ErrorCategory::Muxing,
+            WindowsError::FinalizeResultLost => ErrorCategory::Muxing,
 
             // Platform errors
             WindowsError::Windows(_) => ErrorCategory::Platform,

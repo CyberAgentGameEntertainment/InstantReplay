@@ -77,6 +77,7 @@ impl Encoder for MediaFoundationVideoEncoder {
 
     fn get(self) -> unienc_common::Result<(Self::InputType, Self::OutputType)> {
         let media_type = Some(UnsafeSend(self.transform.output_type()?.clone()));
+        let errors = self.transform.errors();
         Ok((
             VideoEncoderInputImpl {
                 transform: self.transform,
@@ -85,6 +86,7 @@ impl Encoder for MediaFoundationVideoEncoder {
             VideoEncoderOutputImpl {
                 receiver: self.output_rx,
                 media_type,
+                errors,
             },
         ))
     }
@@ -98,6 +100,7 @@ pub struct VideoEncoderInputImpl {
 pub struct VideoEncoderOutputImpl {
     media_type: Option<UnsafeSend<IMFMediaType>>,
     receiver: mpsc::Receiver<UnsafeSend<IMFSample>>,
+    errors: ErrorSlot,
 }
 
 impl EncoderInput for VideoEncoderInputImpl {
@@ -167,9 +170,18 @@ impl EncoderOutput for VideoEncoderOutputImpl {
                 payload: Payload::Format(media_type),
             }));
         }
-        Ok(self.receiver.recv().await.map(|sample| VideoEncodedData {
-            payload: Payload::Sample(sample),
-        }))
+        match self.receiver.recv().await {
+            Some(sample) => Ok(Some(VideoEncodedData {
+                payload: Payload::Sample(sample),
+            })),
+            // End of output and a dead encoder loop look identical from here.
+            // Reporting the loop's error is what stops a failed encode from
+            // being mistaken for a short one.
+            None => match self.errors.get() {
+                Some(error) => Err(error.into()),
+                None => Ok(None),
+            },
+        }
     }
 }
 
