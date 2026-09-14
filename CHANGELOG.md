@@ -1,3 +1,14 @@
+## [1.6.10] - 2026/09/14
+
+### Added
+
+- Added a preference (Preferences > UniEnc) to control the native library's log level, with an option to bake the configured level into player builds so it also applies to release builds.
+
+### Fixed
+
+- Fixed Vulkan API misuse and violations of Unity's low-level native plugin interface requirements in the readback-free encoding pipeline on Android (Vulkan), which could result in undefined behavior such as rendering artifacts.
+- Fixed recording frame rate on Android (Vulkan) being limited by the readback-free encoding pipeline's GPU round trip; recording now keeps pace with the frame provider instead of waiting for each frame's GPU work to complete before starting the next.
+
 ## [1.6.9] - 2026/08/31
 
 ### Fixed
