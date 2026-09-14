@@ -16,10 +16,14 @@ use objc2_av_foundation::{
 use objc2_core_audio_types::{
     AudioStreamBasicDescription, AudioStreamPacketDescription, MPEG4ObjectID, kAudioFormatMPEG4AAC,
 };
+use objc2_core_foundation::{CFDictionary, CFString, CFType};
 use objc2_core_media::{
     CMAudioFormatDescriptionCreate, CMAudioSampleBufferCreateReadyWithPacketDescriptions,
     CMBlockBuffer, CMFormatDescription, CMSampleBuffer, CMTime, CMVideoFormatDescriptionCreate,
-    kCMBlockBufferAssureMemoryNowFlag, kCMTimeZero, kCMVideoCodecType_H264,
+    kCMBlockBufferAssureMemoryNowFlag, kCMFormatDescriptionColorPrimaries_ITU_R_709_2,
+    kCMFormatDescriptionExtension_ColorPrimaries, kCMFormatDescriptionExtension_TransferFunction,
+    kCMFormatDescriptionExtension_YCbCrMatrix, kCMFormatDescriptionTransferFunction_ITU_R_709_2,
+    kCMFormatDescriptionYCbCrMatrix_ITU_R_709_2, kCMTimeZero, kCMVideoCodecType_H264,
 };
 use objc2_foundation::{NSString, NSURL};
 use tokio::sync::{mpsc, oneshot};
@@ -165,6 +169,29 @@ impl AVFMuxer {
             objc2_av_foundation::AVAssetWriter::assetWriterWithURL_fileType_error(&url, file_type)?
         };
 
+        // AVAssetWriter writes the `colr` box from the format description it is given, not from
+        // the one the encoder produced: the encoded frames travel back through the caller as
+        // opaque buffers, so this muxer never sees the encoder's format description. Without
+        // these extensions the output carries no color information at all, which makes players
+        // guess at the color space. The values match the tags the encoder writes into the SPS.
+        let color_extensions = {
+            let keys: [&CFString; 3] = unsafe {
+                [
+                    kCMFormatDescriptionExtension_ColorPrimaries,
+                    kCMFormatDescriptionExtension_TransferFunction,
+                    kCMFormatDescriptionExtension_YCbCrMatrix,
+                ]
+            };
+            let values: [&CFType; 3] = unsafe {
+                [
+                    kCMFormatDescriptionColorPrimaries_ITU_R_709_2,
+                    kCMFormatDescriptionTransferFunction_ITU_R_709_2,
+                    kCMFormatDescriptionYCbCrMatrix_ITU_R_709_2,
+                ]
+            };
+            CFDictionary::from_slices(&keys, &values)
+        };
+
         let source_format_hint = unsafe {
             let mut format_desc: *const CMFormatDescription = std::ptr::null();
             CMVideoFormatDescriptionCreate(
@@ -172,7 +199,7 @@ impl AVFMuxer {
                 kCMVideoCodecType_H264,
                 video_options.width() as i32,
                 video_options.height() as i32,
-                None,
+                Some(color_extensions.as_opaque()),
                 NonNull::new(&mut format_desc).unwrap(),
             )
             .to_result()?;

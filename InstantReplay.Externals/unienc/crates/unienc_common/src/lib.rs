@@ -147,7 +147,24 @@ impl VideoFrameBgra32 {
         let mut u_data = vec![128u8; padded_uv_size]; // Neutral for U
         let mut v_data = vec![128u8; padded_uv_size]; // Neutral for V
 
-        // Convert ARGB to YUV for the original image area only
+        // Convert ARGB to YUV for the original image area only.
+        //
+        // BT.709 limited range ("studio swing"), 8-bit fixed point with a denominator of 256:
+        //
+        //     Y  = 16  + (219/255) * ( 0.2126 R + 0.7152 G + 0.0722 B )
+        //     Cb = 128 + (224/255) * ( B - Y ) / 1.8556
+        //     Cr = 128 + (224/255) * ( R - Y ) / 1.5748
+        //
+        // Scaling those factors by 256 gives (46.74, 157.24, 15.87) for Y, (-25.76, -86.67,
+        // 112.43) for Cb and (112.43, -102.13, -10.30) for Cr. The Cb row is rounded to
+        // (-26, -86, 112) instead of to the nearest integers so that every row sums to the value
+        // the reference formula requires: 220 for Y, which maps white to 235 and black to 16, and
+        // 0 for Cb and Cr, which maps neutral colors to exactly 128. That also keeps both chroma
+        // rows inside the nominal 16..240 range at the primary extremes, as the BT.601
+        // coefficients this replaces did. The results therefore always fit in u8 without clamping.
+        //
+        // The color tags written by each platform encoder must stay in sync with these
+        // coefficients.
         for y in 0..self.height {
             for x in 0..self.width {
                 let bgra_idx = ((y * self.width + x) * 4) as usize;
@@ -155,15 +172,15 @@ impl VideoFrameBgra32 {
                 let g = data[bgra_idx + 1] as i32;
                 let b = data[bgra_idx] as i32;
 
-                let y_val = (((66 * r + 129 * g + 25 * b + 128) >> 8) + 16) as u8;
+                let y_val = (((47 * r + 157 * g + 16 * b + 128) >> 8) + 16) as u8;
 
                 let y_idx = (y * w + x) as usize;
                 y_data[y_idx] = y_val;
 
                 // Sample U and V for every 2x2 block (4:2:0 subsampling)
                 if x % 2 == 0 && y % 2 == 0 {
-                    let u_val = (((-38 * r - 74 * g + 112 * b + 128) >> 8) + 128) as u8;
-                    let v_val = (((112 * r - 94 * g - 18 * b + 128) >> 8) + 128) as u8;
+                    let u_val = (((-26 * r - 86 * g + 112 * b + 128) >> 8) + 128) as u8;
+                    let v_val = (((112 * r - 102 * g - 10 * b + 128) >> 8) + 128) as u8;
 
                     let uv_idx = ((y / 2) * (w / 2) + (x / 2)) as usize;
                     u_data[uv_idx] = u_val;

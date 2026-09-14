@@ -225,7 +225,18 @@ window["unienc_webcodecs"] = {
                         offset: 0,
                         stride: options.width * 4  // BGRA = 4 bytes per pixel
                     }
-                ]
+                ],
+                // Describe the source buffer as sRGB. WebCodecs has no way to ask the encoder for
+                // a particular output color space, so this is the only lever available: the user
+                // agent converts to the encoder's YUV space itself and tags the stream from what
+                // the source frame declares. Left unset it has to guess, which is what makes the
+                // output carry no color information today.
+                colorSpace: {
+                    primaries: "bt709",
+                    transfer: "iec61966-2-1",
+                    matrix: "rgb",
+                    fullRange: true
+                }
             };
             const frame = new VideoFrame(data, init);
             encoder.encode(frame, {

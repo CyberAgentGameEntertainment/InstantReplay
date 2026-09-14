@@ -8,13 +8,17 @@ use objc2_core_foundation::{
     CFBoolean, CFDictionary, CFNumber, CFString, CFType, kCFBooleanFalse, kCFBooleanTrue,
 };
 use objc2_core_media::{
-    CMSampleBuffer, CMTime, kCMSampleAttachmentKey_NotSync, kCMTimeInvalid, kCMVideoCodecType_H264,
+    CMSampleBuffer, CMTime, kCMFormatDescriptionColorPrimaries_ITU_R_709_2,
+    kCMFormatDescriptionTransferFunction_ITU_R_709_2, kCMFormatDescriptionYCbCrMatrix_ITU_R_709_2,
+    kCMSampleAttachmentKey_NotSync, kCMTimeInvalid, kCMVideoCodecType_H264,
 };
 use objc2_core_video::{CVPixelBuffer, CVPixelBufferCreateWithBytes, kCVPixelFormatType_32BGRA};
 use objc2_video_toolbox::{
     VTCompressionSession, VTEncodeInfoFlags, VTSessionSetProperty,
     kVTCompressionPropertyKey_AllowFrameReordering, kVTCompressionPropertyKey_AverageBitRate,
-    kVTCompressionPropertyKey_RealTime, kVTInvalidSessionErr,
+    kVTCompressionPropertyKey_ColorPrimaries, kVTCompressionPropertyKey_RealTime,
+    kVTCompressionPropertyKey_TransferFunction, kVTCompressionPropertyKey_YCbCrMatrix,
+    kVTInvalidSessionErr,
 };
 use tokio::sync::mpsc;
 use unienc_common::{
@@ -379,6 +383,36 @@ impl CompressionSession {
                 &session,
                 kVTCompressionPropertyKey_AverageBitRate,
                 Some(&CFNumber::new_i32(bitrate as i32)),
+            )
+        }
+        .to_result()?;
+
+        // Tag the stream as BT.709 limited range. Without these the encoder leaves the color
+        // information unspecified, so the muxed file carries no `colr` box and players have to
+        // guess. The values must match the conversion `VideoFrameBgra32::to_yuv420_planes`
+        // performs on the readback path, and the matrix additionally tells VideoToolbox which
+        // coefficients to use when it converts the BGRA pixel buffers of the blit path itself.
+        unsafe {
+            VTSessionSetProperty(
+                &session,
+                kVTCompressionPropertyKey_ColorPrimaries,
+                Some(kCMFormatDescriptionColorPrimaries_ITU_R_709_2 as &CFType),
+            )
+        }
+        .to_result()?;
+        unsafe {
+            VTSessionSetProperty(
+                &session,
+                kVTCompressionPropertyKey_TransferFunction,
+                Some(kCMFormatDescriptionTransferFunction_ITU_R_709_2 as &CFType),
+            )
+        }
+        .to_result()?;
+        unsafe {
+            VTSessionSetProperty(
+                &session,
+                kVTCompressionPropertyKey_YCbCrMatrix,
+                Some(kCMFormatDescriptionYCbCrMatrix_ITU_R_709_2 as &CFType),
             )
         }
         .to_result()?;
