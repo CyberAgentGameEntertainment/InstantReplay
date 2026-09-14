@@ -2,6 +2,8 @@ use crate::*;
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn unienc_new_runtime() -> *mut Runtime {
+    // First FFI call on hosts that have no plugin entry point of their own (NuGet package, tests).
+    crate::logging::init();
     let runtime = Runtime::new().unwrap();
     Box::into_raw(Box::new(runtime))
 }

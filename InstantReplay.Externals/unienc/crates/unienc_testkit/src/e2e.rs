@@ -91,6 +91,7 @@ pub struct E2eReport {
 /// see `unienc_harness_web`.
 #[cfg(not(target_os = "emscripten"))]
 pub fn run(config: &E2eConfig, output_path: &Path) -> unienc_common::Result<E2eReport> {
+    crate::logging::install();
     let runtime = TestRuntime::new();
     let encoding_system = new_platform_system(config, runtime.clone());
     futures::executor::block_on(run_with(
@@ -106,6 +107,7 @@ pub fn new_platform_system(
     config: &E2eConfig,
     runtime: TestRuntime,
 ) -> unienc::PlatformEncodingSystem<TestVideoOptions, TestAudioOptions, TestRuntime> {
+    crate::logging::install();
     unienc::PlatformEncodingSystem::new(
         &TestVideoOptions::from(config),
         &TestAudioOptions::from(config),

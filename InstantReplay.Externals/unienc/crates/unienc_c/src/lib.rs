@@ -1,6 +1,7 @@
 mod api;
 mod buffer;
 mod ffi;
+pub mod logging;
 mod platform;
 mod runtime;
 mod types;

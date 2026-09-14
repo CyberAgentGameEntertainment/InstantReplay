@@ -27,6 +27,15 @@ pub struct MediaFoundationEncodingSystem<
     runtime: R,
 }
 
+/// Media Foundation has no Unity rendering integration, so both hooks keep the trait's empty
+/// default bodies. The implementation still has to exist for `unity_plugin_load` to resolve on
+/// Windows, where the same call site in `unienc_c` is shared with the Metal and Vulkan backends.
+#[cfg(feature = "unity")]
+impl<V: unienc_common::VideoEncoderOptions, A: unienc_common::AudioEncoderOptions, R: Runtime>
+    unienc_common::unity::UnityPlugin for MediaFoundationEncodingSystem<V, A, R>
+{
+}
+
 impl<
     V: unienc_common::VideoEncoderOptions,
     A: unienc_common::AudioEncoderOptions,

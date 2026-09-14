@@ -194,15 +194,16 @@ impl MediaCodec {
                 let name = env.get_string(&name)?.to_str()?.to_string();
                 let is_hardware_accelerated =
                     bindings::MediaCodecInfo::is_hardware_accelerated(env, api, &codec_info)?;
-                println!(
+                log::info!(
                     "MediaCodec Info: Name: {}, Hardware Accelerated: {}",
-                    name, is_hardware_accelerated
+                    name,
+                    is_hardware_accelerated
                 );
             }
             None => {
                 let name = bindings::MediaCodecInfo::get_name(env, &codec_info)?;
                 let name = env.get_string(&name)?.to_str()?.to_string();
-                println!("MediaCodec Info: Name: {}", name);
+                log::info!("MediaCodec Info: Name: {}", name);
             }
         }
 
@@ -216,7 +217,7 @@ impl MediaCodec {
         let key_set = bindings::PersistableBundle::key_set(env, &metrics)?;
         let iterator = bindings::JavaSet::iterator(env, &key_set)?;
 
-        println!("MediaCodec Metrics:");
+        log::debug!("MediaCodec Metrics:");
         while bindings::JavaIterator::has_next(env, &iterator)? {
             let key = JString::from(bindings::JavaIterator::next(env, &iterator)?);
             let key_rust = env.get_string(&key)?.to_str()?.to_string();
@@ -225,7 +226,7 @@ impl MediaCodec {
             let value_str = bindings::JavaObject::to_string(env, &value)?;
             let value_rust = env.get_string(&value_str)?.to_str()?.to_string();
 
-            println!("  {}: {}", key_rust, value_rust);
+            log::debug!("  {}: {}", key_rust, value_rust);
         }
 
         Ok(())
@@ -607,6 +608,15 @@ pub(crate) async fn pull_encoded_data_with_codec<R: SpawnBlocking>(
             // Read encoded data
             let encoded_data = read_from_buffer(env, &output_buffer, offset, size)?;
 
+            log::trace!(
+                "new frame data: flags: {:?}, length: {}, timestamp: {}, offset: {}, {:?}",
+                flags,
+                encoded_data.len(),
+                timestamp,
+                offset,
+                encoded_data.iter().take(32).collect::<Vec<_>>()
+            );
+
             let video_data = CommonEncodedData {
                 content: CommonEncodedDataContent::Buffer {
                     data: encoded_data,
@@ -767,7 +777,7 @@ fn format_to_map_legacy(
                 map.insert((*key).to_string(), value);
             }
             None => {
-                println!(
+                log::warn!(
                     "MediaFormat key '{}' has an unsupported value type; skipped",
                     key
                 );
@@ -840,11 +850,11 @@ impl ImageWriter {
 
         let writer = if let Some(api) = ApiLevel::<33>::check()? {
             // API 33+: Use ImageWriter.Builder with explicit usage flags
-            println!("Using ImageWriter.Builder for API level {}", api_level);
+            log::debug!("Using ImageWriter.Builder for API level {}", api_level);
             Self::new_with_builder(env, api, surface, max_images, width, height)?
         } else if let Some(api) = ApiLevel::<29>::check()? {
             // API 29-32: Use ImageWriter.newInstance with format parameter
-            println!(
+            log::debug!(
                 "Using ImageWriter.newInstance with RGBA_8888 format for API level {}",
                 api_level
             );
@@ -997,12 +1007,10 @@ pub fn write_bgra_to_yuv_planes_with_padding(
     }
 
     let (y_data, u_data, v_data) = sample.to_yuv420_planes(Some((padded_width, padded_height)))?;
-    /*
-    println!("padded: {}x{}", padded_width, padded_height);
-    println!("Y: {}", planes[0]);
-    println!("U: {}", planes[1]);
-    println!("V: {}", planes[2]);
-    */
+    log::trace!("padded: {}x{}", padded_width, padded_height);
+    log::trace!("Y: {}", planes[0]);
+    log::trace!("U: {}", planes[1]);
+    log::trace!("V: {}", planes[2]);
 
     // Write to planes using padded dimensions
     planes[0].write_component_data(&y_data, padded_width, padded_height, 1, 1)?;

@@ -179,8 +179,6 @@ impl<R: Runtime + 'static> EncoderOutput for FFmpegAudioEncoderOutput<R> {
             sample_rate: self.sample_rate,
         };
 
-        // println!("{data:?}");
-
         Ok(Some(data))
     }
 }

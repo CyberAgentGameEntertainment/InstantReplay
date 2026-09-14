@@ -40,7 +40,7 @@ pub static FFMPEG_PATH: LazyLock<OsString> = LazyLock::new(|| {
         fallback.unwrap_or(OsString::from("ffmpeg"))
     });
 
-    println!("using FFmpeg at: {}", res.to_str().unwrap());
+    log::info!("using FFmpeg at: {}", res.to_str().unwrap());
 
     res
 });
@@ -268,7 +268,7 @@ impl Builder {
             Destination::Stdout => command.stdout(Stdio::piped()).arg(OsString::from("-")),
         };
 
-        println!("Running FFmpeg: {command:?}");
+        log::debug!("Running FFmpeg: {command:?}");
 
         let mut child = command.spawn()?;
 

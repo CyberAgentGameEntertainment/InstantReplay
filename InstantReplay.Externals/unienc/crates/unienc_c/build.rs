@@ -9,6 +9,7 @@ fn main() {
         .input_extern_file("src/api/runtime.rs")
         .input_extern_file("src/api/encoding_system.rs")
         .input_extern_file("src/api/graphics.rs")
+        .input_extern_file("src/api/logging.rs")
         .input_extern_file("src/types.rs")
         .input_extern_file("src/buffer.rs")
         .input_extern_file("src/ffi.rs")

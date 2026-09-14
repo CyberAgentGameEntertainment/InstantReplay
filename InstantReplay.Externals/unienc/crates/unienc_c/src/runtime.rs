@@ -175,7 +175,7 @@ fn new_executor(lazy_runtime: Arc<Mutex<Option<WeakRuntime>>>) -> Executor {
     #[cfg(not(feature = "multi-thread"))]
     {
         let _ = lazy_runtime;
-        println!("Using current thread runtime");
+        log::info!("Using current thread runtime");
         LocalExecutor::new()
     }
 

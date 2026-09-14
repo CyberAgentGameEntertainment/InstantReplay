@@ -76,7 +76,7 @@ impl<R: Runtime + 'static> EncoderInput for WebCodecsAudioEncoderInput<R> {
                             timestamp,
                         };
                         if let Err(err) = tx.try_send(encoded_data) {
-                            println!(
+                            log::error!(
                                 "WebCodecsAudioEncoder: Failed to send encoded data: {}",
                                 err
                             );
