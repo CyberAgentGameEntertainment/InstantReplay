@@ -64,7 +64,8 @@ namespace InstantReplay
                     Width = 1280,
                     Height = 720,
                     FpsHint = 30,
-                    Bitrate = 2500000 // 2.5 Mbps
+                    Bitrate = 2500000, // 2.5 Mbps
+                    IdrIntervalSeconds = 1f
                 },
                 AudioOptions = new AudioEncoderOptions
                 {

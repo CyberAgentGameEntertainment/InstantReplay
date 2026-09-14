@@ -6,6 +6,8 @@ use unienc_common::{
     UnsupportedBlitData, VideoEncoderOptions, VideoFrame, VideoSample,
 };
 use windows::Win32::Media::MediaFoundation::*;
+use windows::Win32::System::Variant::{VARIANT, VT_UI4};
+use windows::core::Interface;
 
 use crate::common::*;
 use crate::mft::Transform;
@@ -48,6 +50,29 @@ impl MediaFoundationVideoEncoder {
             output_type
         };
 
+        // Media Foundation expresses the GOP length in frames, so the interval has to be resolved
+        // against the frame rate hint. `CODECAPI_AVEncMPVGOPSize` is optional for an MFT to
+        // implement, so an encoder that rejects it keeps its own GOP length rather than failing to
+        // activate.
+        let gop_size = ((options.idr_interval_seconds() as f64 * options.fps_hint() as f64).round()
+            as u32)
+            .max(1);
+        let configure = |transform: &IMFTransform| {
+            let Ok(codec_api) = transform.cast::<ICodecAPI>() else {
+                println!("MFT does not expose ICodecAPI; leaving the GOP size at its default");
+                return;
+            };
+            let mut value = VARIANT::default();
+            unsafe {
+                let inner = &mut value.Anonymous.Anonymous;
+                inner.vt = VT_UI4;
+                inner.Anonymous.ulVal = gop_size;
+                if let Err(err) = codec_api.SetValue(&CODECAPI_AVEncMPVGOPSize, &value) {
+                    println!("Failed to set CODECAPI_AVEncMPVGOPSize to {gop_size}: {err:?}");
+                }
+            }
+        };
+
         let (transform, output_rx) = Transform::new(
             MFT_CATEGORY_VIDEO_ENCODER,
             MFT_REGISTER_TYPE_INFO {
@@ -60,6 +85,7 @@ impl MediaFoundationVideoEncoder {
             },
             input_type,
             output_type,
+            &configure,
             runtime,
         )?;
 

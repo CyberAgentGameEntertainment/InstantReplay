@@ -14,7 +14,8 @@ use objc2_core_video::{CVPixelBuffer, CVPixelBufferCreateWithBytes, kCVPixelForm
 use objc2_video_toolbox::{
     VTCompressionSession, VTEncodeInfoFlags, VTSessionSetProperty,
     kVTCompressionPropertyKey_AllowFrameReordering, kVTCompressionPropertyKey_AverageBitRate,
-    kVTCompressionPropertyKey_RealTime, kVTInvalidSessionErr,
+    kVTCompressionPropertyKey_MaxKeyFrameIntervalDuration, kVTCompressionPropertyKey_RealTime,
+    kVTInvalidSessionErr,
 };
 use tokio::sync::mpsc;
 use unienc_common::{
@@ -44,6 +45,7 @@ pub struct VideoToolboxEncoderInput {
     width: u32,
     height: u32,
     bitrate: u32,
+    idr_interval_seconds: f32,
 }
 
 struct CompressionSession {
@@ -279,7 +281,12 @@ impl EncoderInput for VideoToolboxEncoderInput {
                 // VTCompressionSession turns invalid when the app enters background on iOS; retry
                 // once with a fresh session, re-passing the same reserved permit.
                 retry += 1;
-                match CompressionSession::new(self.width, self.height, self.bitrate) {
+                match CompressionSession::new(
+                    self.width,
+                    self.height,
+                    self.bitrate,
+                    self.idr_interval_seconds,
+                ) {
                     Ok(session) => {
                         self.session = session;
                         continue;
@@ -335,7 +342,7 @@ impl Drop for VideoToolboxEncoderInput {
 }
 
 impl CompressionSession {
-    fn new(width: u32, height: u32, bitrate: u32) -> Result<Self> {
+    fn new(width: u32, height: u32, bitrate: u32, idr_interval_seconds: f32) -> Result<Self> {
         let mut session: *mut VTCompressionSession = std::ptr::null_mut();
 
         unsafe {
@@ -382,6 +389,14 @@ impl CompressionSession {
             )
         }
         .to_result()?;
+        unsafe {
+            VTSessionSetProperty(
+                &session,
+                kVTCompressionPropertyKey_MaxKeyFrameIntervalDuration,
+                Some(&CFNumber::new_f64(idr_interval_seconds as f64)),
+            )
+        }
+        .to_result()?;
 
         Ok(CompressionSession { inner: session })
     }
@@ -393,14 +408,16 @@ impl VideoToolboxEncoder {
         let tx = Box::new(tx);
 
         let (width, height, bitrate) = (options.width(), options.height(), options.bitrate());
+        let idr_interval_seconds = options.idr_interval_seconds();
 
         Ok(VideoToolboxEncoder {
             input: VideoToolboxEncoderInput {
-                session: CompressionSession::new(width, height, bitrate)?,
+                session: CompressionSession::new(width, height, bitrate, idr_interval_seconds)?,
                 tx,
                 width,
                 height,
                 bitrate,
+                idr_interval_seconds,
             },
             output: VideoToolboxEncoderOutput { rx },
         })

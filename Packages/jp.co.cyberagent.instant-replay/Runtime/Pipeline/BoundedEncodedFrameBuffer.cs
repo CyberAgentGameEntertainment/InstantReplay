@@ -108,6 +108,14 @@ namespace InstantReplay
         /// <summary>
         ///     Gets frames for the specified duration, adjusted to start from a keyframe.
         /// </summary>
+        /// <remarks>
+        ///     The segment can only begin at a keyframe, so the IDR interval bounds how precisely the requested
+        ///     duration can be honoured, and no frames at all are returned while the buffer holds no keyframe. Raising
+        ///     <see cref="UniEnc.VideoEncoderOptions.IdrIntervalSeconds" /> beyond the retained duration therefore
+        ///     yields an empty export. Eviction also works one frame at a time rather than one group of pictures at a
+        ///     time, so the frames preceding the oldest surviving keyframe are retained but unusable, and a longer IDR
+        ///     interval leaves a larger share of the memory budget unusable.
+        /// </remarks>
         public void GetFramesForDuration(double? durationSeconds, out ReadOnlyMemory<EncodedFrame> videoFrames,
             out ReadOnlyMemory<EncodedFrame> audioFrames)
         {

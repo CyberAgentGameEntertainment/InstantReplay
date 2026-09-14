@@ -151,6 +151,8 @@ File.Move(outputPath, Path.Combine(Application.persistentDataPath, Path.GetFileN
 
 実行時に使用されるメモリとしては、上記のエンコード済みのデータを保持するバッファに加え、エンコード前の生のフレームや音声サンプルがいくつか保持されます。これはエンコーダーが非同期的に動作する関係で、あるフレームをエンコードしている間に次のフレームを受け取るためです。`VideoInputQueueSize` と `AudioInputQueueSizeSeconds` でそれぞれのキューのサイズを指定できるほか、`MaxNumberOfRawFrameBuffers` (オプション) で圧縮前のフレームを保持するバッファの最大数を指定できます。この値を小さくすることでメモリ使用量を削減できる場合がありますが、フレームドロップの可能性が高まります。
 
+`IdrIntervalSeconds` は IDR (キー) フレームの最大間隔を秒で指定します。書き出しはキーフレームからしか開始できないため、この値は `StopAndExportAsync` が指定した長さにどれだけ近づけられるかの粒度を決めます。`null` を指定した場合は、プラットフォームのエンコーダー自身の既定値ではなく `VideoEncoderOptions.DefaultIdrIntervalSeconds` (1 秒) が適用されます。エンコーダーの既定値はプラットフォームごとに異なり、著しく長い場合があるためです。間隔を長くするとキーフレームに費やされるビットレートが減りますが、保持している時間より長い間隔を指定するとバッファ内にキーフレームが存在しなくなり、書き出しが何も生成しない場合があります。
+
 ```csharp
 // デフォルト設定
 var options = new RealtimeEncodingOptions
@@ -160,7 +162,8 @@ var options = new RealtimeEncodingOptions
         Width = 1280,
         Height = 720,
         FpsHint = 30,
-        Bitrate = 2500000 // 2.5 Mbps
+        Bitrate = 2500000, // 2.5 Mbps
+        IdrIntervalSeconds = 1f // IDR (キー) フレームの最大間隔 (秒)。null の場合は既定値の 1 秒が適用されます。
     },
     AudioOptions = new AudioEncoderOptions
     {

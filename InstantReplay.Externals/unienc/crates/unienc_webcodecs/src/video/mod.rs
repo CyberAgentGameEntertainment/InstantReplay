@@ -20,6 +20,7 @@ pub struct WebCodecsVideoEncoderInput<R: Runtime> {
     fps_hint: f64,
     tx: mpsc::Sender<VideoEncodedData>,
     prev_key_timestamp: Option<f64>,
+    idr_interval_seconds: f64,
     runtime: R,
 }
 
@@ -49,6 +50,8 @@ impl<R: Runtime> WebCodecsVideoEncoder<R> {
                 encoder_handle: None,
                 tx,
                 prev_key_timestamp: None,
+                // WebCodecs has no GOP-length knob, so keyframes are requested per frame.
+                idr_interval_seconds: options.idr_interval_seconds() as f64,
                 runtime: runtime.clone(),
             },
             output: WebCodecsVideoEncoderOutput { rx },
@@ -108,17 +111,12 @@ impl<R: Runtime + 'static> EncoderInput for WebCodecsVideoEncoderInput<R> {
             Some(prev) => data.timestamp - prev,
             None => f64::INFINITY,
         };
-        if since_prev_key >= 1.0 {
+        let is_key = since_prev_key >= self.idr_interval_seconds;
+        if is_key {
             self.prev_key_timestamp = Some(data.timestamp);
         }
         encoder_handle
-            .push_video_frame(
-                pixels,
-                frame.width,
-                frame.height,
-                data.timestamp,
-                since_prev_key >= 1.0,
-            )
+            .push_video_frame(pixels, frame.width, frame.height, data.timestamp, is_key)
             .context("Failed to push video frame to WebCodecs EncoderHandle")?;
         Ok(())
     }

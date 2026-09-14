@@ -9,6 +9,11 @@ namespace UniEnc
     public struct VideoEncoderOptions
     {
         /// <summary>
+        ///     Interval between IDR (key) frames applied when <see cref="IdrIntervalSeconds" /> is not set, in seconds.
+        /// </summary>
+        public const float DefaultIdrIntervalSeconds = 1f;
+
+        /// <summary>
         ///     Width of the video in pixels.
         /// </summary>
         public uint Width { get; set; }
@@ -29,6 +34,13 @@ namespace UniEnc
         public uint Bitrate { get; set; }
 
         /// <summary>
+        ///     Maximum interval between IDR (key) frames, in seconds. Must be finite and greater than 0 when set.
+        ///     <c>null</c> applies <see cref="DefaultIdrIntervalSeconds" /> rather than deferring to the platform
+        ///     encoder, whose own default differs per platform and may be considerably longer.
+        /// </summary>
+        public float? IdrIntervalSeconds { get; set; }
+
+        /// <summary>
         ///     Validates the options and throws if invalid.
         /// </summary>
         internal void Validate()
@@ -41,6 +53,11 @@ namespace UniEnc
 
             if (Bitrate == 0)
                 throw new ArgumentException("Bitrate must be greater than 0");
+
+            if (IdrIntervalSeconds is { } idrIntervalSeconds &&
+                (idrIntervalSeconds <= 0f || float.IsNaN(idrIntervalSeconds) ||
+                 float.IsInfinity(idrIntervalSeconds)))
+                throw new ArgumentException("IDR interval must be a finite value greater than 0");
         }
 
         /// <summary>
@@ -54,7 +71,8 @@ namespace UniEnc
                 width = Width,
                 height = Height,
                 fps_hint = FpsHint,
-                bitrate = Bitrate
+                bitrate = Bitrate,
+                idr_interval_seconds = IdrIntervalSeconds ?? DefaultIdrIntervalSeconds
             };
         }
     }
