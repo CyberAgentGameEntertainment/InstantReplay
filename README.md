@@ -40,6 +40,9 @@ When a bug occurs, you can export the recent gameplay leading up to the bug as a
       * [CRI Support](#cri-support)
       * [Wwise Support](#wwise-support)
     * [Getting the Recording State](#getting-the-recording-state)
+  * [Disk Buffering and Crash Recovery](#disk-buffering-and-crash-recovery)
+    * [Recovering After a Crash](#recovering-after-a-crash)
+    * [Disk Buffer Options](#disk-buffer-options)
   * [Unbounded Recording](#unbounded-recording)
   * [Legacy Mode](#legacy-mode)
     * [Setting Recording Time and Frame Rate](#setting-recording-time-and-frame-rate)
@@ -278,6 +281,64 @@ Wwise is also supported via `InstantReplay.Wwise.WwiseAudioSampleProvider`.
 ### Getting the Recording State
 
 You can get the recording state with the `RealtimeInstantReplaySession.State` property.
+
+## Disk Buffering and Crash Recovery
+
+By default, `RealtimeInstantReplaySession` holds encoded frames in memory. Assigning `RealtimeEncodingOptions.DiskBuffer` writes them to segment files on disk instead. This lowers memory pressure, and it leaves the footage that preceded an abnormal termination on disk, where a later run of the application can recover it.
+
+> [!WARNING]
+> Recording continuously to storage shortens the lifespan of flash memory. This is intended primarily for development and quality-assurance builds rather than for builds shipped to end users.
+
+```csharp
+using InstantReplay;
+
+var options = RealtimeEncodingOptions.Default;
+options.DiskBuffer = DiskBufferOptions.Default;
+
+using var session = new RealtimeInstantReplaySession(options);
+```
+
+`MaxMemoryUsageBytesForCompressedFrames` is not used while the disk buffer is enabled. `DiskBufferOptions.MaxDiskUsageBytes` bounds the retained data instead.
+
+### Recovering After a Crash
+
+Each session writes into its own directory. A session that is disposed normally deletes its directory unless `RetainOnDispose` is set, so a directory still present on the next run denotes a session that did not end normally.
+
+```csharp
+using InstantReplay;
+
+foreach (var recovery in DiskEncodedFrameBufferRecovery.FindRecoverable())
+{
+    if (!recovery.IsCompatible) continue;
+
+    var path = await recovery.ExportAsync(durationSeconds: 30);
+    Debug.Log($"Recovered {path} (started at {recovery.StartedAtUtc:u}, {recovery.SizeBytes} bytes)");
+
+    recovery.Delete();
+}
+```
+
+`FindRecoverable` enumerates every recoverable session below the given root directory, or below the directory the recorder uses by default when none is passed. Several may be present when the application has terminated abnormally more than once, and the caller decides which to export and which to discard. `TryGetRecoverable` reads a single session directory when its path is already known.
+
+Recovery never deletes anything implicitly, because a session left behind by a crash is the only copy of the footage that preceded it. Call `Delete()` once the exported file has been dealt with.
+
+`IsCompatible` compares the platform and package version recorded in the manifest against the running application. It is necessary but not sufficient: the payloads are serialized by the native library, whose schema may change between package versions, and a mismatch of that kind surfaces as a failure from `ExportAsync` instead.
+
+### Disk Buffer Options
+
+| Property | Default | Description |
+|---|---|---|
+| `Directory` | `null` | Directory holding the session directories. `null` or empty uses `Application.temporaryCachePath/InstantReplay/DiskBuffer`, available as `DiskBufferOptions.GetDefaultDirectory()`. |
+| `MaxDiskUsageBytes` | 256 MiB | Upper bound of one session directory, covering the manifest, the codec configuration, and every segment. Must be at least `DiskBufferOptions.MinimumDiskUsageBytes` (4 MiB). |
+| `SegmentDuration` | 5.0 | Target duration of one segment file, in seconds. |
+| `MaxSegmentBytes` | 8 MiB | Upper bound of one segment file. Must not exceed `MaxDiskUsageBytes`. |
+| `MaxPendingWriteBytes` | 4 MiB | Upper bound of the payload waiting in the write queue. Frames arriving while it is full are dropped rather than blocking the encoder. |
+| `RetainOnDispose` | `false` | Whether the session directory is kept when the session is disposed normally. |
+| `SyncMode` | `OperatingSystem` | Flush policy. See below. |
+
+`MaxDiskUsageBytes` is a bound rather than a target. Space is reserved before each record is written, and the reservation deletes as many of the oldest segments as it needs, so the directory never exceeds the bound at any instant. When the bound cannot be met even after every evictable segment has been deleted, records are dropped rather than written; a value close to `MaxSegmentBytes` therefore degrades the recording rather than the retention. Segments are closed at video key frames, so discarding one never leaves a partial group of pictures behind.
+
+`SyncMode` selects which failure mode to defend against. `DiskBufferSyncMode.OperatingSystem`, the default, hands data to the operating system after every batch and flushes it to the storage device when a segment is closed. Recorded frames survive a process crash — a native fault, an out-of-memory kill, or an abort — which is what crash recovery targets, and this costs no additional device writes. Power loss or a kernel panic loses at most the records written since the current segment was opened. `DiskBufferSyncMode.EveryRecord` flushes every record to the device, which survives power loss as well, at the cost of one device flush per frame. It markedly increases wear on flash memory and is intended for diagnosing storage-layer problems rather than for routine use.
 
 ## Unbounded Recording
 
