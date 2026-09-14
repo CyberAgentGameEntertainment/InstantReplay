@@ -13,6 +13,15 @@ use crate::{
     common::{media_codec_buffer_flag::BUFFER_FLAG_END_OF_STREAM, *},
     config::{format_keys::*, *},
 };
+use blit_pipeline::{BlitFuture, BlitPipeline, PendingBlit};
+
+mod blit_pipeline;
+
+/// Images the `ImageWriter` lets the producer hold at once.
+const HARDWARE_BUFFER_MAX_IMAGES: usize = 3;
+/// Frames dequeued but not yet queued back to the encoder. Kept below
+/// `HARDWARE_BUFFER_MAX_IMAGES` so that `dequeue_frame` never has to wait for a free image.
+const MAX_BLITS_IN_FLIGHT: usize = HARDWARE_BUFFER_MAX_IMAGES - 1;
 
 pub struct MediaCodecVideoEncoder<R: unienc_common::Runtime + 'static> {
     input: MediaCodecVideoEncoderInput<R>,
@@ -40,7 +49,12 @@ struct UninitializedState {
 enum MediaCodecVideoEncoderInputProcessor {
     Uninitialized(UninitializedState),
     Buffer(),
-    HardwareBuffer(Arc<HardwareBufferSurface>),
+    HardwareBuffer(HardwareBufferProcessor),
+}
+
+struct HardwareBufferProcessor {
+    surface: Arc<HardwareBufferSurface>,
+    pipeline: BlitPipeline,
 }
 
 unsafe impl<R: unienc_common::Runtime + 'static> Send for MediaCodecVideoEncoderInput<R> {}
@@ -92,11 +106,10 @@ impl<R: unienc_common::Runtime + 'static> Drop for MediaCodecVideoEncoderInput<R
                         return Err(AndroidError::NoInputBuffer);
                     }
                 },
-                MediaCodecVideoEncoderInputProcessor::HardwareBuffer(_) => {
-                    self.codec.print_metrics()?;
-                    self.codec.signal_end_of_input_stream()?;
-                    Ok(())
-                }
+                // Blits may still be in flight; the pipeline's completion task queues them and
+                // then signals end of stream (see `BlitPipeline`), triggered by dropping the
+                // processor after this body.
+                MediaCodecVideoEncoderInputProcessor::HardwareBuffer(_) => Ok(()),
             }
         }()
         .unwrap();
@@ -249,7 +262,7 @@ async fn push_video_impl<R: unienc_common::Runtime + 'static>(
             texture_token,
             width,
             height,
-            graphics_format,
+            graphics_format: _,
             flip_vertically,
             is_gamma_workflow,
             event_issuer,
@@ -279,28 +292,44 @@ async fn push_video_impl<R: unienc_common::Runtime + 'static>(
 
                 // Create input surface after configure, before start
                 let surface = this.codec.create_input_surface()?;
-                let hardware_buffer_surface = HardwareBufferSurface::new(
+                let hardware_buffer_surface = Arc::new(HardwareBufferSurface::new(
                     &surface,
                     this.padded_width,
                     this.padded_height,
-                    3, // max_images
-                )?;
+                    HARDWARE_BUFFER_MAX_IMAGES as i32,
+                )?);
                 this.codec.start()?;
 
                 // Replace temporary placeholder with actual HardwareBuffer processor
-                this.processor = MediaCodecVideoEncoderInputProcessor::HardwareBuffer(Arc::new(
-                    hardware_buffer_surface,
-                ));
+                this.processor =
+                    MediaCodecVideoEncoderInputProcessor::HardwareBuffer(HardwareBufferProcessor {
+                        pipeline: BlitPipeline::start(
+                            &this.runtime,
+                            hardware_buffer_surface.clone(),
+                            this.codec.clone(),
+                            MAX_BLITS_IN_FLIGHT,
+                        ),
+                        surface: hardware_buffer_surface,
+                    });
                 _ = state.tx.send(());
             }
 
-            let MediaCodecVideoEncoderInputProcessor::HardwareBuffer(hb_surface) = &this.processor
+            let MediaCodecVideoEncoderInputProcessor::HardwareBuffer(processor) = &this.processor
             else {
                 return Err(AndroidError::EncoderInputMismatch);
             };
 
-            // Dequeue a frame from ImageWriter
-            let frame = hb_surface.dequeue_frame()?;
+            processor.pipeline.check()?;
+            let permit = processor.pipeline.acquire().await?;
+
+            // Dequeue a frame from ImageWriter. `dequeueInputImage` is a JNI call that can wait
+            // on the BufferQueue, so keep it off the executor workers.
+            let frame = {
+                let surface = processor.surface.clone();
+                this.runtime
+                    .spawn_blocking(move || surface.dequeue_frame())
+                    .await?
+            };
 
             let (tx, rx) = tokio::sync::oneshot::channel();
             let runtime = this.runtime.clone();
@@ -311,21 +340,22 @@ async fn push_video_impl<R: unienc_common::Runtime + 'static>(
                         crate::VulkanTexture::try_from_unity_native_texture_ptr(native_texture_ptr)
                             .map_err(|_| AndroidError::NullVulkanTexture)
                             .and_then(|texture| {
-                                let image = texture.tex;
                                 crate::vulkan::blit_to_hardware_buffer(
-                                    &image,
+                                    texture.native,
                                     width,
                                     height,
-                                    graphics_format,
                                     flip_vertically,
                                     is_gamma_workflow,
                                     &frame,
                                     runtime,
                                 )
-                            });
-                    tx.send((result, frame))
-                        .map_err(|_| AndroidError::RenderThreadSendFailed)
-                        .unwrap();
+                            })
+                            .map(|future| Box::pin(future) as BlitFuture);
+                    if tx.send((result, frame)).is_err() {
+                        // The completion task is gone (encoder torn down); the frame is dropped
+                        // here together with its Vulkan resources.
+                        log::error!("unienc: blit completion task is gone, dropping frame");
+                    }
                 }),
                 *crate::vulkan::EVENT_ID
                     .get()
@@ -333,12 +363,13 @@ async fn push_video_impl<R: unienc_common::Runtime + 'static>(
                 texture_token,
             );
 
-            let (blit_result, frame) = rx.await?;
-            let future = blit_result?;
-            future.await?;
-
-            // Queue the frame to MediaCodec
-            hb_surface.queue_frame(frame, (data.timestamp * 1000.0 * 1000.0 * 1000.0) as i64)?;
+            // GPU completion and queueing to MediaCodec happen in the pipeline's completion
+            // task, in frame order, so the next frame can be issued right away.
+            processor.pipeline.submit(PendingBlit {
+                rx,
+                timestamp_ns: (data.timestamp * 1000.0 * 1000.0 * 1000.0) as i64,
+                permit,
+            })?;
 
             Ok(())
         }

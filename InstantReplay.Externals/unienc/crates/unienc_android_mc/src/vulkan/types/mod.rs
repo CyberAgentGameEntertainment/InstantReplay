@@ -16,12 +16,6 @@ pub struct VulkanImageView {
     pub(crate) view: VulkanImageViewHandle,
 }
 
-pub struct VulkanCommandBuffer {
-    pub(crate) command_pool: Arc<VulkanCommandPoolHandle>,
-    pub(crate) command_buffer: vk::CommandBuffer,
-    device: Arc<ash::Device>,
-}
-
 pub struct VulkanFramebuffer {
     pub(crate) framebuffer: VulkanFramebufferHandle,
     pub(crate) view: Arc<VulkanImageView>,
@@ -43,29 +37,6 @@ impl VulkanImage {
         VulkanImage {
             image,
             memory: None,
-        }
-    }
-}
-
-impl VulkanCommandBuffer {
-    pub fn new(
-        command_pool: Arc<VulkanCommandPoolHandle>,
-        command_buffer: vk::CommandBuffer,
-        device: Arc<ash::Device>,
-    ) -> Self {
-        VulkanCommandBuffer {
-            command_pool,
-            command_buffer,
-            device,
-        }
-    }
-}
-
-impl Drop for VulkanCommandBuffer {
-    fn drop(&mut self) {
-        unsafe {
-            self.device
-                .free_command_buffers(**self.command_pool, &[self.command_buffer]);
         }
     }
 }
