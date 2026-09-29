@@ -1,3 +1,9 @@
+## [1.6.11] - 2026/09/29
+
+### Fixed
+
+- Fixed a native crash on the first call into the encoding library in the Windows Editor of Unity 6.5 (6000.5).
+
 ## [1.6.10] - 2026/09/14
 
 ### Added
