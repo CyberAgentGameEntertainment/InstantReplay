@@ -13,11 +13,11 @@ package jp.co.cyberagent.unienc.harness;
 public final class Harness {
     private Harness() {}
 
-    private static native int run(String outputPath);
+    private static native int run(String outputDir);
 
     public static void main(String[] args) {
         if (args.length != 2) {
-            System.out.println("usage: Harness <library path> <output path>");
+            System.out.println("usage: Harness <library path> <output directory>");
             System.exit(2);
         }
 

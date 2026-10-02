@@ -16,10 +16,12 @@ unsafe extern "C" {
 /// function it calls and writes the same bytes to `path`. Nothing in
 /// `unienc_webcodecs` knows the difference.
 ///
-/// `window.unienc_webcodecs` does not exist yet at this point — the backend
-/// creates it lazily when the first encoder is built — so the interception is a
-/// property setter that patches the object as it is assigned and then replaces
-/// itself with the plain value.
+/// Before the first run `window.unienc_webcodecs` does not exist yet — the
+/// backend creates it lazily when the first encoder is built — so the
+/// interception is a property setter that patches the object as it is assigned
+/// and then replaces itself with the plain value. A later run finds the object
+/// already there and patches it directly, so calling this again before each run
+/// redirects that run's output to its own path.
 pub fn capture_muxed_output(path: &Path) -> Result<(), String> {
     let target = path.to_string_lossy();
     if target.contains('"') || target.contains('\\') {
@@ -54,6 +56,10 @@ pub fn capture_muxed_output(path: &Path) -> Result<(), String> {
                 }}
                 (Module.FS || FS).writeFile(target, joined);
             }};
+            if (window.unienc_webcodecs) {{
+                window.unienc_webcodecs.makeDownload = capture;
+                return;
+            }}
             Object.defineProperty(window, "unienc_webcodecs", {{
                 configurable: true,
                 set: function (value) {{
