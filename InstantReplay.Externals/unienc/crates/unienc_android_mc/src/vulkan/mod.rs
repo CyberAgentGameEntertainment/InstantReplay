@@ -1,4 +1,3 @@
-mod format;
 pub mod hardware_buffer;
 pub mod hardware_buffer_surface;
 mod preprocess;
@@ -7,7 +6,6 @@ pub mod types;
 mod utils;
 
 use crate::error::{AndroidError, Result, ResultExt};
-use ash::vk;
 use std::fmt::Debug;
 use std::future::Future;
 use std::os::raw::c_int;
@@ -34,6 +32,10 @@ static CONTEXT: OnceLock<Mutex<GlobalContext>> = OnceLock::new();
 pub static EVENT_ID: OnceLock<c_int> = OnceLock::new();
 static MARKERS: OnceLock<Markers> = OnceLock::new();
 static PROFILER: OnceLock<UnityProfiler> = OnceLock::new();
+
+// UnityVulkanEventConfigFlagBits (IUnityGraphicsVulkan.h)
+const EVENT_CONFIG_FLAG_ENSURE_PREVIOUS_FRAME_SUBMISSION: u32 = 1 << 0;
+const EVENT_CONFIG_FLAG_MODIFIES_COMMAND_BUFFERS_STATE: u32 = 1 << 3;
 
 pub(crate) fn is_initialized() -> bool {
     CONTEXT.get().is_some()
@@ -83,7 +85,7 @@ impl<'a> Drop for MarkerGuard<'a> {
 }
 
 pub(crate) fn unity_plugin_load(interfaces: &unity_native_plugin::interface::UnityInterfaces) {
-    println!("unienc: unity_plugin_load");
+    log::info!("unity_plugin_load");
     let graphics = interfaces.interface::<UnityGraphics>().unwrap();
     let profiler = interfaces.interface::<UnityProfiler>().unwrap();
     if profiler.is_available() {
@@ -135,12 +137,12 @@ pub(crate) fn unity_plugin_load(interfaces: &unity_native_plugin::interface::Uni
 }
 
 extern "system" fn on_device_event(ev_type: GfxDeviceEventType) {
-    println!("unienc: on_device_event {ev_type:?}");
+    log::debug!("on_device_event {ev_type:?}");
     match ev_type {
         GfxDeviceEventType::Initialize => {
             let graphics = GRAPHICS.get().unwrap().lock().unwrap();
             let renderer = graphics.renderer();
-            println!("unienc: {renderer:?}");
+            log::debug!("{renderer:?}");
 
             if renderer != unity_native_plugin::graphics::GfxRenderer::Vulkan {
                 return;
@@ -149,7 +151,7 @@ extern "system" fn on_device_event(ev_type: GfxDeviceEventType) {
             let event_id = graphics.reserve_event_id_range(1);
 
             EVENT_ID.set(event_id).unwrap();
-            println!("unienc: reserved event id {event_id}");
+            log::debug!("reserved event id {event_id}");
 
             let interfaces = unity_native_plugin::interface::UnityInterfaces::get();
             let vulkan = interfaces.interface::<UnityGraphicsVulkanV2>().unwrap();
@@ -157,12 +159,17 @@ extern "system" fn on_device_event(ev_type: GfxDeviceEventType) {
             let instance = unity_instance.instance();
             let device = unity_instance.device();
 
+            // The blit acquires its source through `AccessTexture`, which is only permitted from
+            // an event without queue access; the submission itself goes through `AccessQueue`
+            // (see `preprocess::blit_to_hardware_buffer`). `EnsurePreviousFrameSubmission`
+            // keeps Unity's submission thread from racing that submission.
             vulkan.configure_event(
                 event_id,
                 &VulkanPluginEventConfig::new(
                     VulkanEventRenderPassPreCondition::EnsureOutside,
-                    VulkanGraphicsQueueAccess::Allow,
-                    8,
+                    VulkanGraphicsQueueAccess::DontCare,
+                    EVENT_CONFIG_FLAG_ENSURE_PREVIOUS_FRAME_SUBMISSION
+                        | EVENT_CONFIG_FLAG_MODIFIES_COMMAND_BUFFERS_STATE,
                 ),
             );
 
@@ -212,16 +219,18 @@ extern "system" fn on_device_event(ev_type: GfxDeviceEventType) {
     }
 }
 
+/// See `preprocess::blit_to_hardware_buffer`. Must be called from the plugin event reserved in
+/// `EVENT_ID`; `native_texture` is the pointer returned by `Texture.GetNativeTexturePtr()`.
 pub fn blit_to_hardware_buffer<R: unienc_common::Runtime + 'static>(
-    src: &vk::Image,
+    native_texture: *mut c_void,
     src_width: u32,
     src_height: u32,
-    src_graphics_format: u32,
     flip_vertically: bool,
     is_gamma_workflow: bool,
     frame: &hardware_buffer_surface::HardwareBufferFrame,
     runtime: R,
 ) -> Result<impl Future<Output = Result<()>> + use<R>> {
+    let event_id = *EVENT_ID.get().ok_or(AndroidError::EventIdNotReserved)?;
     let cx = crate::vulkan::CONTEXT
         .get()
         .ok_or(AndroidError::ContextNotInitialized)?
@@ -230,13 +239,13 @@ pub fn blit_to_hardware_buffer<R: unienc_common::Runtime + 'static>(
 
     preprocess::blit_to_hardware_buffer(
         &cx,
-        src,
+        native_texture,
         src_width,
         src_height,
-        src_graphics_format,
         flip_vertically,
         is_gamma_workflow,
         frame,
+        event_id,
         runtime,
     )
 }

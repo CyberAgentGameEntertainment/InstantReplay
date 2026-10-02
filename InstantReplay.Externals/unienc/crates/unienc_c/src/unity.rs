@@ -81,7 +81,7 @@ unsafe extern "system" fn graphics_event_callback_trampoline(
     let context = unsafe { Box::from_raw(user_data as *mut GraphicsEventContext) };
     let rust_data = unsafe { Box::from_raw(context.rust_context) };
     let Some(runtime) = rust_data.weak_runtime.upgrade() else {
-        println!("Failed to upgrade runtime in graphics event callback");
+        log::error!("Failed to upgrade runtime in graphics event callback");
         return;
     };
     let _guard = runtime.enter();
@@ -89,10 +89,14 @@ unsafe extern "system" fn graphics_event_callback_trampoline(
 }
 
 fn unity_plugin_load(interfaces: &unity_native_plugin::interface::UnityInterfaces) {
+    // The interfaces are already stored by the caller, so `IUnityLog` can be resolved from here on.
+    crate::logging::set_unity_interfaces_available(true);
     PlatformEncodingSystem::unity_plugin_load(interfaces);
 }
 fn unity_plugin_unload() {
     PlatformEncodingSystem::unity_plugin_unload();
+    // Unity is tearing the plugin down; stop logging through an interface that is going away.
+    crate::logging::set_unity_interfaces_available(false);
 }
 
 #[cfg(not(target_os = "ios"))]
@@ -102,6 +106,7 @@ mod entry_points {
     #[unsafe(no_mangle)]
     #[allow(non_snake_case)]
     extern "system" fn UnityPluginLoad(interfaces: *mut unity_native_plugin::IUnityInterfaces) {
+        crate::logging::init();
         #[cfg(feature = "mimalloc")]
         {
             unsafe {
@@ -137,6 +142,7 @@ mod entry_points {
     extern "system" fn unienc_UnityPluginLoad(
         interfaces: *mut unity_native_plugin::IUnityInterfaces,
     ) {
+        crate::logging::init();
         #[cfg(feature = "mimalloc")]
         {
             unsafe {

@@ -256,7 +256,7 @@ impl Transform {
 
         for activate in mfts {
             if let Some(_r) = &result {
-                println!("Skipping MFT: {}", Self::get_name(&activate)?);
+                log::debug!("Skipping MFT: {}", Self::get_name(&activate)?);
                 continue;
             }
             match Self::try_activate(activate, &mut input_type, &mut output_type, runtime) {
@@ -264,7 +264,7 @@ impl Transform {
                     result = Some(r);
                 }
                 Err(err) => {
-                    println!("Failed to activate MFT: {:?}", err);
+                    log::warn!("Failed to activate MFT: {:?}", err);
                 }
             };
         }
@@ -292,7 +292,7 @@ impl Transform {
         output_type: &mut Option<IMFMediaType>,
         runtime: &impl Runtime,
     ) -> Result<(Self, mpsc::Receiver<UnsafeSend<IMFSample>>)> {
-        println!("Trying MFT: {}", Self::get_name(&activate)?);
+        log::debug!("Trying MFT: {}", Self::get_name(&activate)?);
 
         let is_async = unsafe { activate.GetUINT32(&MF_TRANSFORM_ASYNC) }.unwrap_or(0) != 0;
         let transform = unsafe { activate.ActivateObject::<IMFTransform>()? };
@@ -386,17 +386,17 @@ impl Transform {
                                 }
                                 #[allow(non_upper_case_globals)]
                                 METransformDrainComplete => {
-                                    println!("Transform drain complete");
+                                    log::debug!("Transform drain complete");
                                     // end - generator and transform are dropped here
                                     break;
                                 }
                                 _ => {
-                                    println!("Unhandled media event type: {:?}", event_type);
+                                    log::debug!("Unhandled media event type: {:?}", event_type);
                                 }
                             }
                         }
                         Err(e) => {
-                            println!("Error receiving media event: {:?}", e);
+                            log::error!("Error receiving media event: {:?}", e);
                             break;
                         }
                     }

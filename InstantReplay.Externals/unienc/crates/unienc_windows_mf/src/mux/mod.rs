@@ -233,7 +233,7 @@ impl Stream {
                                     std::ptr::null(),
                                 )
                             } {
-                                println!("PlaceMarker(ENDOFSEGMENT) failed (non-fatal): {:?}", e);
+                                log::warn!("PlaceMarker(ENDOFSEGMENT) failed (non-fatal): {:?}", e);
                             }
                             if let Some(finish_tx) = finish_tx.take() {
                                 finish_tx
@@ -243,7 +243,7 @@ impl Stream {
                         }
                     }
                     _ => {
-                        println!("Unhandled media sink event type: {:?}", event_type);
+                        log::debug!("Unhandled media sink event type: {:?}", event_type);
                     }
                 }
             }
