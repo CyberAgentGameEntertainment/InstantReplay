@@ -18,7 +18,7 @@ namespace InstantReplay
     public class RealtimeInstantReplaySession : IDisposable
     {
         private readonly AudioSampleProviderSubscription _audioPipeline;
-        private readonly BoundedEncodedFrameBuffer _buffer;
+        private readonly IEncodedFrameBuffer _buffer;
         private readonly EncodingSystem _encodingSystem;
         private readonly object _lock = new();
         private readonly TemporalController _temporalController = new();
@@ -69,7 +69,9 @@ namespace InstantReplay
             var encodingSystem = _encodingSystem = new EncodingSystem(options.VideoOptions, options.AudioOptions);
             var videoEncoder = encodingSystem.CreateVideoEncoder();
             var audioEncoder = encodingSystem.CreateAudioEncoder();
-            var buffer = _buffer = new BoundedEncodedFrameBuffer(options.MaxMemoryUsageBytesForCompressedFrames);
+            var buffer = _buffer = options.DiskBuffer is { } diskBufferOptions
+                ? new DiskEncodedFrameBuffer(diskBufferOptions, options.VideoOptions, options.AudioOptions)
+                : (IEncodedFrameBuffer)new BoundedEncodedFrameBuffer(options.MaxMemoryUsageBytesForCompressedFrames);
 
             // ReSharper disable once ConvertToLocalFunction
             Action<LazyVideoFrameData> onLazyVideoFrameDataDropped = async static dropped =>
@@ -97,7 +99,7 @@ namespace InstantReplay
                                 options.VideoInputQueueSize,
                                 onLazyVideoFrameDataDropped,
                                 new VideoEncoderInput(videoEncoder,
-                                    new BoundedEncodedDataBufferVideoInput(buffer).AsAsync())))));
+                                    new EncodedFrameBufferVideoInput(buffer).AsAsync())))));
             }
             else
             {
@@ -122,7 +124,7 @@ namespace InstantReplay
                                     options.VideoInputQueueSize,
                                     onLazyVideoFrameDataDropped,
                                     new VideoEncoderInput(videoEncoder,
-                                        new BoundedEncodedDataBufferVideoInput(buffer).AsAsync()))))));
+                                        new EncodedFrameBufferVideoInput(buffer).AsAsync()))))));
             }
 
             var audioInputQueueSizeSeconds = options.AudioInputQueueSizeSeconds ?? 1.0;
@@ -138,7 +140,7 @@ namespace InstantReplay
                     options.AudioLagAdjustmentThreshold).AsInput(
                     new PcmAudioFrameDroppingChannelInput(audioInputQueueSizeSamples,
                         new AudioEncoderInput(audioEncoder,
-                            new BoundedEncodedDataBufferAudioInput(buffer).AsAsync()))));
+                            new EncodedFrameBufferAudioInput(buffer).AsAsync()))));
 
             _temporalController.Resume();
             State = SessionState.Recording;
@@ -231,12 +233,17 @@ namespace InstantReplay
                 using var muxer = _encodingSystem.CreateMuxer(outputPath);
 
                 // Get frames for the requested duration
-                _buffer.GetFramesForDuration(seconds, out var videoFrames, out var audioFrames);
+                var selection = await _buffer.GetFramesForDurationAsync(seconds).ConfigureAwait(false);
 
                 // Mux the segment
-                await MuxSegmentAsync(muxer, videoFrames, audioFrames);
+                await EncodedFrameMuxer.MuxAsync(muxer, selection.VideoFrames, selection.AudioFrames)
+                    .ConfigureAwait(false);
 
                 State = SessionState.Completed;
+
+                // The exported file supersedes the buffer, so the session directory is no longer worth keeping.
+                if (_buffer is DiskEncodedFrameBuffer diskBuffer)
+                    diskBuffer.CleanupStorage();
                 return outputPath;
             }
             catch (Exception)
@@ -244,84 +251,6 @@ namespace InstantReplay
                 State = SessionState.Invalid;
                 throw;
             }
-        }
-
-
-        private async ValueTask MuxSegmentAsync(Muxer muxer, ReadOnlyMemory<EncodedFrame> videoFrames,
-            ReadOnlyMemory<EncodedFrame> audioFrames)
-        {
-            async ValueTask MuxVideoAsync()
-            {
-                Exception exception = null;
-                for (var i = 0; i < videoFrames.Span.Length; i++)
-                {
-                    var frame = videoFrames.Span[i];
-                    try
-                    {
-                        using (frame)
-                        {
-                            if (exception == null)
-                                await muxer.PushVideoDataAsync(frame).ConfigureAwait(false);
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        exception = ex;
-                    }
-                }
-
-                // Errors in the input to the muxer do not propagate as exceptions in PushVideoDataAsync;
-                // instead, a channel closed error occurs when attempting to input the next frame.
-                // Since the actual muxer error is returned in FinishVideoAsync,
-                // we should call FinishVideoAsync even if PushVideoDataAsync fails.
-                await muxer.FinishVideoAsync().ConfigureAwait(false);
-
-                if (exception != null)
-                    throw exception;
-            }
-
-            async ValueTask MuxAudioAsync()
-            {
-                Exception exception = null;
-                for (var i = 0; i < audioFrames.Span.Length; i++)
-                {
-                    var frame = audioFrames.Span[i];
-                    try
-                    {
-                        using (frame)
-                        {
-                            if (exception == null)
-                                await muxer.PushAudioDataAsync(frame).ConfigureAwait(false);
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        exception = ex;
-                    }
-                }
-
-                // same as video
-                await muxer.FinishAudioAsync().ConfigureAwait(false);
-
-                if (exception != null)
-                    throw exception;
-            }
-
-            // Always observe both tasks even if one of them fails, so that the muxer is not
-            // disposed (by the caller) while the other task is still using it.
-            var whenAll = Task.WhenAll(MuxVideoAsync().AsTask(), MuxAudioAsync().AsTask());
-            try
-            {
-                await whenAll.ConfigureAwait(false);
-            }
-            catch (Exception) when (whenAll.Exception is { InnerExceptions: { Count: > 1 } } aggregate)
-            {
-                // Awaiting Task.WhenAll rethrows only the first exception;
-                // rethrow the AggregateException so that all failures are propagated.
-                throw aggregate;
-            }
-
-            await muxer.CompleteAsync();
         }
 
         /// <summary>

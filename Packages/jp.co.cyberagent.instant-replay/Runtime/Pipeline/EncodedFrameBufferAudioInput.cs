@@ -8,11 +8,11 @@ using UniEnc;
 
 namespace InstantReplay
 {
-    internal class BoundedEncodedDataBufferAudioInput : IPipelineInput<EncodedFrame>
+    internal class EncodedFrameBufferAudioInput : IPipelineInput<EncodedFrame>
     {
-        private readonly BoundedEncodedFrameBuffer _buffer;
+        private readonly IEncodedFrameBuffer _buffer;
 
-        internal BoundedEncodedDataBufferAudioInput(BoundedEncodedFrameBuffer buffer)
+        internal EncodedFrameBufferAudioInput(IEncodedFrameBuffer buffer)
         {
             _buffer = buffer;
         }

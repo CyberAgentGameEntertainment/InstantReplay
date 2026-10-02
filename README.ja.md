@@ -40,6 +40,9 @@ Instant Replay は Unity で直近のゲームプレイ動画をいつでも保�
       * [CRI サポート](#cri-サポート)
       * [Wwise サポート](#wwise-サポート)
     * [録画状態を取得する](#録画状態を取得する)
+  * [ディスクバッファリングとクラッシュ復旧](#ディスクバッファリングとクラッシュ復旧)
+    * [クラッシュ後の復旧](#クラッシュ後の復旧)
+    * [ディスクバッファの設定](#ディスクバッファの設定)
   * [無制限録画](#無制限録画)
   * [レガシーモード](#レガシーモード)
     * [録画時間とフレームレートの設定](#録画時間とフレームレートの設定)
@@ -274,6 +277,64 @@ Wwise もサポートされています。
 ### 録画状態を取得する
 
 `InstantReplaySession.State` プロパティで録画の状態を取得できます。
+
+## ディスクバッファリングとクラッシュ復旧
+
+`RealtimeInstantReplaySession` は既定ではエンコード済みのフレームをメモリ上に保持しますが、`RealtimeEncodingOptions.DiskBuffer` を設定するとディスク上のセグメントファイルに書き出すようになります。メモリ使用量を抑えられるほか、異常終了の直前までの映像がディスク上に残るため、次回起動時に復旧できます。
+
+> [!WARNING]
+> ストレージへ継続的に書き込むとフラッシュメモリの寿命を縮めます。この機能は主に開発ビルドや QA ビルドでの利用を想定しており、エンドユーザーに配布するビルドでの使用は推奨しません。
+
+```csharp
+using InstantReplay;
+
+var options = RealtimeEncodingOptions.Default;
+options.DiskBuffer = DiskBufferOptions.Default;
+
+using var session = new RealtimeInstantReplaySession(options);
+```
+
+ディスクバッファが有効な間は `MaxMemoryUsageBytesForCompressedFrames` は使用されません。代わりに `DiskBufferOptions.MaxDiskUsageBytes` が保持されるデータ量の上限になります。
+
+### クラッシュ後の復旧
+
+各セッションは専用のディレクトリに書き込みます。正常に破棄されたセッションは、`RetainOnDispose` が設定されていない限り自身のディレクトリを削除します。したがって次回起動時に残っているディレクトリは、正常に終了しなかったセッションを表します。
+
+```csharp
+using InstantReplay;
+
+foreach (var recovery in DiskEncodedFrameBufferRecovery.FindRecoverable())
+{
+    if (!recovery.IsCompatible) continue;
+
+    var path = await recovery.ExportAsync(durationSeconds: 30);
+    Debug.Log($"Recovered {path} (started at {recovery.StartedAtUtc:u}, {recovery.SizeBytes} bytes)");
+
+    recovery.Delete();
+}
+```
+
+`FindRecoverable` は指定したルートディレクトリ以下の復旧可能なセッションを列挙します。引数を省略した場合は、記録側が既定で使用するディレクトリを対象とします。異常終了が複数回発生した場合は複数のセッションが残ることがあり、どれを書き出してどれを破棄するかは呼び出し側が決定します。パスが既に判明している単一のセッションを読み取る場合は `TryGetRecoverable` を使用します。
+
+復旧処理が暗黙にディレクトリを削除することはありません。クラッシュによって残されたセッションは、それに先行する映像の唯一の複製だからです。書き出したファイルの処理が済んだ時点で `Delete()` を呼び出してください。
+
+`IsCompatible` は、マニフェストに記録されたプラットフォームとパッケージバージョンを実行中のアプリケーションと比較します。ただしこれは必要条件であって十分条件ではありません。ペイロードはネイティブライブラリによってシリアライズされており、そのスキーマはパッケージのバージョン間で変わりうるためです。この種の不一致は `ExportAsync` の失敗として表面化します。
+
+### ディスクバッファの設定
+
+| プロパティ | 既定値 | 説明 |
+|---|---|---|
+| `Directory` | `null` | セッションディレクトリを格納するディレクトリ。`null` または空の場合は `Application.temporaryCachePath/InstantReplay/DiskBuffer` が使用されます (`DiskBufferOptions.GetDefaultDirectory()` で取得できます)。 |
+| `MaxDiskUsageBytes` | 256 MiB | 1 セッションディレクトリのサイズ上限。マニフェスト、コーデック設定、全セグメントを含みます。`DiskBufferOptions.MinimumDiskUsageBytes` (4 MiB) 以上である必要があります。 |
+| `SegmentDuration` | 5.0 | 1 セグメントファイルの目標長さ (秒)。 |
+| `MaxSegmentBytes` | 8 MiB | 1 セグメントファイルのサイズ上限。`MaxDiskUsageBytes` を超えることはできません。 |
+| `MaxPendingWriteBytes` | 4 MiB | 書き込みキューで待機するペイロードの合計サイズ上限。キューが一杯の間に到着したフレームは、エンコーダーをブロックせず破棄されます。 |
+| `RetainOnDispose` | `false` | セッションが正常に破棄されたときにディレクトリを残すかどうか。 |
+| `SyncMode` | `OperatingSystem` | フラッシュ方針。下記を参照してください。 |
+
+`MaxDiskUsageBytes` は目標値ではなく上限です。各レコードの書き込み前に領域を予約し、その予約が必要なだけ古いセグメントを削除するため、ディレクトリのサイズが一瞬たりとも上限を超えることはありません。削除可能なセグメントをすべて削除しても上限を満たせない場合は、書き込まずにレコードを破棄します。したがって `MaxSegmentBytes` に近い値を指定すると、保持時間ではなく録画そのものが劣化します。セグメントは映像のキーフレームで閉じられるため、セグメントを1つ破棄しても不完全な GOP が残ることはありません。
+
+`SyncMode` は、どの障害モードに備えるかを選択します。既定の `DiskBufferSyncMode.OperatingSystem` は、書き込みキューから取り出したバッチごとにデータを OS へ渡し、セグメントを閉じる際にストレージデバイスへフラッシュします。記録されたフレームはプロセスのクラッシュ (ネイティブフォールト、OOM kill、abort) を生き延びます。これがクラッシュ復旧の目的とする障害モードであり、デバイスへの追加の書き込みを必要としません。電源断やカーネルパニックでは、現在のセグメントを開いてから書き込んだレコードが失われる可能性があります。`DiskBufferSyncMode.EveryRecord` は全レコードをデバイスへフラッシュするため電源断にも耐えますが、フレームごとに1回のデバイスフラッシュが発生します。フラッシュメモリの摩耗が著しく増えるため、常用ではなくストレージ層の問題の診断を想定しています。
 
 ## 無制限録画
 
