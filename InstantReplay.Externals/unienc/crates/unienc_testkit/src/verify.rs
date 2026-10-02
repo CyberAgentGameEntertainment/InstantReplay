@@ -11,7 +11,7 @@
 use std::fmt;
 
 use crate::e2e::{E2eConfig, E2eReport};
-use crate::mp4::{Mp4Summary, Track, TrackKind};
+use crate::mp4::{ColorDescription, Mp4Summary, Track, TrackKind};
 
 /// An AAC frame always covers 1024 samples per channel.
 const AAC_SAMPLES_PER_FRAME: u64 = 1024;
@@ -28,6 +28,11 @@ const DURATION_TOLERANCE_SECS: f64 = 0.25;
 /// How far apart the tracks may start before playback is audibly out of sync.
 /// Encoder priming shifts one track by a few milliseconds at most.
 const SYNC_TOLERANCE_SECS: f64 = 0.05;
+
+/// Whether the muxer on this target writes a `colr` box. muxide, which the web
+/// backend muxes with, writes none, so the SPS VUI is the only place the web
+/// output can state its color space.
+const MUXER_WRITES_COLR: bool = !cfg!(target_os = "emscripten");
 
 /// Everything that did not hold.
 #[derive(Debug)]
@@ -206,6 +211,8 @@ fn verify_video_track(
         )
     });
 
+    verify_video_color(findings, track);
+
     // A decoder joining at the start needs the first sample to be a keyframe.
     findings.check(track.is_sync_sample(1), || {
         "the first video sample is not a sync sample".to_string()
@@ -237,6 +244,41 @@ fn verify_video_track(
             interval
         )
     });
+}
+
+/// Every backend converts to BT.709 limited range, so that is what the file has
+/// to declare. Without a declaration players guess, and they guess differently.
+///
+/// The container's `colr` box and the SPS VUI are checked separately because
+/// they come from different places: the box from the muxer's track format, the
+/// VUI from the encoder. Players disagree on which one wins, so wherever both
+/// are present they have to agree.
+///
+/// This checks the declaration only. Whether the pixels were converted with the
+/// matrix it names takes decoding, which this harness does not do.
+fn verify_video_color(findings: &mut Findings, track: &Track) {
+    let expected = ColorDescription::BT709_LIMITED;
+
+    match track.colr {
+        Some(colr) => findings.check(colr.is_bt709_limited(), || {
+            format!("the 'colr' box declares {colr}, expected {expected}")
+        }),
+        None => findings.check(!MUXER_WRITES_COLR, || {
+            "video track carries no 'colr' box, so players have to guess its color space"
+                .to_string()
+        }),
+    }
+
+    match track.sps_color {
+        Some(sps) => findings.check(sps.is_bt709_limited(), || {
+            format!("the SPS VUI declares {sps}, expected {expected}")
+        }),
+        None => findings.check(MUXER_WRITES_COLR, || {
+            "the SPS VUI declares no color space, and this muxer writes no 'colr' box, \
+             so nothing does"
+                .to_string()
+        }),
+    }
 }
 
 fn verify_audio_track(
@@ -299,7 +341,7 @@ pub fn describe(summary: &Mp4Summary) -> String {
     for track in &summary.tracks {
         out.push_str(&match track.kind {
             TrackKind::Video => format!(
-                "  video: {} {}x{} ({}), {} frames, start {:.3} s, {:.3} s\n",
+                "  video: {} {}x{} ({}), {} frames, start {:.3} s, {:.3} s\n         colr: {}; SPS: {}\n",
                 track.format,
                 track.width,
                 track.height,
@@ -310,6 +352,8 @@ pub fn describe(summary: &Mp4Summary) -> String {
                 track.sample_count,
                 track.start_time,
                 track.duration,
+                describe_color(track.colr),
+                describe_color(track.sps_color),
             ),
             TrackKind::Audio => format!(
                 "  audio: {} {} Hz {} ch, {} frames, start {:.3} s, {:.3} s, decoder config: {}\n",
@@ -325,4 +369,11 @@ pub fn describe(summary: &Mp4Summary) -> String {
         });
     }
     out
+}
+
+fn describe_color(color: Option<ColorDescription>) -> String {
+    match color {
+        Some(color) => color.to_string(),
+        None => "none".to_string(),
+    }
 }

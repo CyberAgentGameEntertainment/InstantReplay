@@ -17,6 +17,8 @@ use crate::mft::MediaEventGeneratorCustom;
 use crate::video::VideoEncodedData;
 use windows::core::Interface;
 
+mod colr;
+
 enum LazyStream {
     None {
         tx: oneshot::Sender<Result<UnsafeSend<IMFMediaType>>>,
@@ -86,6 +88,7 @@ impl MediaFoundationMuxer {
         let (audio_stream_tx, audio_stream_rx) = oneshot::channel::<Result<Stream>>();
 
         let runtime_clone = runtime.clone();
+        let output_path = output_path.to_path_buf();
 
         runtime.spawn_ret(async move {
             let result: Result<()> = async move {
@@ -171,10 +174,15 @@ impl MediaFoundationMuxer {
                     let _ = unsafe { sink.Shutdown() };
                 }
 
+                // The sink has written everything it will by now. Closing the byte stream releases
+                // the file so that it can be reopened below.
+                let _ = unsafe { file.Close() };
+
                 result
             }
             .await;
 
+            let result = result.and_then(|()| add_color_description(&output_path));
             let _ = finish_tx.send(result);
         });
 
@@ -192,6 +200,23 @@ impl MediaFoundationMuxer {
             audio_stream,
             finish_rx,
         })
+    }
+}
+
+/// Adds the `colr` box the MPEG-4 file sink does not write. See [`colr`] for why it is needed.
+///
+/// A file that cannot be patched safely is left as the sink wrote it, which is still playable;
+/// only an I/O error, which may have left the file half-written, fails the mux.
+fn add_color_description(path: &Path) -> Result<()> {
+    match colr::add_bt709_colr(path) {
+        Ok(colr::ColrOutcome::Added | colr::ColrOutcome::AlreadyPresent) => Ok(()),
+        Ok(colr::ColrOutcome::Skipped(reason)) => {
+            log::warn!("Muxed file left without a colr box: {reason}");
+            Ok(())
+        }
+        Err(err) => Err(WindowsError::Other(format!(
+            "Failed to add a colr box to the muxed file: {err}"
+        ))),
     }
 }
 

@@ -16,6 +16,26 @@ pub struct MediaFoundationVideoEncoder {
     fps_hint: f64,
 }
 
+/// Describes a media type as BT.709 limited range.
+///
+/// On the input type this states what the NV12 buffers `VideoFrameBgra32::to_yuv420_planes`
+/// produces actually contain, and on the output type it asks the encoder to record the same in the
+/// H.264 VUI.
+///
+/// Not every encoder honors the request. The Microsoft software H.264 encoder writes no video
+/// signal type into the VUI regardless, and its documentation lists no color attribute or codec
+/// property among those it supports. The muxer therefore states the color space in a `colr` box of
+/// its own (see `mux::colr`) rather than relying on the encoder.
+fn set_bt709_color_attributes(media_type: &IMFMediaType) -> Result<()> {
+    unsafe {
+        media_type.SetUINT32(&MF_MT_VIDEO_PRIMARIES, MFVideoPrimaries_BT709.0 as u32)?;
+        media_type.SetUINT32(&MF_MT_TRANSFER_FUNCTION, MFVideoTransFunc_709.0 as u32)?;
+        media_type.SetUINT32(&MF_MT_YUV_MATRIX, MFVideoTransferMatrix_BT709.0 as u32)?;
+        media_type.SetUINT32(&MF_MT_VIDEO_NOMINAL_RANGE, MFNominalRange_16_235.0 as u32)?;
+    }
+    Ok(())
+}
+
 impl MediaFoundationVideoEncoder {
     pub fn new<V: VideoEncoderOptions>(options: &V, runtime: &impl Runtime) -> Result<Self> {
         let input_type = unsafe {
@@ -30,6 +50,7 @@ impl MediaFoundationVideoEncoder {
             )?;
 
             input_type.SetUINT64(&MF_MT_FRAME_RATE, ((options.fps_hint() as u64) << 32) + 1)?;
+            set_bt709_color_attributes(&input_type)?;
             input_type
         };
 
@@ -45,6 +66,7 @@ impl MediaFoundationVideoEncoder {
             )?;
             output_type.SetUINT32(&MF_MT_INTERLACE_MODE, MFVideoInterlace_Progressive.0 as u32)?;
             output_type.SetUINT32(&MF_MT_MPEG2_PROFILE, eAVEncH264VProfile_Base.0 as u32)?;
+            set_bt709_color_attributes(&output_type)?;
             output_type
         };
 

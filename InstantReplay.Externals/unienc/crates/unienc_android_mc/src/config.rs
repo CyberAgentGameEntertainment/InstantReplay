@@ -24,6 +24,9 @@ pub mod format_keys {
     pub const KEY_LEVEL: &str = "level";
     pub const KEY_PRIORITY: &str = "priority";
     pub const KEY_OPERATING_RATE: &str = "operating-rate";
+    pub const KEY_COLOR_STANDARD: &str = "color-standard";
+    pub const KEY_COLOR_TRANSFER: &str = "color-transfer";
+    pub const KEY_COLOR_RANGE: &str = "color-range";
 
     // Audio keys
     pub const KEY_SAMPLE_RATE: &str = "sample-rate";
@@ -33,6 +36,13 @@ pub mod format_keys {
 
 pub const COLOR_FORMAT_SURFACE: jint = 0x7F000789;
 pub const COLOR_FORMAT_YUV420_FLEXIBLE: jint = 0x7F420888;
+
+/// `MediaFormat.COLOR_STANDARD_BT709`, `COLOR_TRANSFER_SDR_VIDEO` and `COLOR_RANGE_LIMITED`.
+/// All three were introduced in API 24, below the minimum this crate targets, so setting them
+/// needs no version guard.
+pub const COLOR_STANDARD_BT709: jint = 1;
+pub const COLOR_TRANSFER_SDR_VIDEO: jint = 3;
+pub const COLOR_RANGE_LIMITED: jint = 2;
 pub const AAC_OBJECT_TYPE_AAC_LC: jint = 2;
 
 pub const MUXER_OUTPUT_FORMAT_MPEG_4: jint = 0;

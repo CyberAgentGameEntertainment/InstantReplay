@@ -144,6 +144,8 @@ window["unienc_webcodecs"] = {
         {
             width: number,
             height: number,
+            codedWidth: number,
+            codedHeight: number,
             timestamp: number,
             isKey: boolean
         },
@@ -212,20 +214,40 @@ window["unienc_webcodecs"] = {
             return encoder;
         },
         encodeFrame: (encoder, data, options) => {
+            // The frame arrives as I420, already converted to BT.709 limited range by
+            // `VideoFrameBgra32::to_i420`, and padded to even dimensions: Y, then U, then V, each
+            // tightly packed.
+            const chromaWidth = options.codedWidth / 2;
+            const chromaHeight = options.codedHeight / 2;
+            const lumaSize = options.codedWidth * options.codedHeight;
+            const chromaSize = chromaWidth * chromaHeight;
             const init: VideoFrameBufferInit = {
                 timestamp: options.timestamp * 1000 * 1000,
-                codedWidth: options.width,
-                codedHeight: options.height,
+                codedWidth: options.codedWidth,
+                codedHeight: options.codedHeight,
                 visibleRect: {x: 0, y: 0, width: options.width, height: options.height},
                 displayWidth: options.width,
                 displayHeight: options.height,
-                format: "BGRA",
+                format: "I420",
                 layout: [
-                    {
-                        offset: 0,
-                        stride: options.width * 4  // BGRA = 4 bytes per pixel
-                    }
-                ]
+                    {offset: 0, stride: options.codedWidth},
+                    {offset: lumaSize, stride: chromaWidth},
+                    {offset: lumaSize + chromaSize, stride: chromaWidth},
+                ],
+                // What the planes hold, which the browser copies into the SPS VUI.
+                //
+                // The conversion happens on our side because handing the browser an RGB frame
+                // leaves the YUV color space to it, and browsers disagree. Chrome 154 converts
+                // into whatever matrix and range the RGB frame's color space names, while the
+                // Chrome on the CI runner, given the same declaration, converted to BT.601 and
+                // tagged the stream accordingly. With YUV input there is no conversion left for
+                // the browser to choose.
+                colorSpace: {
+                    primaries: "bt709",
+                    transfer: "bt709",
+                    matrix: "bt709",
+                    fullRange: false
+                }
             };
             const frame = new VideoFrame(data, init);
             encoder.encode(frame, {

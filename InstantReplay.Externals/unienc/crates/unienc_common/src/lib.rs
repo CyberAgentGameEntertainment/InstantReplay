@@ -134,20 +134,66 @@ impl VideoFrameBgra32 {
         &self,
         padded_size: Option<(u32, u32)>,
     ) -> Result<(Vec<u8>, Vec<u8>, Vec<u8>)> {
-        let data = self.buffer.data();
-        let w = padded_size.map_or(self.width, |(w, _)| w);
-        let h = padded_size.map_or(self.height, |(_, h)| h);
-        let w_half = (w + 1) >> 1;
-        let h_half = (h + 1) >> 1;
-        let padded_y_size = (w * h) as usize;
-        let padded_uv_size = (w_half * h_half) as usize;
+        let layout = Yuv420Layout::new(self, padded_size);
 
         // Create padded YUV data arrays
-        let mut y_data = vec![16u8; padded_y_size]; // Black level for Y
-        let mut u_data = vec![128u8; padded_uv_size]; // Neutral for U
-        let mut v_data = vec![128u8; padded_uv_size]; // Neutral for V
+        let mut y_data = vec![16u8; layout.y_size()]; // Black level for Y
+        let mut u_data = vec![128u8; layout.uv_size()]; // Neutral for U
+        let mut v_data = vec![128u8; layout.uv_size()]; // Neutral for V
 
-        // Convert ARGB to YUV for the original image area only
+        self.write_yuv420(&layout, &mut y_data, &mut u_data, &mut v_data);
+
+        Ok((y_data, u_data, v_data))
+    }
+
+    /// Converts to I420 in a single buffer: the Y plane, then U, then V, each tightly packed.
+    ///
+    /// The planes are laid out for `padded_size` as in [`Self::to_yuv420_planes`], so the luma
+    /// stride is the padded width and the chroma stride is half of it, rounded up.
+    pub fn to_i420(&self, padded_size: Option<(u32, u32)>) -> Result<Vec<u8>> {
+        let layout = Yuv420Layout::new(self, padded_size);
+
+        let mut data = vec![128u8; layout.y_size() + 2 * layout.uv_size()];
+        let (y_data, chroma) = data.split_at_mut(layout.y_size());
+        let (u_data, v_data) = chroma.split_at_mut(layout.uv_size());
+        y_data.fill(16);
+
+        self.write_yuv420(&layout, y_data, u_data, v_data);
+
+        Ok(data)
+    }
+
+    /// Writes the converted image into planes laid out by `layout`. Samples outside the image
+    /// are left untouched, so the caller decides what the padding holds.
+    fn write_yuv420(
+        &self,
+        layout: &Yuv420Layout,
+        y_data: &mut [u8],
+        u_data: &mut [u8],
+        v_data: &mut [u8],
+    ) {
+        let data = self.buffer.data();
+        let w = layout.width;
+        let w_half = layout.chroma_width();
+
+        // Convert ARGB to YUV for the original image area only.
+        //
+        // BT.709 limited range ("studio swing"), 8-bit fixed point with a denominator of 256:
+        //
+        //     Y  = 16  + (219/255) * ( 0.2126 R + 0.7152 G + 0.0722 B )
+        //     Cb = 128 + (224/255) * ( B - Y ) / 1.8556
+        //     Cr = 128 + (224/255) * ( R - Y ) / 1.5748
+        //
+        // Scaling those factors by 256 gives (46.74, 157.24, 15.87) for Y, (-25.76, -86.67,
+        // 112.43) for Cb and (112.43, -102.13, -10.30) for Cr. The Cb row is rounded to
+        // (-26, -86, 112) instead of to the nearest integers so that every row sums to the value
+        // the reference formula requires: 220 for Y, which maps white to 235 and black to 16, and
+        // 0 for Cb and Cr, which maps neutral colors to exactly 128. That also keeps both chroma
+        // rows inside the nominal 16..240 range at the primary extremes, as the BT.601
+        // coefficients this replaces did. The results therefore always fit in u8 without clamping.
+        //
+        // The color tags written by each platform encoder must stay in sync with these
+        // coefficients.
         for y in 0..self.height {
             for x in 0..self.width {
                 let bgra_idx = ((y * self.width + x) * 4) as usize;
@@ -155,24 +201,53 @@ impl VideoFrameBgra32 {
                 let g = data[bgra_idx + 1] as i32;
                 let b = data[bgra_idx] as i32;
 
-                let y_val = (((66 * r + 129 * g + 25 * b + 128) >> 8) + 16) as u8;
+                let y_val = (((47 * r + 157 * g + 16 * b + 128) >> 8) + 16) as u8;
 
                 let y_idx = (y * w + x) as usize;
                 y_data[y_idx] = y_val;
 
                 // Sample U and V for every 2x2 block (4:2:0 subsampling)
                 if x % 2 == 0 && y % 2 == 0 {
-                    let u_val = (((-38 * r - 74 * g + 112 * b + 128) >> 8) + 128) as u8;
-                    let v_val = (((112 * r - 94 * g - 18 * b + 128) >> 8) + 128) as u8;
+                    let u_val = (((-26 * r - 86 * g + 112 * b + 128) >> 8) + 128) as u8;
+                    let v_val = (((112 * r - 102 * g - 10 * b + 128) >> 8) + 128) as u8;
 
-                    let uv_idx = ((y / 2) * (w / 2) + (x / 2)) as usize;
+                    let uv_idx = ((y / 2) * w_half + (x / 2)) as usize;
                     u_data[uv_idx] = u_val;
                     v_data[uv_idx] = v_val;
                 }
             }
         }
+    }
+}
 
-        Ok((y_data, u_data, v_data))
+/// Plane dimensions of a 4:2:0 image, padded or not.
+struct Yuv420Layout {
+    width: u32,
+    height: u32,
+}
+
+impl Yuv420Layout {
+    fn new(frame: &VideoFrameBgra32, padded_size: Option<(u32, u32)>) -> Self {
+        let (width, height) = padded_size.unwrap_or((frame.width, frame.height));
+        Self { width, height }
+    }
+
+    /// Chroma planes cover odd dimensions by rounding up, so the last column and row of an
+    /// odd-sized image still have a chroma sample.
+    fn chroma_width(&self) -> u32 {
+        self.width.div_ceil(2)
+    }
+
+    fn chroma_height(&self) -> u32 {
+        self.height.div_ceil(2)
+    }
+
+    fn y_size(&self) -> usize {
+        (self.width * self.height) as usize
+    }
+
+    fn uv_size(&self) -> usize {
+        (self.chroma_width() * self.chroma_height()) as usize
     }
 }
 
@@ -274,5 +349,131 @@ mod tests {
             sample.data_as_s16le_bytes(),
             vec![0x34, 0x12, 0xfe, 0xff, 0x00, 0x80]
         );
+    }
+
+    /// A 2x2 frame of a single color, which converts to exactly one sample on every plane.
+    fn solid_bgra_frame(r: u8, g: u8, b: u8) -> VideoFrameBgra32 {
+        VideoFrameBgra32 {
+            buffer: SharedBuffer::new_unmanaged([b, g, r, 255].repeat(4)),
+            width: 2,
+            height: 2,
+        }
+    }
+
+    fn convert_solid(r: u8, g: u8, b: u8) -> (u8, u8, u8) {
+        let (y, u, v) = solid_bgra_frame(r, g, b).to_yuv420_planes(None).unwrap();
+        (y[0], u[0], v[0])
+    }
+
+    /// BT.709 limited range, evaluated in floating point straight from the definition.
+    fn bt709_limited_reference(r: u8, g: u8, b: u8) -> (f64, f64, f64) {
+        let (r, g, b) = (r as f64 / 255.0, g as f64 / 255.0, b as f64 / 255.0);
+        let luma = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+        (
+            16.0 + 219.0 * luma,
+            128.0 + 224.0 * (b - luma) / 1.8556,
+            128.0 + 224.0 * (r - luma) / 1.5748,
+        )
+    }
+
+    #[test]
+    fn to_yuv420_planes_maps_white_and_black_to_the_limited_range_ends() {
+        assert_eq!(convert_solid(255, 255, 255), (235, 128, 128));
+        assert_eq!(convert_solid(0, 0, 0), (16, 128, 128));
+    }
+
+    #[test]
+    fn to_yuv420_planes_keeps_grays_neutral() {
+        for level in 0..=255u8 {
+            let (_, u, v) = convert_solid(level, level, level);
+            assert_eq!((u, v), (128, 128), "gray level {level}");
+        }
+    }
+
+    #[test]
+    fn to_yuv420_planes_uses_bt709_rather_than_bt601() {
+        // The primaries are where the two matrices differ most. Pure red is Y=63 under BT.709 and
+        // Y=81 under BT.601, so this fails clearly if the BT.601 coefficients come back.
+        assert_eq!(convert_solid(255, 0, 0), (63, 102, 240));
+        assert_eq!(convert_solid(0, 255, 0), (172, 42, 26));
+        assert_eq!(convert_solid(0, 0, 255), (32, 240, 118));
+    }
+
+    #[test]
+    fn to_yuv420_planes_matches_the_bt709_definition_within_rounding() {
+        // The fixed-point coefficients are rounded to 1/256, and the Cb row is deliberately rounded
+        // away from the nearest integers to keep neutral colors at exactly 128 (see
+        // `to_yuv420_planes`). That costs up to about 1.15 steps on Cb for saturated greens. The
+        // BT.601 coefficients this replaced are off by up to 28 steps on Y, so the tolerance
+        // still tells the two matrices apart by a wide margin.
+        for r in (0..=255u8).step_by(5) {
+            for g in (0..=255u8).step_by(5) {
+                for b in (0..=255u8).step_by(5) {
+                    let actual = convert_solid(r, g, b);
+                    let expected = bt709_limited_reference(r, g, b);
+                    for (component, actual, expected) in [
+                        ("Y", actual.0, expected.0),
+                        ("Cb", actual.1, expected.1),
+                        ("Cr", actual.2, expected.2),
+                    ] {
+                        assert!(
+                            (actual as f64 - expected).abs() <= 1.5,
+                            "{component} of rgb({r}, {g}, {b}) is {actual}, expected {expected:.2}"
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn to_i420_packs_the_same_planes_as_to_yuv420_planes() {
+        let frame = solid_bgra_frame(255, 0, 0);
+        for padded_size in [None, Some((4, 4))] {
+            let (y, u, v) = frame.to_yuv420_planes(padded_size).unwrap();
+            assert_eq!(
+                frame.to_i420(padded_size).unwrap(),
+                [y, u, v].concat(),
+                "padded to {padded_size:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn to_yuv420_planes_gives_the_last_column_of_an_odd_width_its_own_chroma() {
+        // Three pixels wide, each row red, red, blue, and two chroma rows tall. Each chroma row
+        // is two samples wide, so the blue column's sample sits at the end of its own row. With
+        // a stride of one, the second chroma row would start on top of it and overwrite it.
+        let mut pixels = Vec::new();
+        for _ in 0..4 {
+            pixels.extend_from_slice(&[0, 0, 255, 255, 0, 0, 255, 255, 255, 0, 0, 255]);
+        }
+        let frame = VideoFrameBgra32 {
+            buffer: SharedBuffer::new_unmanaged(pixels),
+            width: 3,
+            height: 4,
+        };
+
+        let (y, u, v) = frame.to_yuv420_planes(None).unwrap();
+
+        assert_eq!(y, [63, 63, 32].repeat(4));
+        assert_eq!(u, [102, 240].repeat(2));
+        assert_eq!(v, [240, 118].repeat(2));
+    }
+
+    #[test]
+    fn to_yuv420_planes_fills_padding_with_black() {
+        let frame = solid_bgra_frame(255, 255, 255);
+        let (y, u, v) = frame.to_yuv420_planes(Some((4, 4))).unwrap();
+
+        assert_eq!(y.len(), 16);
+        assert_eq!((u.len(), v.len()), (4, 4));
+        for row in 0..4 {
+            for col in 0..4 {
+                let expected = if row < 2 && col < 2 { 235 } else { 16 };
+                assert_eq!(y[row * 4 + col], expected, "luma at ({col}, {row})");
+            }
+        }
+        assert!(u.iter().chain(&v).all(|&c| c == 128));
     }
 }

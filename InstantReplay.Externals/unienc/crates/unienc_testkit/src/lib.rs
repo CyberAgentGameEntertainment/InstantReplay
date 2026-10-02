@@ -16,6 +16,7 @@
 
 pub mod driver;
 pub mod e2e;
+mod h264;
 pub mod logging;
 pub mod mp4;
 pub mod options;
