@@ -29,33 +29,39 @@ pub unsafe extern "C" fn JNI_OnLoad(vm: *mut c_void, reserved: *mut c_void) -> c
     unsafe { unienc::android::set_java_vm(vm as *mut _, reserved) }
 }
 
-/// Runs the harness and returns a process exit status: zero when everything the
-/// harness checks holds, one when it does not.
+/// Runs every harness case and returns a process exit status: zero when
+/// everything the harness checks holds, one when it does not.
 ///
-/// Both the description of a successful output and the reason for a failure go
-/// to stdout, which under `app_process` is the shell that invoked it.
+/// Each case writes `<case>.mp4` into `output_dir`. Both the description of a
+/// successful output and the reason for a failure go to stdout, which under
+/// `app_process` is the shell that invoked it.
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_jp_co_cyberagent_unienc_harness_Harness_run(
     mut env: JNIEnv,
     _class: JClass,
-    output_path: JString,
+    output_dir: JString,
 ) -> c_int {
-    let output_path: String = match env.get_string(&output_path) {
+    let output_dir: String = match env.get_string(&output_dir) {
         Ok(path) => path.into(),
         Err(error) => {
-            println!("harness: cannot read the output path argument: {error}");
+            println!("harness: cannot read the output directory argument: {error}");
             return 1;
         }
     };
+    let output_dir = PathBuf::from(output_dir);
 
-    match unienc_testkit::run_and_verify(&E2eConfig::default(), &PathBuf::from(output_path)) {
-        Ok(description) => {
-            println!("harness: ok\n{description}");
-            0
-        }
-        Err(message) => {
-            println!("harness: FAILED\n{message}");
-            1
+    // Every case runs even after one fails, so that a single run on a device
+    // reports everything that is wrong with it.
+    let mut status = 0;
+    for (name, config) in E2eConfig::cases() {
+        let output_path = output_dir.join(format!("{name}.mp4"));
+        match unienc_testkit::run_and_verify(&config, &output_path) {
+            Ok(description) => println!("harness: {name}: ok\n{description}"),
+            Err(message) => {
+                println!("harness: {name}: FAILED\n{message}");
+                status = 1;
+            }
         }
     }
+    status
 }
