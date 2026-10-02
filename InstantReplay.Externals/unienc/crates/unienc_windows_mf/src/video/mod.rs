@@ -20,8 +20,12 @@ pub struct MediaFoundationVideoEncoder {
 ///
 /// On the input type this states what the NV12 buffers `VideoFrameBgra32::to_yuv420_planes`
 /// produces actually contain, and on the output type it asks the encoder to record the same in the
-/// H.264 VUI. Without it the color information stays unspecified all the way into the file and
-/// players have to guess at the color space.
+/// H.264 VUI.
+///
+/// Not every encoder honors the request. The Microsoft software H.264 encoder writes no video
+/// signal type into the VUI regardless, and its documentation lists no color attribute or codec
+/// property among those it supports. The muxer therefore states the color space in a `colr` box of
+/// its own (see `mux::colr`) rather than relying on the encoder.
 fn set_bt709_color_attributes(media_type: &IMFMediaType) -> Result<()> {
     unsafe {
         media_type.SetUINT32(&MF_MT_VIDEO_PRIMARIES, MFVideoPrimaries_BT709.0 as u32)?;
