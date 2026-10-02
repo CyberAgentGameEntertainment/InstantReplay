@@ -226,16 +226,25 @@ window["unienc_webcodecs"] = {
                         stride: options.width * 4  // BGRA = 4 bytes per pixel
                     }
                 ],
-                // Describe the source buffer as sRGB. WebCodecs has no way to ask the encoder for
-                // a particular output color space, so this is the only lever available: the user
-                // agent converts to the encoder's YUV space itself and tags the stream from what
-                // the source frame declares. Left unset it has to guess, which is what makes the
-                // output carry no color information today.
+                // The YUV color space to encode in: BT.709 limited range, as on every other
+                // backend. WebCodecs has no encoder option for the output color space, so the
+                // frame's color space is the only lever. Chrome converts an RGB frame into the
+                // matrix and range declared here and copies all four fields into the SPS VUI.
+                //
+                // This deliberately does not describe the BGRA buffer itself, which would be
+                // `matrix: "rgb"` and `fullRange: true`. Chrome tags the stream with exactly that
+                // declaration, and it does so even when no color space is given at all: the
+                // output then claims full range and the sRGB transfer, unlike every other
+                // backend.
+                //
+                // Verified on Chrome 154 (macOS) with both the OpenH264 software encoder and the
+                // hardware encoder: the SPS carries primaries 1, transfer 1, matrix 1 in limited
+                // range, and the decoded pixels are limited range (white at Y=235).
                 colorSpace: {
                     primaries: "bt709",
-                    transfer: "iec61966-2-1",
-                    matrix: "rgb",
-                    fullRange: true
+                    transfer: "bt709",
+                    matrix: "bt709",
+                    fullRange: false
                 }
             };
             const frame = new VideoFrame(data, init);
