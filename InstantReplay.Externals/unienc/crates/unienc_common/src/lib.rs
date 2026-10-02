@@ -134,18 +134,47 @@ impl VideoFrameBgra32 {
         &self,
         padded_size: Option<(u32, u32)>,
     ) -> Result<(Vec<u8>, Vec<u8>, Vec<u8>)> {
-        let data = self.buffer.data();
-        let w = padded_size.map_or(self.width, |(w, _)| w);
-        let h = padded_size.map_or(self.height, |(_, h)| h);
-        let w_half = (w + 1) >> 1;
-        let h_half = (h + 1) >> 1;
-        let padded_y_size = (w * h) as usize;
-        let padded_uv_size = (w_half * h_half) as usize;
+        let layout = Yuv420Layout::new(self, padded_size);
 
         // Create padded YUV data arrays
-        let mut y_data = vec![16u8; padded_y_size]; // Black level for Y
-        let mut u_data = vec![128u8; padded_uv_size]; // Neutral for U
-        let mut v_data = vec![128u8; padded_uv_size]; // Neutral for V
+        let mut y_data = vec![16u8; layout.y_size()]; // Black level for Y
+        let mut u_data = vec![128u8; layout.uv_size()]; // Neutral for U
+        let mut v_data = vec![128u8; layout.uv_size()]; // Neutral for V
+
+        self.write_yuv420(&layout, &mut y_data, &mut u_data, &mut v_data);
+
+        Ok((y_data, u_data, v_data))
+    }
+
+    /// Converts to I420 in a single buffer: the Y plane, then U, then V, each tightly packed.
+    ///
+    /// The planes are laid out for `padded_size` as in [`Self::to_yuv420_planes`], so the luma
+    /// stride is the padded width and the chroma stride is half of it, rounded up.
+    pub fn to_i420(&self, padded_size: Option<(u32, u32)>) -> Result<Vec<u8>> {
+        let layout = Yuv420Layout::new(self, padded_size);
+
+        let mut data = vec![128u8; layout.y_size() + 2 * layout.uv_size()];
+        let (y_data, chroma) = data.split_at_mut(layout.y_size());
+        let (u_data, v_data) = chroma.split_at_mut(layout.uv_size());
+        y_data.fill(16);
+
+        self.write_yuv420(&layout, y_data, u_data, v_data);
+
+        Ok(data)
+    }
+
+    /// Writes the converted image into planes laid out by `layout`. Samples outside the image
+    /// are left untouched, so the caller decides what the padding holds.
+    fn write_yuv420(
+        &self,
+        layout: &Yuv420Layout,
+        y_data: &mut [u8],
+        u_data: &mut [u8],
+        v_data: &mut [u8],
+    ) {
+        let data = self.buffer.data();
+        let w = layout.width;
+        let w_half = layout.chroma_width();
 
         // Convert ARGB to YUV for the original image area only.
         //
@@ -182,14 +211,43 @@ impl VideoFrameBgra32 {
                     let u_val = (((-26 * r - 86 * g + 112 * b + 128) >> 8) + 128) as u8;
                     let v_val = (((112 * r - 102 * g - 10 * b + 128) >> 8) + 128) as u8;
 
-                    let uv_idx = ((y / 2) * (w / 2) + (x / 2)) as usize;
+                    let uv_idx = ((y / 2) * w_half + (x / 2)) as usize;
                     u_data[uv_idx] = u_val;
                     v_data[uv_idx] = v_val;
                 }
             }
         }
+    }
+}
 
-        Ok((y_data, u_data, v_data))
+/// Plane dimensions of a 4:2:0 image, padded or not.
+struct Yuv420Layout {
+    width: u32,
+    height: u32,
+}
+
+impl Yuv420Layout {
+    fn new(frame: &VideoFrameBgra32, padded_size: Option<(u32, u32)>) -> Self {
+        let (width, height) = padded_size.unwrap_or((frame.width, frame.height));
+        Self { width, height }
+    }
+
+    /// Chroma planes cover odd dimensions by rounding up, so the last column and row of an
+    /// odd-sized image still have a chroma sample.
+    fn chroma_width(&self) -> u32 {
+        self.width.div_ceil(2)
+    }
+
+    fn chroma_height(&self) -> u32 {
+        self.height.div_ceil(2)
+    }
+
+    fn y_size(&self) -> usize {
+        (self.width * self.height) as usize
+    }
+
+    fn uv_size(&self) -> usize {
+        (self.chroma_width() * self.chroma_height()) as usize
     }
 }
 
@@ -366,6 +424,41 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn to_i420_packs_the_same_planes_as_to_yuv420_planes() {
+        let frame = solid_bgra_frame(255, 0, 0);
+        for padded_size in [None, Some((4, 4))] {
+            let (y, u, v) = frame.to_yuv420_planes(padded_size).unwrap();
+            assert_eq!(
+                frame.to_i420(padded_size).unwrap(),
+                [y, u, v].concat(),
+                "padded to {padded_size:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn to_yuv420_planes_gives_the_last_column_of_an_odd_width_its_own_chroma() {
+        // Three pixels wide, each row red, red, blue, and two chroma rows tall. Each chroma row
+        // is two samples wide, so the blue column's sample sits at the end of its own row. With
+        // a stride of one, the second chroma row would start on top of it and overwrite it.
+        let mut pixels = Vec::new();
+        for _ in 0..4 {
+            pixels.extend_from_slice(&[0, 0, 255, 255, 0, 0, 255, 255, 255, 0, 0, 255]);
+        }
+        let frame = VideoFrameBgra32 {
+            buffer: SharedBuffer::new_unmanaged(pixels),
+            width: 3,
+            height: 4,
+        };
+
+        let (y, u, v) = frame.to_yuv420_planes(None).unwrap();
+
+        assert_eq!(y, [63, 63, 32].repeat(4));
+        assert_eq!(u, [102, 240].repeat(2));
+        assert_eq!(v, [240, 118].repeat(2));
     }
 
     #[test]
