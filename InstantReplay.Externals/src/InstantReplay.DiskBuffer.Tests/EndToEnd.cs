@@ -29,16 +29,27 @@ namespace InstantReplay.DiskBufferTests
         private const int Channels = 2;
         private const double Seconds = 2.0;
 
-        public static bool IsSupported()
+        private static bool? _isSupported;
+
+        public static bool IsSupported
         {
-            try
+            get
             {
-                using var system = new EncodingSystem(VideoOptions(), AudioOptions());
-                return true;
-            }
-            catch (Exception)
-            {
-                return false;
+                if (_isSupported is {} value) return value;
+
+                bool result;
+                try
+                {
+                    using var system = new EncodingSystem(VideoOptions(), AudioOptions());
+                    result = true;
+                }
+                catch
+                {
+                    result = false;
+                }
+
+                _isSupported = result;
+                return result;
             }
         }
 
@@ -179,8 +190,9 @@ namespace InstantReplay.DiskBufferTests
                 {
                     var remaining = (totalSamples - i) * Channels;
                     var block = buffer.AsMemory(0, Math.Min(buffer.Length, remaining));
+                    var numSamples = block.Length / Channels;
 
-                    for (var j = 0; j < block.Length / Channels; j++)
+                    for (var j = 0; j < numSamples; j++)
                     {
                         var t = (double)(i + j) / SampleRate;
                         var value = (short)(Math.Sin(2.0 * Math.PI * 440.0 * t) * short.MaxValue);
@@ -188,7 +200,7 @@ namespace InstantReplay.DiskBufferTests
                     }
 
                     await encoder.PushSamplesAsync(block, (ulong)i);
-                    i += block.Length / Channels;
+                    i += numSamples;
                 }
             }
             finally
