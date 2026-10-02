@@ -292,4 +292,95 @@ mod tests {
             vec![0x34, 0x12, 0xfe, 0xff, 0x00, 0x80]
         );
     }
+
+    /// A 2x2 frame of a single color, which converts to exactly one sample on every plane.
+    fn solid_bgra_frame(r: u8, g: u8, b: u8) -> VideoFrameBgra32 {
+        VideoFrameBgra32 {
+            buffer: SharedBuffer::new_unmanaged([b, g, r, 255].repeat(4)),
+            width: 2,
+            height: 2,
+        }
+    }
+
+    fn convert_solid(r: u8, g: u8, b: u8) -> (u8, u8, u8) {
+        let (y, u, v) = solid_bgra_frame(r, g, b).to_yuv420_planes(None).unwrap();
+        (y[0], u[0], v[0])
+    }
+
+    /// BT.709 limited range, evaluated in floating point straight from the definition.
+    fn bt709_limited_reference(r: u8, g: u8, b: u8) -> (f64, f64, f64) {
+        let (r, g, b) = (r as f64 / 255.0, g as f64 / 255.0, b as f64 / 255.0);
+        let luma = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+        (
+            16.0 + 219.0 * luma,
+            128.0 + 224.0 * (b - luma) / 1.8556,
+            128.0 + 224.0 * (r - luma) / 1.5748,
+        )
+    }
+
+    #[test]
+    fn to_yuv420_planes_maps_white_and_black_to_the_limited_range_ends() {
+        assert_eq!(convert_solid(255, 255, 255), (235, 128, 128));
+        assert_eq!(convert_solid(0, 0, 0), (16, 128, 128));
+    }
+
+    #[test]
+    fn to_yuv420_planes_keeps_grays_neutral() {
+        for level in 0..=255u8 {
+            let (_, u, v) = convert_solid(level, level, level);
+            assert_eq!((u, v), (128, 128), "gray level {level}");
+        }
+    }
+
+    #[test]
+    fn to_yuv420_planes_uses_bt709_rather_than_bt601() {
+        // The primaries are where the two matrices differ most. Pure red is Y=63 under BT.709 and
+        // Y=81 under BT.601, so this fails clearly if the BT.601 coefficients come back.
+        assert_eq!(convert_solid(255, 0, 0), (63, 102, 240));
+        assert_eq!(convert_solid(0, 255, 0), (172, 42, 26));
+        assert_eq!(convert_solid(0, 0, 255), (32, 240, 118));
+    }
+
+    #[test]
+    fn to_yuv420_planes_matches_the_bt709_definition_within_rounding() {
+        // The fixed-point coefficients are rounded to 1/256, and the Cb row is deliberately rounded
+        // away from the nearest integers to keep neutral colors at exactly 128 (see
+        // `to_yuv420_planes`). That costs up to about 1.15 steps on Cb for saturated greens. The
+        // BT.601 coefficients this replaced are off by up to 28 steps on Y, so the tolerance
+        // still tells the two matrices apart by a wide margin.
+        for r in (0..=255u8).step_by(5) {
+            for g in (0..=255u8).step_by(5) {
+                for b in (0..=255u8).step_by(5) {
+                    let actual = convert_solid(r, g, b);
+                    let expected = bt709_limited_reference(r, g, b);
+                    for (component, actual, expected) in [
+                        ("Y", actual.0, expected.0),
+                        ("Cb", actual.1, expected.1),
+                        ("Cr", actual.2, expected.2),
+                    ] {
+                        assert!(
+                            (actual as f64 - expected).abs() <= 1.5,
+                            "{component} of rgb({r}, {g}, {b}) is {actual}, expected {expected:.2}"
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn to_yuv420_planes_fills_padding_with_black() {
+        let frame = solid_bgra_frame(255, 255, 255);
+        let (y, u, v) = frame.to_yuv420_planes(Some((4, 4))).unwrap();
+
+        assert_eq!(y.len(), 16);
+        assert_eq!((u.len(), v.len()), (4, 4));
+        for row in 0..4 {
+            for col in 0..4 {
+                let expected = if row < 2 && col < 2 { 235 } else { 16 };
+                assert_eq!(y[row * 4 + col], expected, "luma at ({col}, {row})");
+            }
+        }
+        assert!(u.iter().chain(&v).all(|&c| c == 128));
+    }
 }
