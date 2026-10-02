@@ -6,4 +6,5 @@ mod video;
 mod android;
 mod encoding_system;
 mod graphics;
+mod logging;
 mod runtime;

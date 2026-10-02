@@ -108,6 +108,14 @@ namespace UniEnc.Native
         [DllImport(__DllName, EntryPoint = "unienc_free_graphics_event_context", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
         internal static extern void unienc_free_graphics_event_context(void* context);
 
+        /// <summary>
+        ///  Installs the native logger if it is not installed yet, and discards any record below `level`.
+        ///  Safe to call at any point; records emitted before the first call use the build-dependent default
+        ///  (`Debug` for debug builds, `Info` for release builds).
+        /// </summary>
+        [DllImport(__DllName, EntryPoint = "unienc_set_log_level", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        internal static extern void unienc_set_log_level(UniencLogLevel level);
+
         [DllImport(__DllName, EntryPoint = "unienc_new_shared_buffer_pool", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
         [return: MarshalAs(UnmanagedType.U1)]
         internal static extern bool unienc_new_shared_buffer_pool(nuint limit, Mutex** pool_out, nuint _on_error, void* _user_data);
@@ -167,6 +175,19 @@ namespace UniEnc.Native
         public byte* message;
     }
 
+
+    /// <summary>
+    ///  Severity threshold for native logging. Mirrors `log::LevelFilter`.
+    /// </summary>
+    internal enum UniencLogLevel : uint
+    {
+        Off = 0,
+        Error = 1,
+        Warn = 2,
+        Info = 3,
+        Debug = 4,
+        Trace = 5,
+    }
 
     internal enum UniencErrorKind : uint
     {

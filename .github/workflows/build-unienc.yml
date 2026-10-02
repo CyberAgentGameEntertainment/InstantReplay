@@ -31,7 +31,7 @@ jobs:
           submodules: 'recursive'
       - run: rustup default stable
       - run: rustup target add ${{ matrix.arch }}-pc-windows-msvc
-      - run: cargo build --target ${{ matrix.arch }}-pc-windows-msvc --profile ${{ env._RUST_BUILD_CONFIG == 'debug' && 'dev' || env._RUST_BUILD_CONFIG }} ${{ matrix.variant == 'unity' && '-F mimalloc' || '' }}
+      - run: cargo build --target ${{ matrix.arch }}-pc-windows-msvc --profile ${{ env._RUST_BUILD_CONFIG == 'debug' && 'dev' || env._RUST_BUILD_CONFIG }} ${{ matrix.variant == 'unity' && '-F unity,mimalloc' || '' }}
       - run: Move-Item -Path unienc_c.dll -Destination libunienc_c.dll -Force
         working-directory: InstantReplay.Externals/unienc/target/${{ matrix.arch }}-pc-windows-msvc/${{ env._RUST_BUILD_CONFIG }}
       - uses: actions/upload-artifact@v4
@@ -167,7 +167,7 @@ jobs:
       - run: rustup default stable
       - run: rustup target add ${{ matrix.arch }}-unknown-linux-gnu
       - run: sudo apt update && sudo apt install gcc-multilib
-      - run: cargo build --target ${{ matrix.arch }}-unknown-linux-gnu --profile ${{ env._RUST_BUILD_CONFIG == 'debug' && 'dev' || env._RUST_BUILD_CONFIG }} ${{ matrix.variant == 'unity' && '-F mimalloc' || '' }}
+      - run: cargo build --target ${{ matrix.arch }}-unknown-linux-gnu --profile ${{ env._RUST_BUILD_CONFIG == 'debug' && 'dev' || env._RUST_BUILD_CONFIG }} ${{ matrix.variant == 'unity' && '-F unity,mimalloc' || '' }}
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.variant }}-${{ matrix.arch }}-unknown-linux
