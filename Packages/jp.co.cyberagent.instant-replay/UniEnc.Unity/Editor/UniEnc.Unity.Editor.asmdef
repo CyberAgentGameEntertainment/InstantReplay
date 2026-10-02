@@ -1,7 +1,10 @@
 {
     "name": "UniEnc.Unity.Editor",
     "rootNamespace": "",
-    "references": [],
+    "references": [
+        "GUID:cbc5f87df9298458d9b3f2ed13ca9ba4",
+        "GUID:4e3a30675d7ba4290a7d55e61b3bdff6"
+    ],
     "includePlatforms": [
         "Editor"
     ],
