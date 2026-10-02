@@ -3,6 +3,7 @@
 // --------------------------------------------------------------
 
 using System;
+using System.Buffers;
 using System.Collections.Generic;
 using System.IO;
 using UniEnc;
@@ -27,8 +28,8 @@ namespace InstantReplay
     ///         is what segments may occupy.
     ///     </para>
     ///     <para>
-    ///         Every member is called from the single writer thread of <see cref="DiskEncodedFrameBuffer" />, so no
-    ///         synchronization is performed here. This type has no dependency on UnityEngine.
+    ///         Members are called by one worker of <see cref="DiskEncodedFrameBuffer" /> at a time, never concurrently,
+    ///         so no synchronization is performed here. This type has no dependency on UnityEngine.
     ///     </para>
     /// </remarks>
     internal sealed class DiskBufferSegmentWriter : IDisposable
@@ -51,7 +52,6 @@ namespace InstantReplay
         private double? _openSegmentFirstTimestamp;
         private int _openSegmentIndex = -1;
         private FileStream _openSegmentStream;
-        private byte[] _scratch = new byte[DiskBufferFormat.RecordHeaderSize + 64 * 1024];
         private long _totalSegmentBytes;
 
         public DiskBufferSegmentWriter(string directory, long maxTotalBytes, double segmentDuration,
@@ -340,19 +340,27 @@ namespace InstantReplay
             return true;
         }
 
-        private void WriteRecord(FileStream stream, DiskBufferTrack track, UniencSampleKind kind, double timestamp,
-            ReadOnlySpan<byte> payload)
+        private static void WriteRecord(FileStream stream, DiskBufferTrack track, UniencSampleKind kind,
+            double timestamp, ReadOnlySpan<byte> payload)
         {
             var total = DiskBufferFormat.RecordHeaderSize + payload.Length;
 
-            // Grown once and reused for the lifetime of the writer, so that no allocation occurs per frame.
-            if (_scratch.Length < total) _scratch = new byte[total];
+            // The header and the payload are joined into one array so that a payload larger than the FileStream buffer
+            // still takes a single write syscall. The array is passed as byte[] because the Mono FileStream does not
+            // override Write(ReadOnlySpan<byte>), whose base implementation would rent and copy once more.
+            var record = ArrayPool<byte>.Shared.Rent(total);
+            try
+            {
+                DiskBufferFormat.WriteRecordHeader(record, 0, payload.Length, track, kind, timestamp,
+                    Crc32.Compute(payload));
+                payload.CopyTo(record.AsSpan(DiskBufferFormat.RecordHeaderSize));
 
-            DiskBufferFormat.WriteRecordHeader(_scratch, 0, payload.Length, track, kind, timestamp,
-                Crc32.Compute(payload));
-            payload.CopyTo(_scratch.AsSpan(DiskBufferFormat.RecordHeaderSize));
-
-            stream.Write(_scratch, 0, total);
+                stream.Write(record, 0, total);
+            }
+            finally
+            {
+                ArrayPool<byte>.Shared.Return(record);
+            }
         }
 
         private static bool PayloadEquals(byte[] existing, ReadOnlySpan<byte> payload)

@@ -3,10 +3,10 @@
 // --------------------------------------------------------------
 
 using System;
-using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Threading;
+using System.Threading.Channels;
 using System.Threading.Tasks;
 using UniEnc;
 using UnityEngine;
@@ -25,16 +25,16 @@ namespace InstantReplay
 
         private readonly object _lock = new();
         private readonly long _maxPendingWriteBytes;
-        private readonly Queue<PendingWrite> _pending = new();
+        private readonly Channel<PendingWrite> _pending;
         private readonly bool _retainOnDispose;
         private readonly string _sessionDirectory;
-        private readonly Thread _worker;
+        private readonly Task _worker;
         private readonly DiskBufferSegmentWriter _writer;
 
-        private bool _completed;
         private bool _disposed;
         private long _droppedFrameCount;
         private long _pendingBytes;
+        private Task _quiesceTask;
         private bool _warnedAboutDrops;
 
         public DiskEncodedFrameBuffer(in DiskBufferOptions options, in VideoEncoderOptions videoOptions,
@@ -58,12 +58,15 @@ namespace InstantReplay
             _writer.SetManifestBytes(manifest.Write(Path.Combine(_sessionDirectory,
                 DiskBufferFormat.ManifestFileName)));
 
-            _worker = new Thread(RunWorker)
+            // Synchronous continuations stay disabled so that file I/O never runs inline on the encoder thread that
+            // enqueues a frame.
+            _pending = Channel.CreateUnbounded<PendingWrite>(new UnboundedChannelOptions
             {
-                Name = "InstantReplay.DiskBuffer",
-                IsBackground = true
-            };
-            _worker.Start();
+                SingleReader = true,
+                SingleWriter = false,
+                AllowSynchronousContinuations = false
+            });
+            _worker = Task.Run(() => RunWorkerAsync(_pending.Reader));
         }
 
         /// <summary>
@@ -81,16 +84,15 @@ namespace InstantReplay
             return TryEnqueue(DiskBufferTrack.Audio, frame);
         }
 
-        public ValueTask<EncodedFrameSelection> GetFramesForDurationAsync(double? durationSeconds)
+        public async ValueTask<EncodedFrameSelection> GetFramesForDurationAsync(double? durationSeconds)
         {
             if (_disposed) throw new ObjectDisposedException(nameof(DiskEncodedFrameBuffer));
 
             // The worker owns the files, so it must have drained and closed them before they can be read back.
-            Quiesce();
+            await QuiesceAsync().ConfigureAwait(false);
 
             var scan = DiskBufferSegmentReader.Scan(_sessionDirectory, ILogger.LogExceptionCore);
-            var selection = DiskBufferSegmentReader.BuildSelection(scan, durationSeconds, ILogger.LogExceptionCore);
-            return new ValueTask<EncodedFrameSelection>(selection);
+            return DiskBufferSegmentReader.BuildSelection(scan, durationSeconds, ILogger.LogExceptionCore);
         }
 
         public void Dispose()
@@ -101,7 +103,9 @@ namespace InstantReplay
                 _disposed = true;
             }
 
-            Quiesce();
+            // Dispose is synchronous, so it blocks until the files are closed. The worker never resumes on the calling
+            // thread's synchronization context, so blocking here cannot deadlock it.
+            QuiesceAsync().GetAwaiter().GetResult();
 
             if (!_retainOnDispose) DeleteSessionDirectory();
         }
@@ -121,7 +125,7 @@ namespace InstantReplay
 
             lock (_lock)
             {
-                if (_disposed || _completed) return false;
+                if (_disposed || _quiesceTask != null) return false;
 
                 if (_pendingBytes + length > _maxPendingWriteBytes)
                 {
@@ -139,89 +143,88 @@ namespace InstantReplay
                     return false;
                 }
 
-                _pending.Enqueue(new PendingWrite(track, frame));
+                // The writer is completed only while holding the lock, so this cannot fail.
+                _pending.Writer.TryWrite(new PendingWrite(track, frame));
                 _pendingBytes += length;
-                Monitor.Pulse(_lock);
                 return true;
             }
         }
 
-        private void RunWorker()
+        private async Task RunWorkerAsync(ChannelReader<PendingWrite> reader)
         {
-            while (true)
+            while (await reader.WaitToReadAsync().ConfigureAwait(false))
             {
-                PendingWrite item;
-
-                lock (_lock)
+                while (reader.TryRead(out var item))
                 {
-                    while (_pending.Count == 0)
+                    lock (_lock)
                     {
-                        if (_completed) return;
-                        Monitor.Wait(_lock);
+                        _pendingBytes -= item.Frame.Data.Length;
                     }
 
-                    item = _pending.Dequeue();
-                    _pendingBytes -= item.Frame.Data.Length;
+                    try
+                    {
+                        using (item.Frame)
+                        {
+                            _writer.Write(item.Track, item.Frame);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        ILogger.LogExceptionCore(ex);
+                    }
                 }
 
+                // The queue is empty. Handing the batch to the operating system is what makes it survive a process
+                // crash. It costs a write syscall and no device flush, so it does not add wear to flash memory.
                 try
                 {
-                    using (item.Frame)
-                    {
-                        _writer.Write(item.Track, item.Frame);
-                    }
+                    _writer.FlushToOperatingSystem();
                 }
                 catch (Exception ex)
                 {
                     ILogger.LogExceptionCore(ex);
                 }
-
-                bool idle;
-                lock (_lock)
-                {
-                    idle = _pending.Count == 0;
-                }
-
-                // Handing the batch to the operating system is what makes it survive a process crash. It costs a write
-                // syscall and no device flush, so it does not add wear to flash memory.
-                if (idle) _writer.FlushToOperatingSystem();
             }
         }
 
         /// <summary>
-        ///     Stops accepting frames, drains everything already accepted, and closes the files.
+        ///     Stops accepting frames, drains everything already accepted, and closes the files. Every caller observes the
+        ///     same operation, so a concurrent caller does not return before the files are closed.
         /// </summary>
-        private void Quiesce()
+        private Task QuiesceAsync()
         {
             lock (_lock)
             {
-                if (_completed) return;
-                _completed = true;
-                Monitor.PulseAll(_lock);
+                if (_quiesceTask != null) return _quiesceTask;
+                _pending.Writer.TryComplete();
+                return _quiesceTask = QuiesceCoreAsync();
             }
+        }
 
+        private async Task QuiesceCoreAsync()
+        {
             try
             {
-                _worker.Join();
+                await _worker.ConfigureAwait(false);
             }
             catch (Exception ex)
             {
                 ILogger.LogExceptionCore(ex);
             }
 
+            // Anything still queued was never written; release it so no pooled array is leaked.
+            while (_pending.Reader.TryRead(out var item))
+                try
+                {
+                    item.Frame.Dispose();
+                }
+                catch (Exception ex)
+                {
+                    ILogger.LogExceptionCore(ex);
+                }
+
             lock (_lock)
             {
-                // Anything still queued was never written; release it so no pooled array is leaked.
-                while (_pending.Count > 0)
-                    try
-                    {
-                        _pending.Dequeue().Frame.Dispose();
-                    }
-                    catch (Exception ex)
-                    {
-                        ILogger.LogExceptionCore(ex);
-                    }
-
                 _pendingBytes = 0;
             }
 
