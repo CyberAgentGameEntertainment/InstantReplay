@@ -1,4 +1,4 @@
-use crate::error::{OptionExt, Result, WindowsError};
+use crate::error::{Result, WindowsError};
 use std::path::Path;
 use tokio::sync::mpsc;
 use tokio::sync::oneshot;
@@ -7,9 +7,9 @@ use unienc_common::{
     AudioEncoderOptions, CompletionHandle, Muxer, MuxerInput, Runtime, VideoEncoderOptions,
 };
 use windows::Win32::Media::MediaFoundation::*;
+use windows::Win32::System::Com::StructuredStorage::PROPVARIANT;
 use windows_core::HSTRING;
 use windows_core::IUnknown;
-use windows_core::PROPVARIANT;
 
 use crate::audio::AudioEncodedData;
 use crate::common::{Payload, UnsafeSend};
