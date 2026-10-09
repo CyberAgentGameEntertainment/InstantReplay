@@ -1,4 +1,4 @@
-use crate::error::{OptionExt, Result, WindowsError};
+use crate::error::{Result, WindowsError};
 use std::path::Path;
 use tokio::sync::mpsc;
 use tokio::sync::oneshot;
@@ -7,6 +7,7 @@ use unienc_common::{
     AudioEncoderOptions, CompletionHandle, Muxer, MuxerInput, Runtime, VideoEncoderOptions,
 };
 use windows::Win32::Media::MediaFoundation::*;
+use windows::Win32::System::Com::StructuredStorage::PROPVARIANT;
 use windows_core::HSTRING;
 use windows_core::IUnknown;
 
@@ -195,6 +196,10 @@ impl MediaFoundationMuxer {
     }
 }
 
+/// Context value attached to the end-of-segment marker. Its value is not used; it only has to be
+/// a non-empty PROPVARIANT (see the PlaceMarker call in `Stream::new`).
+const END_OF_SEGMENT_MARKER_CONTEXT: u32 = 1;
+
 struct Stream {
     sample_tx: mpsc::Sender<UnsafeSend<IMFSample>>,
 }
@@ -213,34 +218,60 @@ impl Stream {
         runtime.spawn_ret(async move {
             let mut sample_rx = sample_rx;
             let mut finish_tx = Some(finish_tx);
+            let mut end_of_segment_placed = false;
             while let Ok(event) = stream_cap.get_event().await {
                 let event_type: u32 = unsafe { event.GetType()? };
                 match MF_EVENT_TYPE(event_type as i32) {
                     #[allow(non_upper_case_globals)]
                     MEStreamSinkRequestSample => {
+                        // The sink asks for samples ahead of consuming them, so requests are
+                        // still queued after the segment has ended. Answering one of those
+                        // with a second marker would place it on a sink that may already be
+                        // finalizing.
+                        if end_of_segment_placed {
+                            log::debug!("Ignoring a sample request after end of segment");
+                            continue;
+                        }
                         if let Some(sample) = sample_rx.recv().await {
                             unsafe { stream_cap.ProcessSample(&*sample)? };
                         } else {
-                            // Some Windows builds (observed on 26200 with
-                            // mfmp4srcsnk.dll 10.0.26100.8457) reject PlaceMarker with
-                            // MF_E_INVALIDTYPE for every marker type. The marker only
-                            // tells us the sink consumed everything; treat failure as
-                            // non-fatal so finalization still runs and writes the moov.
+                            end_of_segment_placed = true;
+
+                            // The end-of-segment marker is how the MPEG-4 sink learns that
+                            // this stream has ended. Without it the sink keeps interleaving
+                            // against this stream: once the other stream runs more than
+                            // about 1.5 s past this one's last sample, the sink stops
+                            // requesting samples from it, that stream never drains and
+                            // finalization never starts.
+                            //
+                            // Some Windows builds (observed on 26200 with mfmp4srcsnk.dll
+                            // 10.0.26100.8457 and later) reject PlaceMarker with
+                            // MF_E_INVALIDTYPE when pvarContextValue is NULL or VT_EMPTY,
+                            // although the documentation allows NULL. Passing a non-empty
+                            // context value makes the marker accepted on those builds.
+                            let context = PROPVARIANT::from(END_OF_SEGMENT_MARKER_CONTEXT);
                             if let Err(e) = unsafe {
                                 stream_cap.PlaceMarker(
                                     MFSTREAMSINK_MARKER_ENDOFSEGMENT,
                                     std::ptr::null(),
-                                    std::ptr::null(),
+                                    &context,
                                 )
                             } {
+                                // No MEStreamSinkMarker follows a rejected marker, so report
+                                // the stream drained on the strength of ProcessSample having
+                                // returned for every sample, as before.
                                 log::warn!("PlaceMarker(ENDOFSEGMENT) failed (non-fatal): {:?}", e);
+                                Self::report_drained(&mut finish_tx)?;
                             }
-                            if let Some(finish_tx) = finish_tx.take() {
-                                finish_tx
-                                    .send(())
-                                    .map_err(|_e| WindowsError::FinishSignalSendFailed)?
-                            };
                         }
+                    }
+                    #[allow(non_upper_case_globals)]
+                    MEStreamSinkMarker => {
+                        // The only marker this loop places is the end-of-segment one, and the
+                        // sink sends this once it has consumed every sample placed before it:
+                        // only from here is it safe to start finalization, which writes the
+                        // moov box over data the sink must already be done with.
+                        Self::report_drained(&mut finish_tx)?;
                     }
                     _ => {
                         log::debug!("Unhandled media sink event type: {:?}", event_type);
@@ -252,6 +283,16 @@ impl Stream {
         });
 
         Ok((Self { sample_tx }, finish_rx))
+    }
+
+    /// Tells the muxer task this stream is done with, once.
+    fn report_drained(finish_tx: &mut Option<oneshot::Sender<()>>) -> Result<()> {
+        if let Some(finish_tx) = finish_tx.take() {
+            finish_tx
+                .send(())
+                .map_err(|_e| WindowsError::FinishSignalSendFailed)?;
+        }
+        Ok(())
     }
 }
 
