@@ -17,6 +17,7 @@
 //!
 //! Run it with `scripts/web-browser-test.sh`.
 
+use std::collections::VecDeque;
 use std::ffi::c_void;
 use std::path::PathBuf;
 use std::pin::Pin;
@@ -42,44 +43,74 @@ unsafe extern "C" {
 /// Everything the per-frame callback needs, kept alive on the heap for as long as
 /// the main loop runs.
 struct Harness {
+    /// The cases still to run after the current one, in order.
+    pending: VecDeque<(&'static str, E2eConfig)>,
+    current: Run,
+    pool: LocalPool,
+    /// Whether any case so far has failed. Every case runs regardless, so that a
+    /// single page load reports everything that is wrong.
+    failed: bool,
+}
+
+/// The case being driven at the moment.
+struct Run {
+    name: &'static str,
     config: E2eConfig,
     output_path: PathBuf,
-    pool: LocalPool,
     future: Pin<Box<dyn Future<Output = UniencResult<E2eReport>>>>,
 }
 
-fn main() -> ExitCode {
-    let config = E2eConfig::default();
-    // Emscripten's filesystem is in memory; the root is the one directory
-    // guaranteed to exist.
-    let output_path = PathBuf::from("/e2e.mp4");
+impl Run {
+    fn start(name: &'static str, config: E2eConfig, pool: &LocalPool) -> Result<Self, String> {
+        // Emscripten's filesystem is in memory; the root is the one directory
+        // guaranteed to exist.
+        let output_path = PathBuf::from(format!("/{name}.mp4"));
 
-    // The muxer hands its bytes to a download rather than writing a file, so they
-    // have to be diverted before the run for the verification to find anything.
-    if let Err(message) = unienc_testkit::web::capture_muxed_output(&output_path) {
-        println!("harness: FAILED\n{message}");
-        return ExitCode::FAILURE;
+        // The muxer hands its bytes to a download rather than writing a file, so
+        // they have to be diverted before the run for the verification to find
+        // anything.
+        unienc_testkit::web::capture_muxed_output(&output_path)?;
+
+        let runtime = TestRuntime::from_spawner(pool.spawner());
+        let encoding_system = e2e::new_platform_system(&config, runtime.clone());
+        println!("harness: {name}: driving the pipeline from the browser's main loop");
+
+        Ok(Self {
+            name,
+            config,
+            future: Box::pin(e2e::run_with(
+                encoding_system,
+                runtime,
+                config,
+                output_path.clone(),
+            )),
+            output_path,
+        })
     }
+}
+
+fn main() -> ExitCode {
+    let mut pending: VecDeque<_> = E2eConfig::cases().into_iter().collect();
+    let (name, config) = pending.pop_front().expect("there is at least one case");
 
     let pool = LocalPool::new();
-    let runtime = TestRuntime::from_spawner(pool.spawner());
-    let encoding_system = e2e::new_platform_system(&config, runtime.clone());
+    let current = match Run::start(name, config, &pool) {
+        Ok(run) => run,
+        Err(message) => {
+            println!("harness: {name}: FAILED\n{message}");
+            return ExitCode::FAILURE;
+        }
+    };
 
     // Boxed and leaked into the main loop: `main` returns before the work is
     // done, so nothing here may live on its stack.
     let harness = Box::new(Harness {
-        future: Box::pin(e2e::run_with(
-            encoding_system,
-            runtime,
-            config,
-            output_path.clone(),
-        )),
-        config,
-        output_path,
+        pending,
+        current,
         pool,
+        failed: false,
     });
 
-    println!("harness: driving the pipeline from the browser's main loop");
     unsafe {
         // fps 0 means requestAnimationFrame, and not simulating an infinite loop
         // is what lets `main` return while the loop keeps running.
@@ -103,36 +134,60 @@ extern "C" fn tick(argument: *mut c_void) {
     let waker = futures::task::noop_waker();
     let mut context = Context::from_waker(&waker);
 
-    match harness.future.as_mut().poll(&mut context) {
-        Poll::Pending => {}
-        Poll::Ready(result) => finish(argument, result),
+    let result = match harness.current.future.as_mut().poll(&mut context) {
+        Poll::Pending => return,
+        Poll::Ready(result) => result,
+    };
+
+    if !report(&harness.current, result) {
+        harness.failed = true;
+    }
+
+    // The next case starts on the next frame, from the same loop.
+    while let Some((name, config)) = harness.pending.pop_front() {
+        match Run::start(name, config, &harness.pool) {
+            Ok(run) => {
+                harness.current = run;
+                return;
+            }
+            Err(message) => {
+                println!("harness: {name}: FAILED\n{message}");
+                harness.failed = true;
+            }
+        }
+    }
+
+    finish(argument);
+}
+
+/// Prints the outcome of one case and says whether it passed.
+fn report(run: &Run, result: UniencResult<E2eReport>) -> bool {
+    let name = run.name;
+    match result {
+        Err(error) => {
+            println!("harness: {name}: FAILED\nthe encode failed: {error}");
+            false
+        }
+        Ok(report) => match verify_output(&run.config, &run.output_path, &report) {
+            Ok(description) => {
+                println!("harness: {name}: ok\n{description}");
+                true
+            }
+            Err(message) => {
+                println!("harness: {name}: FAILED\n{message}");
+                false
+            }
+        },
     }
 }
 
-/// Reports the outcome and exits, having stopped the loop first.
-fn finish(argument: *mut c_void, result: UniencResult<E2eReport>) {
+/// Stops the loop and exits with the overall status.
+fn finish(argument: *mut c_void) {
     // SAFETY: as in `tick`; taking ownership back so nothing is polled again.
     let harness = unsafe { Box::from_raw(argument as *mut Harness) };
     unsafe { emscripten_cancel_main_loop() };
 
-    let status = match result {
-        Err(error) => {
-            println!("harness: FAILED\nthe encode failed: {error}");
-            1
-        }
-        Ok(report) => match verify_output(&harness.config, &harness.output_path, &report) {
-            Ok(description) => {
-                println!("harness: ok\n{description}");
-                0
-            }
-            Err(message) => {
-                println!("harness: FAILED\n{message}");
-                1
-            }
-        },
-    };
-
     // The page has no other way to report a status, and emrun turns the exit
     // status into the process's.
-    unsafe { emscripten_force_exit(status) };
+    unsafe { emscripten_force_exit(if harness.failed { 1 } else { 0 }) };
 }
