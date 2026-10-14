@@ -1,0 +1,44 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <TargetFramework>net8.0</TargetFramework>
+        <!-- Run on whichever runtime is installed, so the checks do not require a specific SDK. -->
+        <RollForward>LatestMajor</RollForward>
+        <Nullable>disable</Nullable>
+        <LangVersion>9</LangVersion>
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+        <IsPackable>false</IsPackable>
+        <RootNamespace>InstantReplay.DiskBufferTests</RootNamespace>
+        <AssemblyName>InstantReplay.DiskBuffer.Tests</AssemblyName>
+    </PropertyGroup>
+
+    <!--
+        The storage layer of the disk buffer has no dependency on UnityEngine, so it is compiled into this project
+        directly and exercised without the Unity Editor. Only the files listed here may reference UnityEngine; adding a
+        reference to one of them breaks this project, which is the intended guard.
+    -->
+    <ItemGroup>
+        <Compile Include="..\..\..\Packages\jp.co.cyberagent.instant-replay\Runtime\Pipeline\DiskBufferFormat.cs"
+                 Link="Linked\DiskBufferFormat.cs"/>
+        <Compile Include="..\..\..\Packages\jp.co.cyberagent.instant-replay\Runtime\Pipeline\DiskBufferManifest.cs"
+                 Link="Linked\DiskBufferManifest.cs"/>
+        <Compile Include="..\..\..\Packages\jp.co.cyberagent.instant-replay\Runtime\Pipeline\DiskBufferSegmentReader.cs"
+                 Link="Linked\DiskBufferSegmentReader.cs"/>
+        <Compile Include="..\..\..\Packages\jp.co.cyberagent.instant-replay\Runtime\Pipeline\DiskBufferSegmentWriter.cs"
+                 Link="Linked\DiskBufferSegmentWriter.cs"/>
+        <Compile Include="..\..\..\Packages\jp.co.cyberagent.instant-replay\Runtime\Pipeline\DiskBufferSyncMode.cs"
+                 Link="Linked\DiskBufferSyncMode.cs"/>
+        <Compile Include="..\..\..\Packages\jp.co.cyberagent.instant-replay\Runtime\Pipeline\EncodedFrameSelector.cs"
+                 Link="Linked\EncodedFrameSelector.cs"/>
+        <Compile Include="..\..\..\Packages\jp.co.cyberagent.instant-replay\Runtime\Pipeline\EncodedFrameMuxer.cs"
+                 Link="Linked\EncodedFrameMuxer.cs"/>
+        <Compile Include="..\..\..\Packages\jp.co.cyberagent.instant-replay\Runtime\Pipeline\IEncodedFrameBuffer.cs"
+                 Link="Linked\IEncodedFrameBuffer.cs"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\UniEnc\UniEnc.csproj"/>
+    </ItemGroup>
+
+</Project>
