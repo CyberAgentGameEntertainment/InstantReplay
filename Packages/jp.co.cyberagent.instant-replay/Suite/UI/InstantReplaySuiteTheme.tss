@@ -9,8 +9,11 @@
     background-color: rgb(30, 33, 39);
 }
 
+/* Unity 2022.3 sizes the outer container from the height of the inner one and its own borders, so the inner container
+   must not have margins. */
+
 .unity-base-dropdown__container-inner {
-    margin: 4px;
+    padding: 4px;
     border-width: 0;
     background-color: rgba(0, 0, 0, 0);
 }
