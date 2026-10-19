@@ -72,7 +72,7 @@ namespace InstantReplay.Suite.UI
             _overlayLabel.AddToClassList("irs-overlay__label");
             _overlay.Add(_overlayDot);
             _overlay.Add(_overlayLabel);
-            _overlay.RegisterCallback<ClickEvent>(_ => TogglePanel());
+            _overlay.OnTap(TogglePanel);
             _root.Add(_overlay);
 
             _panel = new VisualElement();
@@ -160,6 +160,7 @@ namespace InstantReplay.Suite.UI
             _recorder.ConfigurationChanged += OnRecorderChanged;
             _root.RegisterCallback<GeometryChangedEvent>(_ => ApplySafeArea());
 
+            Taps.Apply(_root);
             _refresh = _root.schedule.Execute(Refresh).Every(RefreshIntervalMs);
             _pulse = _root.schedule.Execute(Pulse).Every(PulseIntervalMs);
             SelectTab(false);

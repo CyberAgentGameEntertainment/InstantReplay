@@ -72,6 +72,7 @@ namespace InstantReplay.Suite.UI
             actions.Add(_confirmButton);
             panel.Add(actions);
 
+            Taps.Apply(Root);
             Root.AddToClassList("irs-modal--entering");
             parent.Add(Root);
             Root.schedule.Execute(() => Root.RemoveFromClassList("irs-modal--entering")).StartingIn(16);
@@ -139,7 +140,7 @@ namespace InstantReplay.Suite.UI
                 var row = RecordingRows.Create($"Unfinished · {Formatting.LocalDateTime(recovery.StartedAtUtc)}",
                     details, null, _allowMultiple, _checked.Contains(recovery));
                 row.AddToClassList("irs-picker__row--unfinished");
-                row.RegisterCallback<ClickEvent>(_ => Toggle(recovery));
+                row.OnTap(() => Toggle(recovery));
                 _list.Add(row);
             }
 
@@ -149,7 +150,7 @@ namespace InstantReplay.Suite.UI
                 if (thumbnail != null) _thumbnails.Add(thumbnail);
                 var row = RecordingRows.Create(RecordingRows.Title(entry), RecordingRows.DescribeShort(entry),
                     thumbnail, _allowMultiple, _checked.Contains(entry));
-                row.RegisterCallback<ClickEvent>(_ => Toggle(entry));
+                row.OnTap(() => Toggle(entry));
                 _list.Add(row);
             }
 

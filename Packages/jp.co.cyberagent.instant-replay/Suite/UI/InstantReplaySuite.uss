@@ -56,7 +56,8 @@
     background-color: rgba(16, 18, 22, 0.88);
 }
 
-.irs-overlay:active {
+.irs-overlay:active,
+.irs-overlay.irs-pressed {
     scale: 0.96 0.96;
 }
 
@@ -200,7 +201,8 @@
     border-color: var(--irs-border-strong);
 }
 
-.irs-root .unity-button:active:enabled {
+.irs-root .unity-button:active:enabled,
+.irs-root .unity-button.irs-pressed:enabled {
     background-color: var(--irs-surface-active);
     scale: 0.97 0.97;
 }
@@ -221,7 +223,8 @@
     background-color: var(--irs-accent-hover);
 }
 
-.irs-root .irs-button--primary:active:enabled {
+.irs-root .irs-button--primary:active:enabled,
+.irs-root .irs-button--primary.irs-pressed:enabled {
     background-color: var(--irs-accent-active);
 }
 
@@ -570,7 +573,8 @@
     background-color: var(--irs-surface-hover);
 }
 
-.irs-library__row:active {
+.irs-library__row:active,
+.irs-library__row.irs-pressed {
     scale: 0.99 0.99;
 }
 

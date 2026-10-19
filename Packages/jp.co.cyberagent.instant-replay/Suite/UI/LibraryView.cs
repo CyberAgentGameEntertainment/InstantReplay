@@ -105,7 +105,7 @@ namespace InstantReplay.Suite.UI
 
             _preview = new PreviewPlayer(previewParent);
             _preview.Error += message => _detailInfo.text += $"\nPreview failed: {message}";
-            _preview.Image.RegisterCallback<ClickEvent>(_ => _preview.TogglePause());
+            _preview.Image.OnTap(_preview.TogglePause);
             if (PreviewPlayer.IsSupported) _detail.Add(_preview.Image);
 
             _detailInfo = new Label();
@@ -279,7 +279,7 @@ namespace InstantReplay.Suite.UI
             var row = RecordingRows.Create(RecordingRows.Title(entry), RecordingRows.DescribeShort(entry), thumbnail,
                 _selectionMode, isChecked);
 
-            row.RegisterCallback<ClickEvent>(_ =>
+            row.OnTap(() =>
             {
                 if (_selectionMode) ToggleChecked(entry);
                 else OpenDetail(entry);

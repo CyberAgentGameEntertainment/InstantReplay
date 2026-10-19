@@ -64,7 +64,7 @@ namespace InstantReplay.Suite.UI
 
             _preview = new PreviewPlayer(previewParent);
             _preview.Image.AddToClassList("irs-trim__preview");
-            _preview.Image.RegisterCallback<ClickEvent>(_ => TogglePlay());
+            _preview.Image.OnTap(TogglePlay);
             _preview.Error += message => _statusLabel.text = $"Preview failed: {message}";
             if (PreviewPlayer.IsSupported) panel.Add(_preview.Image);
 
@@ -130,6 +130,8 @@ namespace InstantReplay.Suite.UI
             actions.Add(_cancelButton);
             actions.Add(_saveButton);
             content.Add(actions);
+
+            Taps.Apply(Root);
 
             // The view is laid out in its initial state first, so that the transition to the final state runs.
             Root.AddToClassList("irs-modal--entering");

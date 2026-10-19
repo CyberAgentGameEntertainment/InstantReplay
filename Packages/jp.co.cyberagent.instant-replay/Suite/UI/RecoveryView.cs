@@ -64,6 +64,7 @@ namespace InstantReplay.Suite.UI
 
             _list.Clear();
             foreach (var recovery in recoveries) _list.Add(CreateRow(recovery));
+            Taps.Apply(_list);
             Root.style.display = recoveries.Count > 0 || !string.IsNullOrEmpty(_status.text)
                 ? DisplayStyle.Flex
                 : DisplayStyle.None;
