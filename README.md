@@ -30,6 +30,22 @@ When a bug occurs, you can export the recent gameplay leading up to the bug as a
       * [Method 2: Install manually](#method-2-install-manually)
     * [Install the Package](#install-the-package)
   * [Quick Start](#quick-start)
+  * [Instant Replay Suite](#instant-replay-suite)
+    * [Setup](#setup)
+    * [Using the User Interface](#using-the-user-interface)
+      * [Overlay](#overlay)
+      * [Recorder Tab](#recorder-tab)
+      * [Trim View](#trim-view)
+      * [Recordings Tab](#recordings-tab)
+      * [Recovering Unfinished Recordings](#recovering-unfinished-recordings)
+    * [Using the Suite from Code](#using-the-suite-from-code)
+      * [Saving a Replay](#saving-a-replay)
+      * [Starting an Unbounded Recording](#starting-an-unbounded-recording)
+      * [State and Statistics](#state-and-statistics)
+      * [Choosing Video and Audio Sources](#choosing-video-and-audio-sources)
+      * [Recording Library](#recording-library)
+      * [Sharing](#sharing)
+      * [Using the Recorder without the User Interface](#using-the-recorder-without-the-user-interface)
   * [Detailed Usage](#detailed-usage)
     * [Options](#options)
     * [Pausing and Resuming](#pausing-and-resuming)
@@ -118,21 +134,258 @@ Import the "User Interfaces" sample from the Package Manager.
 
 <img width="913" alt="Image" src="https://github.com/user-attachments/assets/970ad1e3-a5cf-410c-a2cb-70e0004e88e2" />
 
-Place `InstantReplay Recorder.prefab` in the scene. This prefab contains `RecorderInterface` and `PersistentRecorder` components, which automatically record the gameplay while enabled.
+Open `SampleScene` in the imported sample and enter Play mode. The scene contains a game object with the `InstantReplaySuite` component, which starts buffering the gameplay as soon as the scene starts.
 
-<img width="585" alt="Image" src="https://github.com/user-attachments/assets/0724b264-f92b-4a68-b6dc-85b9aae9c05b" />
+The overlay at the top right of the screen shows the duration of the buffered footage and the estimated capacity of the buffer. Click or tap the overlay to open the panel.
 
-Then, you can stop the recording and save the video by calling `RecorderInterface.StopAndExport()`. For example, you can trigger this method by clicking the button in the scene.
+<img width="800" alt="Recorder tab of the Instant Replay Suite" src=".github/images/suite-recorder.png" />
 
-<img width="585" alt="Image" src="https://github.com/user-attachments/assets/0674da6c-e7e8-4988-8890-01baa11f4322" />
+Press **Save replay**. The trim view opens with the whole buffered footage selected. Press **Save** to save it as it is, or choose a range first as described in [Trim View](#trim-view).
 
-The recorded video will play on the screen.
+<img width="800" alt="Trim view of the Instant Replay Suite" src=".github/images/suite-trim.png" />
 
-![image](https://github.com/user-attachments/assets/f147e50d-a3e8-4dda-bfa3-22c1240f2904)
+The saved recording appears in the **Recordings** tab, where it can be played back, shared and deleted.
+
+<img width="800" alt="Recordings tab of the Instant Replay Suite" src=".github/images/suite-recordings.png" />
+
+To use the suite in your own project, see [Instant Replay Suite](#instant-replay-suite). To record from your own code without the suite, see [Detailed Usage](#detailed-usage).
+
+## Instant Replay Suite
+
+The Instant Replay Suite is a set of runtime components and a user interface that is included in the package. It covers what projects commonly build on top of the recording API: continuous buffering, saving and trimming replays, unbounded recording, recording settings that the user can change at runtime, a library of saved recordings, sharing, and recovery of footage left behind by an abnormal termination.
+
+The suite consists of the following assemblies.
+
+| Assembly | Contents |
+|---|---|
+| `InstantReplay.Suite` | The recorder (`InstantReplayRecorder`), presets, the settings asset, the recording library, the sharing abstraction and the file export share target. It does not depend on any UI framework. |
+| `InstantReplay.Suite.UI` | The `InstantReplaySuite` component and its UI Toolkit user interface. |
+| `InstantReplay.Suite.Sharing.Slack` | Slack share target. Compiled only when the UnityWebRequest module is enabled. |
+| `InstantReplay.Suite.Sharing.Discord` | Discord share target. Compiled only when the UnityWebRequest module is enabled. |
+
+The preview of recordings requires the Video module, and thumbnails require the Image Conversion module. The corresponding controls are omitted when these modules are disabled. Preview is not available on WebGL, where `VideoPlayer` cannot open local files.
+
+> [!NOTE]
+> By default, the suite captures the screen with `ScreenshotFrameProvider`, so the overlay and the panel appear in the recordings. To exclude them, supply a camera-based frame provider as described in [Choosing Video and Audio Sources](#choosing-video-and-audio-sources).
+
+### Setup
+
+1. Add the `InstantReplaySuite` component to a game object in the first scene (**Add Component > Instant Replay > Instant Replay Suite**). Only one instance can be active at a time; a second instance destroys itself.
+2. Create a settings asset from **Create > Instant Replay > Suite Settings** and assign it to the **Settings** field. Without a settings asset, the suite uses a single default preset.
+
+<img width="520" alt="Inspector of the InstantReplaySuite component" src=".github/images/suite-component.png" />
+
+| Field | Description |
+|---|---|
+| Settings | The `InstantReplaySuiteSettings` asset. |
+| Theme Style Sheet, Style Sheet | Style sheets of the user interface. They are assigned automatically from the package in the editor. |
+| Sorting Order | Sorting order of the panel that displays the user interface. |
+| Dont Destroy On Load | Whether the game object is kept across scene loads. |
+| Show Overlay On Launch | Whether the overlay is shown at startup. Recording continues while the overlay is hidden. |
+| Scale | Multiplier applied to the size of the user interface. |
+
+The user interface keeps a constant physical size on every screen. One unit of the style sheet corresponds to 1/96 inch on desktop platforms and to 1/160 inch on handheld devices.
+
+<img width="520" alt="Inspector of the InstantReplaySuiteSettings asset" src=".github/images/suite-settings.png" />
+
+| Field | Description |
+|---|---|
+| Presets | Recording settings that the user can choose from. See below. |
+| Default Preset Id | Identifier of the preset used until the user chooses one. |
+| Start Buffering On Launch | Whether buffering starts at startup when the user has not chosen otherwise. |
+| Output Directory | Directory where recordings are saved. Relative paths are resolved against `Application.persistentDataPath`. |
+| Max Recordings | Number of recordings to keep. The oldest recordings are deleted beyond it. Zero keeps every recording. |
+| Max Total Megabytes | Total size of the recordings to keep, in MiB. The oldest recordings are deleted beyond it, but the recording just saved is always kept. Zero keeps every recording. |
+| Persist User Preferences | Whether the preset and the buffering toggle chosen by the user are restored at the next launch. |
+| Share Targets | Destinations offered when the user shares a recording. See [Sharing](#sharing). |
+
+Each preset has an identifier, a display name, the resolution (a fixed size, or a ratio of the screen size with an upper bound on the longer side), the frame rate, the video bitrate (a fixed value, or computed from bits per pixel), the audio bitrate, the buffer (in memory or on disk, with its size in MiB) and `ForceReadback`. The panel shows the duration that the buffer of the selected preset is estimated to hold.
+
+### Using the User Interface
+
+#### Overlay
+
+The overlay is always shown while it is enabled. It shows the state of the recorder with a colored dot and the buffered duration against the estimated capacity. During an unbounded recording, the dot turns red and blinks, and the overlay shows the elapsed time. Click or tap the overlay to open or close the panel.
+
+#### Recorder Tab
+
+- **Continuous buffering** enables or disables buffering.
+- **Save replay** takes the buffered footage and opens the [trim view](#trim-view). Buffering restarts immediately, so footage continues to be buffered while the trim view is open.
+- **Start recording** starts an unbounded recording, which is written directly to a file until **Stop recording** is pressed. Buffering is suspended during an unbounded recording and resumes afterwards.
+- **Pause** pauses buffering or the unbounded recording, and **Resume** resumes it.
+- **Preset** selects one of the presets. Changing the preset discards the buffered footage.
+- **Customize** overrides individual settings of the selected preset. The preset is then shown with "(custom)", and **Reset to preset** discards the overrides.
+
+<img width="800" alt="Customize section of the Recorder tab" src=".github/images/suite-customize.png" />
+
+#### Trim View
+
+The trim view plays the captured footage in a loop within the selected range.
+
+- Drag the handles at both ends of the timeline to choose the range. The start snaps to the key frame where the saved recording actually starts. The ticks below the timeline mark the key frames.
+- Drag the knob, or click elsewhere on the timeline, to move the playback position. **Set start** and **Set end** set the range at the playback position.
+- **Use frame as thumbnail** takes the frame being shown as the thumbnail of the recording.
+- **Save** saves the selected range to the library, and **Discard** closes the view without saving.
+
+#### Recordings Tab
+
+The Recordings tab lists the saved recordings, newest first. Select a recording to show its preview and details.
+
+<img width="800" alt="Details of a recording" src=".github/images/suite-detail.png" />
+
+- **Use frame as thumbnail** replaces the thumbnail with the frame being shown in the preview.
+- **Delete** deletes the recording. Press it again within three seconds to confirm.
+- **Share to** selects a share target, **Comment** adds a message, and **Share** shares the recording. This section is shown when at least one share target is configured.
+- **Select** switches the list to the selection mode, in which several recordings can be selected and deleted together.
+
+#### Recovering Unfinished Recordings
+
+When a preset with a disk buffer is used and the application terminates abnormally, the footage buffered on disk remains. On the next launch, the Recordings tab lists such footage under **Unfinished recordings**. **Recover** saves it to the library, and **Delete** discards it.
+
+### Using the Suite from Code
+
+The suite can be controlled from game code through `InstantReplayRecorder`, available as `InstantReplaySuite.Recorder`. `InstantReplaySuite.Current` returns the active instance. Every member of `InstantReplayRecorder` must be called on the main thread, and its events are raised on the main thread.
+
+#### Saving a Replay
+
+`SaveReplayAsync` saves the buffered footage to the library without user interaction.
+
+```csharp
+using System.Collections.Generic;
+using InstantReplay.Suite;
+using InstantReplay.Suite.UI;
+using UnityEngine;
+
+var recorder = InstantReplaySuite.Current.Recorder;
+if (recorder.State == RecorderState.Buffering)
+{
+    var entry = await recorder.SaveReplayAsync(new ReplaySaveRequest
+    {
+        DurationSeconds = 30, // null saves the whole buffer
+        Metadata = new Dictionary<string, string> { ["scene"] = "Stage1" }
+    });
+    Debug.Log($"Saved {entry.FilePath}");
+}
+```
+
+`CaptureReplayAsync` takes the buffered footage without saving it and returns a `ReplayDraft`, from which any range can be saved any number of times. The caller owns the draft and must dispose it.
+
+```csharp
+using var draft = await recorder.CaptureReplayAsync();
+
+// Saves the last ten seconds. The start moves to the key frame at or before the requested time.
+var start = draft.GetSaveStart(Math.Max(0, draft.DurationSeconds - 10));
+var entry = await draft.SaveAsync(start);
+```
+
+#### Starting an Unbounded Recording
+
+```csharp
+var recording = recorder.StartUnbounded();
+
+// 〜 Gameplay 〜
+
+var entry = await recording.StopAsync();
+```
+
+#### State and Statistics
+
+`State` returns one of `Idle`, `Buffering`, `Exporting`, `RecordingUnbounded` and `Faulted`, and `StateChanged` is raised when it changes. `IsPaused` is independent of the state. `GetStatistics()` returns the buffered duration, the estimated capacity, the bytes used by the buffer and the elapsed time of an unbounded recording.
+
+The recorder can also be controlled with `SetBufferingEnabled`, `Pause`, `Resume` and `ApplyPreset`, which correspond to the controls of the Recorder tab.
+
+#### Choosing Video and Audio Sources
+
+By default, the suite uses `ScreenshotFrameProvider` and `UnityAudioSampleProvider`. To use other providers, configure them before the `Start` of the `InstantReplaySuite` component, for example in `Awake` of your own component.
+
+```csharp
+using InstantReplay;
+using InstantReplay.Suite.UI;
+using InstantReplay.UniversalRP;
+using UnityEngine;
+
+public class SuiteSetup : MonoBehaviour
+{
+    [SerializeField] private InstantReplaySuite suite;
+    [SerializeField] private Camera gameCamera;
+
+    private void Awake()
+    {
+        // Records only the game camera, so that the overlay and the panel do not appear in the recordings.
+        suite.Recorder.SetFrameProviderFactory(() => new RendererFeatureFrameProvider(gameCamera));
+    }
+}
+```
+
+The recorder keeps at most one instance of each provider and passes the same instance to every session it creates, so a factory is called only when no instance exists. `SetFrameProvider` and `SetAudioSampleProvider` accept an instance created by the application; when `takeOwnership` is false, the recorder never disposes it. When a provider can no longer operate, for example because its camera has been destroyed, call `InvalidateFrameProvider` or `InvalidateAudioSampleProvider`.
+
+#### Recording Library
+
+`recorder.Library` manages the saved recordings. `GetEntries()` returns them newest first as `RecordingEntry` objects, which describe the file path, the creation time, the duration, the size, the source (`Replay`, `Unbounded` or `Recovered`), the metadata and the thumbnail path. `Delete` deletes recordings, and `Changed` is raised when the list changes. `ImportRecoveredAsync` saves footage returned by `DiskEncodedFrameBufferRecovery.FindRecoverable()` to the library.
+
+#### Sharing
+
+A share target is an asset derived from `ShareTarget`, listed in **Share Targets** of the settings asset. The package provides the following targets, each created from **Create > Instant Replay > Share Targets**.
+
+| Target | Description |
+|---|---|
+| File Export | Copies the recording to a directory. Relative paths are resolved against `Application.persistentDataPath`. It can open the directory afterwards on desktop platforms. |
+| Slack | Uploads the recording to a channel with a bot token that has the `files:write` scope. |
+| Discord | Posts the recording to a channel through a webhook. The upload limit of the server is configurable (10 MiB by default). |
+
+> [!WARNING]
+> Tokens and webhook URLs configured in an asset are included in the build. The Slack and Discord targets are intended for development and quality-assurance builds. They also accept credentials set from code at runtime through `SlackShareTarget.Token` and `DiscordShareTarget.WebhookUrl`.
+
+Share targets can also be added at runtime through `recorder.ShareTargets`. To support another destination, derive a class from `ShareTarget`.
+
+```csharp
+using System.Threading;
+using System.Threading.Tasks;
+using InstantReplay.Suite;
+using UnityEngine;
+
+[CreateAssetMenu(menuName = "My Game/Bug Tracker Share Target")]
+public class BugTrackerShareTarget : ShareTarget
+{
+    public override bool CanShare(ShareRequest request, out string reason)
+    {
+        reason = null;
+        return true;
+    }
+
+    public override async ValueTask<ShareResult> ShareAsync(ShareRequest request, ShareContext context,
+        CancellationToken cancellationToken)
+    {
+        foreach (var entry in request.Entries)
+        {
+            // Upload entry.FilePath together with request.Comment and entry.Metadata, and report progress with
+            // context.ReportProgress(0..1).
+        }
+
+        // Failures are reported by throwing; the message of the exception is shown to the user.
+        return new ShareResult("Reported.", url: "https://example.com/issues/123");
+    }
+}
+```
+
+#### Using the Recorder without the User Interface
+
+Projects that build their own user interface can use `InstantReplayRecorder` directly from the `InstantReplay.Suite` assembly.
+
+```csharp
+using InstantReplay.Suite;
+
+var recorder = new InstantReplayRecorder(settings); // null uses the built-in defaults
+recorder.Activate(); // restores the user's choices and starts buffering when enabled
+
+// 〜 Gameplay 〜
+
+recorder.Dispose();
+```
 
 ## Detailed Usage
 
-To record gameplay from code, use `RealtimeInstantReplaySession` as shown below.
+To record gameplay from code without the suite, use `RealtimeInstantReplaySession` as shown below.
 
 ```csharp
 using InstantReplay;
