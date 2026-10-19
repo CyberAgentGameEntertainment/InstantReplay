@@ -26,6 +26,9 @@ pub struct VideoEncoderOptionsNative {
     pub height: u32,
     pub fps_hint: u32,
     pub bitrate: u32,
+    /// Maximum interval between IDR (key) frames, in seconds. Required; the managed side rejects
+    /// non-positive and non-finite values before the struct crosses the boundary.
+    pub idr_interval_seconds: f32,
 }
 
 #[repr(C)]
@@ -51,6 +54,10 @@ impl VideoEncoderOptions for VideoEncoderOptionsNative {
 
     fn bitrate(&self) -> u32 {
         self.bitrate
+    }
+
+    fn idr_interval_seconds(&self) -> f32 {
+        self.idr_interval_seconds
     }
 }
 
