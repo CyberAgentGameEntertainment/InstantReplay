@@ -9,8 +9,9 @@ using UnityEngine.UIElements;
 namespace InstantReplay.Suite.UI
 {
     /// <summary>
-    ///     Modal view that previews a <see cref="ReplayDraft" />, lets the user choose the range and the thumbnail, and
-    ///     saves the range to the library. The view owns the draft and disposes it when closed.
+    ///     Modal view that previews a <see cref="ReplayDraft" /> and lets the user choose the range and the thumbnail.
+    ///     When it saves to the library, the view owns the draft and disposes it when closed. Otherwise it only returns
+    ///     the selection, and the draft stays with the caller.
     /// </summary>
     internal sealed class TrimView : IDisposable
     {
@@ -21,6 +22,7 @@ namespace InstantReplay.Suite.UI
 
         private readonly Button _cancelButton;
         private readonly ReplayDraft _draft;
+        private readonly bool _saveToLibrary;
         private readonly Label _playheadLabel;
         private readonly Button _playButton;
         private readonly PreviewPlayer _preview;
@@ -42,9 +44,10 @@ namespace InstantReplay.Suite.UI
         private byte[] _thumbnailPng;
         private Texture2D _thumbnailTexture;
 
-        public TrimView(VisualElement parent, ReplayDraft draft, Transform previewParent)
+        public TrimView(VisualElement parent, ReplayDraft draft, Transform previewParent, bool saveToLibrary)
         {
             _draft = draft;
+            _saveToLibrary = saveToLibrary;
             _start = 0;
             _end = draft.DurationSeconds;
 
@@ -122,8 +125,8 @@ namespace InstantReplay.Suite.UI
             var actions = new VisualElement();
             actions.AddToClassList("irs-panel__row");
             actions.AddToClassList("irs-panel__section");
-            _cancelButton = new Button(() => Close(null)) { text = "Discard" };
-            _saveButton = new Button(Save) { text = "Save" }.WithClass(Controls.Primary);
+            _cancelButton = new Button(Cancel) { text = saveToLibrary ? "Discard" : "Cancel" };
+            _saveButton = new Button(Confirm) { text = saveToLibrary ? "Save" : "Use" }.WithClass(Controls.Primary);
             actions.Add(_cancelButton);
             actions.Add(_saveButton);
             content.Add(actions);
@@ -139,8 +142,17 @@ namespace InstantReplay.Suite.UI
 
         public VisualElement Root { get; }
 
-        /// <summary>Raised once when the view closes, with the saved recording or null when nothing was saved.</summary>
-        public event Action<RecordingEntry> Closed;
+        /// <summary>
+        ///     Raised once when the view closes, with the selection and, when the view saves to the library, the saved
+        ///     recording. Both are null when the user cancelled.
+        /// </summary>
+        public event Action<ReplaySelection, RecordingEntry> Closed;
+
+        /// <summary>Closes the view as if the user had cancelled.</summary>
+        public void Cancel()
+        {
+            Close(null, null);
+        }
 
         public void Dispose()
         {
@@ -148,7 +160,7 @@ namespace InstantReplay.Suite.UI
             _closed = true;
             _tick.Pause();
             _preview.Dispose();
-            _draft.Dispose();
+            if (_saveToLibrary) _draft.Dispose();
             if (_thumbnailTexture != null) UnityEngine.Object.Destroy(_thumbnailTexture);
 
             // The view fades out before it is removed. Its controls no longer respond meanwhile.
@@ -258,9 +270,22 @@ namespace InstantReplay.Suite.UI
             _thumbnailImage.style.display = _thumbnailTexture != null ? DisplayStyle.Flex : DisplayStyle.None;
         }
 
-        private async void Save()
+        private ReplaySelection CreateSelection()
+        {
+            // The end is left open when it reaches the last frame, so that the last frame is included.
+            double? end = _end >= _draft.DurationSeconds ? null : _end;
+            return new ReplaySelection(_start, end, _thumbnailPng);
+        }
+
+        private void Confirm()
         {
             if (_saving || _closed) return;
+            if (_saveToLibrary) Save();
+            else Close(CreateSelection(), null);
+        }
+
+        private async void Save()
+        {
             _saving = true;
             SetControlsEnabled(false);
             _preview.Pause();
@@ -268,10 +293,9 @@ namespace InstantReplay.Suite.UI
 
             try
             {
-                // The end is left open when it reaches the last frame, so that the last frame is included.
-                double? end = _end >= _draft.DurationSeconds ? null : _end;
-                var entry = await _draft.SaveAsync(_start, end, _thumbnailPng);
-                Close(entry);
+                var selection = CreateSelection();
+                var entry = await _draft.SaveAsync(selection);
+                Close(selection, entry);
             }
             catch (Exception ex)
             {
@@ -293,11 +317,11 @@ namespace InstantReplay.Suite.UI
             _cancelButton.SetEnabled(enabled);
         }
 
-        private void Close(RecordingEntry saved)
+        private void Close(ReplaySelection selection, RecordingEntry saved)
         {
             if (_closed) return;
             Dispose();
-            Closed?.Invoke(saved);
+            Closed?.Invoke(selection, saved);
         }
     }
 }

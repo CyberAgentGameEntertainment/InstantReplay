@@ -816,3 +816,28 @@
 .irs-timeline:disabled {
     opacity: 0.5;
 }
+
+/* ------------------------------------------------------------------
+   Recording picker
+   ------------------------------------------------------------------ */
+
+.irs-root--chrome-hidden > .irs-overlay,
+.irs-root--chrome-hidden > .irs-panel {
+    display: none;
+}
+
+.irs-modal > .irs-picker {
+    width: 400px;
+}
+
+.irs-picker__list {
+    flex-shrink: 1;
+}
+
+.irs-picker__actions {
+    flex-shrink: 0;
+}
+
+.irs-panel .irs-picker__row--unfinished .irs-library__row-title {
+    color: var(--irs-warning);
+}

@@ -108,6 +108,44 @@ namespace InstantReplay.Suite
         }
 
         /// <summary>
+        ///     Writes the footage between two times to an MP4 file outside the library, for example to attach it to a
+        ///     report. The caller owns the file.
+        /// </summary>
+        /// <param name="startSeconds">Start time in seconds. It moves back to <see cref="GetSaveStart" />.</param>
+        /// <param name="endSeconds">End time in seconds, exclusive. Null exports to the end.</param>
+        /// <param name="outputPath">Output file path. A path in the temporary cache directory is generated when null.</param>
+        /// <returns>Path to the written file.</returns>
+        /// <exception cref="ArgumentException">The range contains no video frame.</exception>
+        /// <exception cref="ObjectDisposedException">The draft has been disposed.</exception>
+        public ValueTask<string> ExportAsync(double startSeconds = 0, double? endSeconds = null,
+            string outputPath = null)
+        {
+            ThrowIfDisposed();
+            return _capture.ExportAsync(startSeconds, endSeconds, outputPath);
+        }
+
+        /// <summary>
+        ///     Writes the selected range to an MP4 file outside the library. The thumbnail of the selection is not written.
+        /// </summary>
+        /// <inheritdoc cref="ExportAsync(double, double?, string)" />
+        public ValueTask<string> ExportAsync(ReplaySelection selection, string outputPath = null)
+        {
+            if (selection == null) throw new ArgumentNullException(nameof(selection));
+            return ExportAsync(selection.StartSeconds, selection.EndSeconds, outputPath);
+        }
+
+        /// <summary>
+        ///     Saves the selected range to the library with the thumbnail of the selection.
+        /// </summary>
+        /// <exception cref="ArgumentException">The range contains no video frame.</exception>
+        /// <exception cref="ObjectDisposedException">The draft has been disposed.</exception>
+        public ValueTask<RecordingEntry> SaveAsync(ReplaySelection selection)
+        {
+            if (selection == null) throw new ArgumentNullException(nameof(selection));
+            return SaveAsync(selection.StartSeconds, selection.EndSeconds, selection.ThumbnailPng);
+        }
+
+        /// <summary>
         ///     Saves the footage between two times to the library as a <see cref="RecordingSource.Replay" /> recording.
         /// </summary>
         /// <param name="startSeconds">Start time in seconds. It moves back to <see cref="GetSaveStart" />.</param>

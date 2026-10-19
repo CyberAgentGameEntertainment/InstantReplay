@@ -74,6 +74,29 @@ namespace InstantReplay.Suite
     }
 
     /// <summary>
+    ///     Range and thumbnail chosen for a <see cref="ReplayDraft" />, for example by the user in a trim view. Pass it to
+    ///     <see cref="ReplayDraft.SaveAsync(ReplaySelection)" /> or <see cref="ReplayDraft.ExportAsync(ReplaySelection, string)" />.
+    /// </summary>
+    public sealed class ReplaySelection
+    {
+        public ReplaySelection(double startSeconds, double? endSeconds = null, byte[] thumbnailPng = null)
+        {
+            StartSeconds = startSeconds;
+            EndSeconds = endSeconds;
+            ThumbnailPng = thumbnailPng;
+        }
+
+        /// <summary>Start time in seconds from the beginning of the draft.</summary>
+        public double StartSeconds { get; }
+
+        /// <summary>End time in seconds from the beginning of the draft, exclusive. Null means the end of the draft.</summary>
+        public double? EndSeconds { get; }
+
+        /// <summary>PNG-encoded thumbnail, or null when none was chosen.</summary>
+        public byte[] ThumbnailPng { get; }
+    }
+
+    /// <summary>
     ///     Parameters of <see cref="InstantReplayRecorder.StartUnbounded" />.
     /// </summary>
     public sealed class UnboundedRecordingRequest

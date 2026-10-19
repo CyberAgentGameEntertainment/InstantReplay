@@ -45,6 +45,7 @@ Instant Replay は Unity で直近のゲームプレイ動画をいつでも保�
       * [映像・音声ソースの指定](#映像音声ソースの指定)
       * [録画ライブラリ](#録画ライブラリ)
       * [共有](#共有)
+      * [独自の画面から Suite のビューを表示する](#独自の画面から-suite-のビューを表示する)
       * [UI を使用せずにレコーダーを使用する](#ui-を使用せずにレコーダーを使用する)
   * [詳細な使い方](#詳細な使い方)
     * [設定](#設定)
@@ -364,6 +365,40 @@ public class BugTrackerShareTarget : ShareTarget
         return new ShareResult("Reported.", url: "https://example.com/issues/123");
     }
 }
+```
+
+#### 独自の画面から Suite のビューを表示する
+
+トリムビューと録画の一覧は、デバッグメニュー内のバグレポート画面など、アプリケーションが作成した画面から表示できます。これらのビューはオーバーレイを非表示にしている間も表示され、何も保存・共有せずにユーザーが選択した内容を返します。
+
+- `TrimAsync(draft)` は `ReplayDraft` のトリムビューを表示し、選択された範囲とサムネイルを持つ `ReplaySelection` を返します。ユーザーがキャンセルした場合は null を返します。`ReplayDraft` は呼び出し側が所有したままです。`draft.ExportAsync(selection)` は選択範囲をライブラリ外のファイルに書き出し、`draft.SaveAsync(selection)` はライブラリに保存します。
+- `PickRecordingsAsync()` は、ライブラリの録画と異常終了で残った映像を一覧表示し、ユーザーが選択した録画を返します。異常終了で残った映像が選択された場合は、先にライブラリへ復旧します。`allowMultiple: false` を指定すると、1 つだけ選択できます。
+
+これらのビューは同時に 1 つだけ開くことができます。どちらのメソッドも、渡した `CancellationToken` がキャンセルされるとビューを閉じます。
+
+```csharp
+using InstantReplay.Suite.UI;
+
+var suite = InstantReplaySuite.Current;
+
+// デバッグメニューを開いたとき。メニュー自体が録画されないようにする。一時停止中も映像は取り出せる。
+suite.Recorder.Pause();
+
+// バグレポート画面
+using var draft = await suite.Recorder.CaptureReplayAsync();
+var selection = await suite.TrimAsync(draft);
+if (selection != null)
+{
+    var videoPath = await draft.ExportAsync(selection); // 一時キャッシュディレクトリ内のファイル
+    var thumbnailPng = selection.ThumbnailPng; // ユーザーが選択しなかった場合は null
+    // 映像とサムネイルを、ユーザー ID やログなどとともにレポートに添付する。
+}
+
+// または、保存済みの録画をユーザーに選択させる。
+var entries = await suite.PickRecordingsAsync(allowMultiple: false);
+
+// デバッグメニューを閉じたとき
+suite.Recorder.Resume();
 ```
 
 #### UI を使用せずにレコーダーを使用する

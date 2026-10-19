@@ -45,6 +45,7 @@ When a bug occurs, you can export the recent gameplay leading up to the bug as a
       * [Choosing Video and Audio Sources](#choosing-video-and-audio-sources)
       * [Recording Library](#recording-library)
       * [Sharing](#sharing)
+      * [Showing the Suite Views from Your Own Screens](#showing-the-suite-views-from-your-own-screens)
       * [Using the Recorder without the User Interface](#using-the-recorder-without-the-user-interface)
   * [Detailed Usage](#detailed-usage)
     * [Options](#options)
@@ -366,6 +367,40 @@ public class BugTrackerShareTarget : ShareTarget
         return new ShareResult("Reported.", url: "https://example.com/issues/123");
     }
 }
+```
+
+#### Showing the Suite Views from Your Own Screens
+
+The trim view and a list of recordings can be shown from screens built by the application, such as a bug report screen in a debug menu. These views are shown even while the overlay is hidden, and they return what the user chose without saving anything or sharing it.
+
+- `TrimAsync(draft)` shows the trim view for a `ReplayDraft` and returns a `ReplaySelection` that holds the chosen range and thumbnail, or null when the user cancels. The draft stays with the caller. `draft.ExportAsync(selection)` writes the range to a file outside the library, and `draft.SaveAsync(selection)` saves it to the library.
+- `PickRecordingsAsync()` lists the recordings in the library together with footage left behind by abnormal terminations, and returns the recordings the user chose. Chosen footage of the latter kind is recovered into the library first. Pass `allowMultiple: false` to allow only one recording.
+
+Only one of these views can be open at a time. Cancelling the `CancellationToken` passed to either method closes the view.
+
+```csharp
+using InstantReplay.Suite.UI;
+
+var suite = InstantReplaySuite.Current;
+
+// When the debug menu opens, so that the menu itself is not recorded. Footage can still be captured while paused.
+suite.Recorder.Pause();
+
+// In the bug report screen
+using var draft = await suite.Recorder.CaptureReplayAsync();
+var selection = await suite.TrimAsync(draft);
+if (selection != null)
+{
+    var videoPath = await draft.ExportAsync(selection); // a file in the temporary cache directory
+    var thumbnailPng = selection.ThumbnailPng; // null when the user did not choose one
+    // Attach the video and the thumbnail to the report together with the user ID, logs and so on.
+}
+
+// Or let the user choose a saved recording.
+var entries = await suite.PickRecordingsAsync(allowMultiple: false);
+
+// When the debug menu closes
+suite.Recorder.Resume();
 ```
 
 #### Using the Recorder without the User Interface

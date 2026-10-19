@@ -5,6 +5,8 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Threading;
+using System.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.UIElements;
 // The Device variants report the simulated device in the Device Simulator, and the actual device elsewhere.
@@ -45,8 +47,10 @@ namespace InstantReplay.Suite.UI
         private readonly Button _unboundedButton;
 
         private bool _busy;
+        private bool _disposed;
         private bool _libraryTabSelected;
         private string _operationError;
+        private RecordingPickerView _picker;
         private TrimView _trim;
 
         public SuiteView(VisualElement documentRoot, StyleSheet styleSheet, InstantReplayRecorder recorder,
@@ -162,17 +166,29 @@ namespace InstantReplay.Suite.UI
             Refresh();
         }
 
+        /// <summary>
+        ///     Whether the overlay and the panel are shown. Views opened from code are shown regardless.
+        /// </summary>
         public bool IsVisible
         {
-            get => _root.style.display != DisplayStyle.None;
-            set => _root.style.display = value ? DisplayStyle.Flex : DisplayStyle.None;
+            get => !_root.ClassListContains("irs-root--chrome-hidden");
+            set
+            {
+                _root.EnableInClassList("irs-root--chrome-hidden", !value);
+                _library.SetVisible(value && IsPanelOpen && _libraryTabSelected);
+            }
         }
+
+        private bool HasModal => _trim != null || _picker != null;
 
         public void Dispose()
         {
+            _disposed = true;
             _refresh.Pause();
             _pulse.Pause();
-            _trim?.Dispose();
+            // Cancelling completes the tasks of views opened from code.
+            _trim?.Cancel();
+            _picker?.Cancel();
             _library.Dispose();
             _recorder.StateChanged -= OnRecorderChanged;
             _recorder.ConfigurationChanged -= OnRecorderChanged;
@@ -201,7 +217,7 @@ namespace InstantReplay.Suite.UI
                 _panel.schedule.Execute(() => _panel.RemoveFromClassList("irs-panel--entering")).StartingIn(16);
             }
 
-            _library.SetVisible(IsPanelOpen && _libraryTabSelected);
+            _library.SetVisible(IsVisible && IsPanelOpen && _libraryTabSelected);
         }
 
         // The dot blinks while an unbounded recording runs.
@@ -219,7 +235,7 @@ namespace InstantReplay.Suite.UI
             _libraryTabButton.EnableInClassList("irs-tab--selected", library);
             _recorderTab.style.display = library ? DisplayStyle.None : DisplayStyle.Flex;
             _libraryTab.style.display = library ? DisplayStyle.Flex : DisplayStyle.None;
-            _library.SetVisible(IsPanelOpen && library);
+            _library.SetVisible(IsVisible && IsPanelOpen && library);
         }
 
         private void OnRecorderChanged(RecorderState _)
@@ -234,15 +250,15 @@ namespace InstantReplay.Suite.UI
 
         private async void SaveReplay()
         {
-            if (_busy || _trim != null) return;
+            if (_busy || HasModal) return;
             _busy = true;
             _operationError = null;
             Refresh();
             try
             {
                 var draft = await _recorder.CaptureReplayAsync();
-                _trim = new TrimView(_root, draft, _previewParent);
-                _trim.Closed += saved =>
+                _trim = new TrimView(_root, draft, _previewParent, true);
+                _trim.Closed += (_, saved) =>
                 {
                     _trim = null;
                     if (saved != null) SelectTab(true);
@@ -259,6 +275,62 @@ namespace InstantReplay.Suite.UI
                 _busy = false;
                 Refresh();
             }
+        }
+
+        public Task<ReplaySelection> TrimAsync(ReplayDraft draft, CancellationToken cancellationToken)
+        {
+            if (draft == null) throw new ArgumentNullException(nameof(draft));
+            if (draft.IsDisposed) throw new ObjectDisposedException(nameof(ReplayDraft));
+            ThrowIfModalOpen();
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var completion = new TaskCompletionSource<ReplaySelection>();
+            var trim = new TrimView(_root, draft, _previewParent, false);
+            _trim = trim;
+            // The callback runs on the main thread even when the token is cancelled on another thread.
+            var registration = cancellationToken.Register(trim.Cancel, true);
+            trim.Closed += (selection, _) =>
+            {
+                registration.Dispose();
+                _trim = null;
+                Refresh();
+                if (selection == null && cancellationToken.IsCancellationRequested)
+                    completion.TrySetCanceled(cancellationToken);
+                else
+                    completion.TrySetResult(selection);
+            };
+            Refresh();
+            return completion.Task;
+        }
+
+        public Task<IReadOnlyList<RecordingEntry>> PickRecordingsAsync(bool allowMultiple,
+            CancellationToken cancellationToken)
+        {
+            ThrowIfModalOpen();
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var completion = new TaskCompletionSource<IReadOnlyList<RecordingEntry>>();
+            var picker = new RecordingPickerView(_root, _recorder, allowMultiple);
+            _picker = picker;
+            var registration = cancellationToken.Register(picker.Cancel, true);
+            picker.Closed += chosen =>
+            {
+                registration.Dispose();
+                _picker = null;
+                Refresh();
+                if (chosen.Count == 0 && cancellationToken.IsCancellationRequested)
+                    completion.TrySetCanceled(cancellationToken);
+                else
+                    completion.TrySetResult(chosen);
+            };
+            Refresh();
+            return completion.Task;
+        }
+
+        private void ThrowIfModalOpen()
+        {
+            if (_disposed) throw new ObjectDisposedException(nameof(InstantReplaySuite));
+            if (HasModal) throw new InvalidOperationException("Another view of the suite is open.");
         }
 
         private async void ToggleUnbounded()
@@ -308,6 +380,7 @@ namespace InstantReplay.Suite.UI
 
         private void Refresh()
         {
+            if (_disposed) return;
             var state = _recorder.State;
             RecorderStatistics stats;
             try
@@ -325,7 +398,7 @@ namespace InstantReplay.Suite.UI
 
             var idle = !_busy && state is not (RecorderState.Exporting or RecorderState.RecordingUnbounded);
             _bufferingToggle.SetValueWithoutNotify(_recorder.IsBufferingEnabled);
-            _saveButton.SetEnabled(!_busy && _trim == null && state == RecorderState.Buffering);
+            _saveButton.SetEnabled(!_busy && !HasModal && state == RecorderState.Buffering);
             _unboundedButton.text = state == RecorderState.RecordingUnbounded ? "Stop recording" : "Start recording";
             _unboundedButton.EnableInClassList("irs-button--recording", state == RecorderState.RecordingUnbounded);
             _unboundedButton.SetEnabled(!_busy && state != RecorderState.Exporting);

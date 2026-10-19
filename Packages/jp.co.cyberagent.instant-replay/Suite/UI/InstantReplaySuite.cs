@@ -2,6 +2,10 @@
 // Copyright 2025 CyberAgent, Inc.
 // --------------------------------------------------------------
 
+using System;
+using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.UIElements;
 
@@ -56,6 +60,47 @@ namespace InstantReplay.Suite.UI
                 showOverlayOnLaunch = value;
                 if (_view != null) _view.IsVisible = value;
             }
+        }
+
+        /// <summary>
+        ///     Shows the trim view for a draft and returns the range and the thumbnail chosen by the user, without saving
+        ///     anything. Use it to let the user choose the footage to attach to a report, and write the footage with
+        ///     <see cref="ReplayDraft.ExportAsync(ReplaySelection, string)" /> or
+        ///     <see cref="ReplayDraft.SaveAsync(ReplaySelection)" />.
+        /// </summary>
+        /// <remarks>
+        ///     The view is shown even while the overlay is hidden. The draft stays with the caller, which must not dispose
+        ///     it until the returned task completes.
+        /// </remarks>
+        /// <returns>The selection, or null when the user cancelled.</returns>
+        /// <exception cref="InvalidOperationException">Another view of the suite is open.</exception>
+        /// <exception cref="OperationCanceledException">The token was cancelled; the view is closed.</exception>
+        public Task<ReplaySelection> TrimAsync(ReplayDraft draft, CancellationToken cancellationToken = default)
+        {
+            return GetView().TrimAsync(draft, cancellationToken);
+        }
+
+        /// <summary>
+        ///     Shows a list of the recordings in the library and of the footage left behind by abnormal terminations, and
+        ///     returns the recordings chosen by the user. Chosen footage of the latter kind is recovered into the library
+        ///     first.
+        /// </summary>
+        /// <remarks>The view is shown even while the overlay is hidden.</remarks>
+        /// <param name="allowMultiple">Whether the user can choose more than one recording.</param>
+        /// <param name="cancellationToken">Closes the view when cancelled.</param>
+        /// <returns>The chosen recordings, newest first after any recovered ones. Empty when the user cancelled.</returns>
+        /// <exception cref="InvalidOperationException">Another view of the suite is open.</exception>
+        /// <exception cref="OperationCanceledException">The token was cancelled; the view is closed.</exception>
+        public Task<IReadOnlyList<RecordingEntry>> PickRecordingsAsync(bool allowMultiple = true,
+            CancellationToken cancellationToken = default)
+        {
+            return GetView().PickRecordingsAsync(allowMultiple, cancellationToken);
+        }
+
+        private SuiteView GetView()
+        {
+            if (_view == null) throw new InvalidOperationException("The InstantReplaySuite is not active.");
+            return _view;
         }
 
         private void Awake()

@@ -273,40 +273,11 @@ namespace InstantReplay.Suite.UI
 
         private VisualElement CreateRow(RecordingEntry entry)
         {
-            var row = new VisualElement();
-            row.AddToClassList("irs-library__row");
-
-            var isChecked = _selectionMode && _checkedPaths.Contains(entry.FilePath);
-            row.EnableInClassList("irs-library__row--checked", isChecked);
-            if (_selectionMode)
-            {
-                // The row handles the click, so the check box only displays the state.
-                var check = new Toggle { value = isChecked, pickingMode = PickingMode.Ignore };
-                check.AddToClassList("irs-library__check");
-                foreach (var child in check.Query<VisualElement>().ToList()) child.pickingMode = PickingMode.Ignore;
-                row.Add(check);
-            }
-
             var thumbnail = Thumbnails.Load(entry.ThumbnailPath);
-            if (thumbnail != null)
-            {
-                _thumbnails.Add(thumbnail);
-                var image = new Image { image = thumbnail, scaleMode = ScaleMode.ScaleAndCrop };
-                image.AddToClassList("irs-thumbnail");
-                row.Add(image);
-            }
-
-            var text = new VisualElement();
-            text.AddToClassList("irs-library__row-text");
-            row.Add(text);
-
-            var title = new Label($"{entry.Source} · {Formatting.LocalDateTime(entry.CreatedAtUtc)}");
-            title.AddToClassList("irs-library__row-title");
-            text.Add(title);
-
-            var info = new Label(DescribeShort(entry));
-            info.AddToClassList("irs-panel__details");
-            text.Add(info);
+            if (thumbnail != null) _thumbnails.Add(thumbnail);
+            var isChecked = _selectionMode && _checkedPaths.Contains(entry.FilePath);
+            var row = RecordingRows.Create(RecordingRows.Title(entry), RecordingRows.DescribeShort(entry), thumbnail,
+                _selectionMode, isChecked);
 
             row.RegisterCallback<ClickEvent>(_ =>
             {
@@ -501,18 +472,11 @@ namespace InstantReplay.Suite.UI
             RefreshShare();
         }
 
-        private static string DescribeShort(RecordingEntry entry)
-        {
-            return entry.DurationSeconds > 0
-                ? $"{Formatting.Time(entry.DurationSeconds)} · {Formatting.Bytes(entry.SizeBytes)}"
-                : Formatting.Bytes(entry.SizeBytes);
-        }
-
         private static string DescribeLong(RecordingEntry entry)
         {
             var builder = new StringBuilder();
             builder.Append(entry.Source).Append(" · ").AppendLine(Formatting.LocalDateTime(entry.CreatedAtUtc));
-            builder.Append(DescribeShort(entry));
+            builder.Append(RecordingRows.DescribeShort(entry));
             foreach (var pair in entry.Metadata) builder.Append('\n').Append(pair.Key).Append(": ").Append(pair.Value);
             return builder.ToString();
         }
