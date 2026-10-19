@@ -1,3 +1,9 @@
+## [1.6.12] - 2026/10/13
+
+### Fixed
+
+- Fixed `StopAndExportAsync` never completing on Windows, leaving an exported mp4 without a `moov` box. This occurred intermittently when the audio and video in the exported segment ended about 1.3 seconds or more apart, on recent Windows 11 builds (24H2 / 25H2).
+
 ## [1.6.11] - 2026/09/29
 
 ### Fixed
