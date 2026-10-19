@@ -87,7 +87,10 @@ namespace InstantReplay
         /// </summary>
         /// <param name="storagePath">Directory of one session, containing the manifest.</param>
         /// <param name="recovery">The recovery instance when the session is readable; null otherwise.</param>
-        /// <returns>True when a session with at least one video key frame was found.</returns>
+        /// <returns>
+        ///     True when a session with at least one video key frame was found. A session that is still open in this
+        ///     process is never returned.
+        /// </returns>
         public static bool TryGetRecoverable(string storagePath, out DiskEncodedFrameBufferRecovery recovery)
         {
             recovery = null;
@@ -95,6 +98,9 @@ namespace InstantReplay
             try
             {
                 if (string.IsNullOrEmpty(storagePath) || !Directory.Exists(storagePath)) return false;
+
+                // A session that is still open in this process is being written to, not left behind by a crash.
+                if (DiskEncodedFrameBuffer.IsLiveSession(storagePath)) return false;
 
                 var manifestPath = Path.Combine(storagePath, DiskBufferFormat.ManifestFileName);
                 if (!DiskBufferManifest.TryRead(manifestPath, out var manifest, ILogger.LogExceptionCore))

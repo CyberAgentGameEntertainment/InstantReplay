@@ -3,6 +3,7 @@
 // --------------------------------------------------------------
 
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Threading;
@@ -21,6 +22,7 @@ namespace InstantReplay
     /// </summary>
     internal sealed class DiskEncodedFrameBuffer : IEncodedFrameBuffer
     {
+        private static readonly HashSet<string> LiveSessionDirectories = new(StringComparer.Ordinal);
         private static int _sessionCounter;
 
         private readonly object _lock = new();
@@ -54,6 +56,7 @@ namespace InstantReplay
             var root = validated.ResolveDirectory();
             _sessionDirectory = Path.Combine(root, CreateSessionId());
             Directory.CreateDirectory(_sessionDirectory);
+            RegisterLiveSession(_sessionDirectory);
 
             _writer = new DiskBufferSegmentWriter(_sessionDirectory, validated.MaxDiskUsageBytes,
                 validated.SegmentDuration, validated.MaxSegmentBytes, validated.SyncMode, ILogger.LogExceptionCore);
@@ -93,6 +96,58 @@ namespace InstantReplay
             }
         }
 
+        /// <summary>
+        ///     Whether the given directory belongs to a session that is still open in this process. Such a directory is
+        ///     being written to and must not be treated as recoverable.
+        /// </summary>
+        internal static bool IsLiveSession(string sessionDirectory)
+        {
+            var key = NormalizeDirectory(sessionDirectory);
+            if (key == null) return false;
+
+            lock (LiveSessionDirectories)
+            {
+                return LiveSessionDirectories.Contains(key);
+            }
+        }
+
+        private static void RegisterLiveSession(string sessionDirectory)
+        {
+            var key = NormalizeDirectory(sessionDirectory);
+            if (key == null) return;
+
+            lock (LiveSessionDirectories)
+            {
+                LiveSessionDirectories.Add(key);
+            }
+        }
+
+        private static void UnregisterLiveSession(string sessionDirectory)
+        {
+            var key = NormalizeDirectory(sessionDirectory);
+            if (key == null) return;
+
+            lock (LiveSessionDirectories)
+            {
+                LiveSessionDirectories.Remove(key);
+            }
+        }
+
+        private static string NormalizeDirectory(string directory)
+        {
+            if (string.IsNullOrEmpty(directory)) return null;
+
+            try
+            {
+                return Path.GetFullPath(directory).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            }
+            catch (Exception ex)
+            {
+                ILogger.LogExceptionCore(ex);
+                return null;
+            }
+        }
+
         public bool TryAddVideoFrame(EncodedFrame frame)
         {
             return TryEnqueue(DiskBufferTrack.Video, frame);
@@ -127,6 +182,9 @@ namespace InstantReplay
             QuiesceAsync().GetAwaiter().GetResult();
 
             if (!_retainOnDispose) DeleteSessionDirectory();
+
+            // A retained directory becomes recoverable once this session no longer writes to it.
+            UnregisterLiveSession(_sessionDirectory);
         }
 
         /// <summary>
