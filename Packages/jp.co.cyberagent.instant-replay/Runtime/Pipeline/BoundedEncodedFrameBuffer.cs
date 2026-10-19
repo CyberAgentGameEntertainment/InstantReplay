@@ -5,6 +5,7 @@
 using System;
 using System.Collections.Generic;
 using System.Threading;
+using System.Threading.Tasks;
 using UniEnc;
 
 namespace InstantReplay
@@ -12,7 +13,7 @@ namespace InstantReplay
     /// <summary>
     ///     Circular buffer for encoded frames with memory bounds.
     /// </summary>
-    internal class BoundedEncodedFrameBuffer : IDisposable
+    internal class BoundedEncodedFrameBuffer : IEncodedFrameBuffer
     {
         [ThreadStatic] private static List<EncodedFrame> _tempFrames;
         private readonly List<EncodedFrame> _audioMetadata = new();
@@ -116,6 +117,27 @@ namespace InstantReplay
         ///     time, so the frames preceding the oldest surviving keyframe are retained but unusable, and a longer IDR
         ///     interval leaves a larger share of the memory budget unusable.
         /// </remarks>
+        public ValueTask<EncodedFrameSelection> GetFramesForDurationAsync(double? durationSeconds)
+        {
+            GetFramesForDuration(durationSeconds, out var videoFrames, out var audioFrames);
+            // Nothing muxable. No audio frame is selected either in that case, so nothing is left to release.
+            if (videoFrames.IsEmpty) return default;
+
+            return new ValueTask<EncodedFrameSelection>(new EncodedFrameSelection(
+                new EncodedFrameArrayReader(videoFrames), new EncodedFrameArrayReader(audioFrames)));
+        }
+
+        /// <summary>
+        ///     Gets frames for the specified duration, adjusted to start from a keyframe.
+        /// </summary>
+        /// <remarks>
+        ///     The segment can only begin at a keyframe, so the IDR interval bounds how precisely the requested
+        ///     duration can be honoured, and no frames at all are returned while the buffer holds no keyframe. Raising
+        ///     <see cref="UniEnc.VideoEncoderOptions.IdrIntervalSeconds" /> beyond the retained duration therefore
+        ///     yields an empty export. Eviction also works one frame at a time rather than one group of pictures at a
+        ///     time, so the frames preceding the oldest surviving keyframe are retained but unusable, and a longer IDR
+        ///     interval leaves a larger share of the memory budget unusable.
+        /// </remarks>
         public void GetFramesForDuration(double? durationSeconds, out ReadOnlyMemory<EncodedFrame> videoFrames,
             out ReadOnlyMemory<EncodedFrame> audioFrames)
         {
@@ -141,68 +163,20 @@ namespace InstantReplay
 
             try
             {
-                if (unprocessedVideoFrames.Length == 0)
-                {
-                    videoFrames = default;
-                    audioFrames = default;
-                    return;
-                }
-
-                // find keyframe
-                var argMinTimespan = -1;
                 var latest = _videoQueueLatestTimestamp ?? 0;
-                if (durationSeconds is { } durationSecondsValue)
-                {
-                    // TODO: binary search
-                    var expectedStartTime = latest - durationSecondsValue;
-                    var minTimespan = double.MaxValue;
-                    for (var i = 0; i < unprocessedVideoFrames.Length; i++)
-                    {
-                        if (unprocessedVideoFrames.Span[i].Kind != UniencSampleKind.Key) continue;
-                        var timespan = Math.Abs(unprocessedVideoFrames.Span[i].Timestamp - expectedStartTime);
-                        if (timespan >= minTimespan) continue;
-                        minTimespan = timespan;
-                        argMinTimespan = i;
-                    }
-                }
-                else
-                {
-                    for (var i = 0; i < unprocessedVideoFrames.Length; i++)
-                    {
-                        if (unprocessedVideoFrames.Span[i].Kind != UniencSampleKind.Key) continue;
-                        argMinTimespan = i;
-                        break;
-                    }
-                }
 
-                if (argMinTimespan == -1)
+                if (!EncodedFrameSelector.TrySelect(
+                        EncodedFrameSelector.ToDescriptors(unprocessedVideoFrames.Span),
+                        EncodedFrameSelector.ToDescriptors(unprocessedAudioFrames.Span),
+                        latest, durationSeconds, out var argMinTimespan, out var argMinAudioTimespan))
                 {
-                    // No keyframe found, return empty arrays
+                    // Nothing muxable: either no frame at all, or no keyframe to start from.
+                    // The metadata frames were taken out of their lists above, so they are released here.
+                    EncodedFrameSelector.DisposeAll(videoMetadata.Span, ILogger.LogExceptionCore);
+                    EncodedFrameSelector.DisposeAll(audioMetadata.Span, ILogger.LogExceptionCore);
                     videoFrames = default;
                     audioFrames = default;
                     return;
-                }
-
-                // find audio start index
-                int argMinAudioTimespan;
-                if (unprocessedAudioFrames.Length == 0)
-                {
-                    argMinAudioTimespan = 0;
-                }
-                else
-                {
-                    var actualDuration = latest - unprocessedVideoFrames.Span[argMinTimespan].Timestamp;
-                    var expectedAudioStartTime = unprocessedAudioFrames.Span[^1].Timestamp - actualDuration;
-
-                    var minAudioTimespan = double.MaxValue;
-                    argMinAudioTimespan = -1;
-                    for (var i = 0; i < unprocessedAudioFrames.Length; i++)
-                    {
-                        var timespan = Math.Abs(unprocessedAudioFrames.Span[i].Timestamp - expectedAudioStartTime);
-                        if (timespan >= minAudioTimespan) continue;
-                        minAudioTimespan = timespan;
-                        argMinAudioTimespan = i;
-                    }
                 }
 
                 // split
@@ -213,42 +187,12 @@ namespace InstantReplay
                 unprocessedAudioFrames = unprocessedAudioFrames[..argMinAudioTimespan];
 
                 // adjust timestamps
-                if (!videoFramesSpan.IsEmpty)
-                {
-                    var videoStartTime = videoFramesSpan.Span[0].Timestamp;
-                    for (var i = 0; i < videoFramesSpan.Length; i++)
-                    {
-                        ref var frame = ref videoFramesSpan.Span[i];
-                        frame = frame.WithTimestamp(frame.Timestamp - videoStartTime);
-                    }
-                }
-
-                if (!audioFramesSpan.IsEmpty)
-                {
-                    var audioStartTime = audioFramesSpan.Span[0].Timestamp;
-                    for (var i = 0; i < audioFramesSpan.Length; i++)
-                    {
-                        ref var frame = ref audioFramesSpan.Span[i];
-                        frame = frame.WithTimestamp(frame.Timestamp - audioStartTime);
-                    }
-                }
+                EncodedFrameSelector.RebaseTimestamps(videoFramesSpan.Span);
+                EncodedFrameSelector.RebaseTimestamps(audioFramesSpan.Span);
 
                 // concat metadata
-                if (videoMetadata.Length > 0)
-                {
-                    var newVideoFrames = new EncodedFrame[videoFramesSpan.Length + videoMetadata.Length];
-                    videoMetadata.Span.CopyTo(newVideoFrames);
-                    videoFramesSpan.Span.CopyTo(newVideoFrames.AsSpan(videoMetadata.Length));
-                    videoFramesSpan = newVideoFrames.AsMemory();
-                }
-
-                if (audioMetadata.Length > 0)
-                {
-                    var newAudioFrames = new EncodedFrame[audioFramesSpan.Length + audioMetadata.Length];
-                    audioMetadata.Span.CopyTo(newAudioFrames);
-                    audioFramesSpan.Span.CopyTo(newAudioFrames.AsSpan(audioMetadata.Length));
-                    audioFramesSpan = newAudioFrames.AsMemory();
-                }
+                videoFramesSpan = EncodedFrameSelector.PrependMetadata(videoFramesSpan, videoMetadata);
+                audioFramesSpan = EncodedFrameSelector.PrependMetadata(audioFramesSpan, audioMetadata);
 
                 videoFrames = videoFramesSpan;
                 audioFrames = audioFramesSpan;

@@ -4,6 +4,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "UniEnc", "src\UniEnc\UniEnc
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "UniEnc.Example", "src\UniEnc.Example\UniEnc.Example.csproj", "{97A9B4B1-08CA-495B-A259-0BC9D030E85D}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "InstantReplay.DiskBuffer.Tests", "src\InstantReplay.DiskBuffer.Tests\InstantReplay.DiskBuffer.Tests.csproj", "{63FADBAA-F778-4BFB-954B-E44CE30E55E0}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -18,5 +20,9 @@ Global
 		{97A9B4B1-08CA-495B-A259-0BC9D030E85D}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{97A9B4B1-08CA-495B-A259-0BC9D030E85D}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{97A9B4B1-08CA-495B-A259-0BC9D030E85D}.Release|Any CPU.Build.0 = Release|Any CPU
+		{63FADBAA-F778-4BFB-954B-E44CE30E55E0}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{63FADBAA-F778-4BFB-954B-E44CE30E55E0}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{63FADBAA-F778-4BFB-954B-E44CE30E55E0}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{63FADBAA-F778-4BFB-954B-E44CE30E55E0}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal

@@ -1,0 +1,95 @@
+// --------------------------------------------------------------
+// Copyright 2025 CyberAgent, Inc.
+// --------------------------------------------------------------
+
+using System;
+using System.Threading.Tasks;
+using UniEnc;
+
+namespace InstantReplay
+{
+    /// <summary>
+    ///     Pushes a selected set of encoded frames into a muxer and completes it.
+    ///     Shared by <see cref="RealtimeInstantReplaySession" /> and <see cref="DiskEncodedFrameBufferRecovery" /> so that
+    ///     both follow the same completion protocol.
+    /// </summary>
+    internal static class EncodedFrameMuxer
+    {
+        /// <summary>
+        ///     Muxes the frames of the given readers, which are typically the two streams of an
+        ///     <see cref="EncodedFrameSelection" />. A null reader is treated as an empty stream. Every frame read is
+        ///     disposed, whether or not it was accepted by the muxer. After a failure, no further frame is read from that
+        ///     stream; the readers are not disposed here, so the caller releases the unread frames by disposing them.
+        /// </summary>
+        public static async ValueTask MuxAsync(Muxer muxer, IEncodedFrameReader videoFrames,
+            IEncodedFrameReader audioFrames)
+        {
+            async ValueTask MuxVideoAsync()
+            {
+                Exception exception = null;
+                try
+                {
+                    // Frames are read one at a time, so that a reader backed by storage holds only the frame being
+                    // pushed. The muxer applies backpressure, which bounds how far reading runs ahead of it.
+                    while (videoFrames != null && videoFrames.TryReadNext(out var frame))
+                        using (frame)
+                        {
+                            await muxer.PushVideoDataAsync(frame).ConfigureAwait(false);
+                        }
+                }
+                catch (Exception ex)
+                {
+                    exception = ex;
+                }
+
+                // Errors in the input to the muxer do not propagate as exceptions in PushVideoDataAsync;
+                // instead, a channel closed error occurs when attempting to input the next frame.
+                // Since the actual muxer error is returned in FinishVideoAsync,
+                // we should call FinishVideoAsync even if PushVideoDataAsync fails.
+                await muxer.FinishVideoAsync().ConfigureAwait(false);
+
+                if (exception != null)
+                    throw exception;
+            }
+
+            async ValueTask MuxAudioAsync()
+            {
+                Exception exception = null;
+                try
+                {
+                    while (audioFrames != null && audioFrames.TryReadNext(out var frame))
+                        using (frame)
+                        {
+                            await muxer.PushAudioDataAsync(frame).ConfigureAwait(false);
+                        }
+                }
+                catch (Exception ex)
+                {
+                    exception = ex;
+                }
+
+                // same as video
+                await muxer.FinishAudioAsync().ConfigureAwait(false);
+
+                if (exception != null)
+                    throw exception;
+            }
+
+            // Always observe both tasks even if one of them fails, so that the muxer is not
+            // disposed (by the caller) while the other task is still using it.
+            var whenAll = Task.WhenAll(MuxVideoAsync().AsTask(), MuxAudioAsync().AsTask());
+            try
+            {
+                await whenAll.ConfigureAwait(false);
+            }
+            catch (Exception) when (whenAll.Exception is { InnerExceptions: { Count: > 1 } } aggregate)
+            {
+                // Awaiting Task.WhenAll rethrows only the first exception;
+                // rethrow the AggregateException so that all failures are propagated.
+                throw aggregate;
+            }
+
+            await muxer.CompleteAsync().ConfigureAwait(false);
+        }
+    }
+}
