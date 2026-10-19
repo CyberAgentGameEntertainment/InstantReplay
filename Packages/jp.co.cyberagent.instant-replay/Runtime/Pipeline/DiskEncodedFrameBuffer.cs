@@ -24,6 +24,7 @@ namespace InstantReplay
         private static int _sessionCounter;
 
         private readonly object _lock = new();
+        private readonly long _maxDiskUsageBytes;
         private readonly long _maxPendingWriteBytes;
         private readonly Channel<PendingWrite> _pending;
         private readonly bool _retainOnDispose;
@@ -35,6 +36,9 @@ namespace InstantReplay
         private long _droppedFrameCount;
         private long _pendingBytes;
         private Task _quiesceTask;
+        private double? _statisticsEarliestKeyFrameTimestamp;
+        private double? _statisticsLatestVideoTimestamp;
+        private long _statisticsTotalBytes;
         private bool _warnedAboutDrops;
 
         public DiskEncodedFrameBuffer(in DiskBufferOptions options, in VideoEncoderOptions videoOptions,
@@ -45,6 +49,7 @@ namespace InstantReplay
 
             _retainOnDispose = validated.RetainOnDispose;
             _maxPendingWriteBytes = validated.MaxPendingWriteBytes;
+            _maxDiskUsageBytes = validated.MaxDiskUsageBytes;
 
             var root = validated.ResolveDirectory();
             _sessionDirectory = Path.Combine(root, CreateSessionId());
@@ -73,6 +78,20 @@ namespace InstantReplay
         ///     Directory this session writes to.
         /// </summary>
         public string SessionDirectory => _sessionDirectory;
+
+        public RecordingBufferStatistics GetStatistics()
+        {
+            lock (_lock)
+            {
+                var bufferedDuration =
+                    _statisticsEarliestKeyFrameTimestamp is { } earliest &&
+                    _statisticsLatestVideoTimestamp is { } latest
+                        ? Math.Max(0, latest - earliest)
+                        : 0;
+                return new RecordingBufferStatistics(bufferedDuration, _statisticsTotalBytes, _maxDiskUsageBytes,
+                    true);
+            }
+        }
 
         public bool TryAddVideoFrame(EncodedFrame frame)
         {
@@ -171,6 +190,14 @@ namespace InstantReplay
                     catch (Exception ex)
                     {
                         ILogger.LogExceptionCore(ex);
+                    }
+
+                    // The writer is not synchronized, so its state is published for GetStatistics here, on the worker.
+                    lock (_lock)
+                    {
+                        _statisticsTotalBytes = _writer.TotalBytes;
+                        _statisticsEarliestKeyFrameTimestamp = _writer.EarliestKeyFrameTimestamp;
+                        _statisticsLatestVideoTimestamp = _writer.LatestVideoTimestamp;
                     }
                 }
 

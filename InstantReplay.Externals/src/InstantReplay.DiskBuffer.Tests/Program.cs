@@ -34,6 +34,7 @@ namespace InstantReplay.DiskBufferTests
             Run("selection streams payloads while it is read", SelectionStreamsPayloads);
             Run("corrupt first key frame yields an empty selection", CorruptFirstKeyFrameYieldsEmptySelection);
             Run("in-memory reader ends on dispose", ArrayReaderReleasesUnreadFrames);
+            Run("retained duration follows eviction", RetainedDurationFollowsEviction);
             RunEndToEnd();
 
             Console.WriteLine(_failures == 0
@@ -193,6 +194,47 @@ namespace InstantReplay.DiskBufferTests
             var scan = DiskBufferSegmentReader.Scan(directory);
             AssertTrue(scan.VideoSamples.Count > 0, "records remain after eviction");
             AssertTrue(scan.VideoMetadata.Count == 1, "metadata survives eviction");
+        }
+
+        private static void RetainedDurationFollowsEviction(string directory)
+        {
+            const long max = 256 * 1024;
+            const int payloadSize = 8 * 1024;
+
+            using var writer = new DiskBufferSegmentWriter(directory, max, 0.5, 64 * 1024,
+                DiskBufferSyncMode.OperatingSystem);
+            writer.SetManifestBytes(0);
+
+            AssertEqual<double?>(null, writer.EarliestKeyFrameTimestamp, "no key frame before the first write");
+            AssertEqual<double?>(null, writer.LatestVideoTimestamp, "no video frame before the first write");
+
+            // An audio record and a non-key video frame ahead of the first key frame do not start the retained range.
+            Write(writer, DiskBufferTrack.Audio, UniencSampleKind.Interpolated, 0.0, Payload(64, 0x01));
+            Write(writer, DiskBufferTrack.Video, UniencSampleKind.Interpolated, 0.0, Payload(64, 0x02));
+            AssertEqual<double?>(null, writer.EarliestKeyFrameTimestamp, "a non-key frame is not a key frame");
+
+            for (var i = 1; i <= 200; i++)
+                Write(writer, DiskBufferTrack.Video, i % 4 == 0 ? UniencSampleKind.Key
+                    : UniencSampleKind.Interpolated, i * 0.05, Payload(payloadSize, (byte)i));
+
+            AssertEqual<double?>(10.0, writer.LatestVideoTimestamp, "latest video timestamp");
+
+            var scan = DiskBufferSegmentReader.Scan(directory);
+            double? earliestOnDisk = null;
+            foreach (var record in scan.VideoSamples)
+                if (record.Kind == UniencSampleKind.Key)
+                {
+                    earliestOnDisk = record.Timestamp;
+                    break;
+                }
+
+            AssertTrue(earliestOnDisk is > 0.2, $"eviction removed the earliest key frames ({earliestOnDisk})");
+            AssertEqual(earliestOnDisk, writer.EarliestKeyFrameTimestamp,
+                "earliest retained key frame matches the files on disk");
+
+            // An out-of-order frame with timestamp 0, as MediaCodec emits at the end of a stream, is ignored.
+            Write(writer, DiskBufferTrack.Video, UniencSampleKind.Interpolated, 0.0, Payload(64, 0x03));
+            AssertEqual<double?>(10.0, writer.LatestVideoTimestamp, "an out-of-order frame keeps the latest timestamp");
         }
 
         private static void MetadataSurvivesEviction(string directory)

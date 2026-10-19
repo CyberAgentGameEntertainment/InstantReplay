@@ -149,6 +149,21 @@ namespace InstantReplay
         public bool IsPaused => _temporalController.IsPaused;
 
         /// <summary>
+        ///     Returns a snapshot of the encoded frame buffer, such as the duration an export would cover. Safe to call
+        ///     from any thread. After an export the buffer has been consumed and the values are no longer meaningful.
+        /// </summary>
+        public RecordingBufferStatistics GetBufferStatistics()
+        {
+            lock (_lock)
+            {
+                if (_disposed)
+                    throw new ObjectDisposedException(nameof(RealtimeInstantReplaySession));
+
+                return _buffer.GetStatistics();
+            }
+        }
+
+        /// <summary>
         ///     Gets the current state of the session.
         /// </summary>
         public SessionState State { get; private set; }

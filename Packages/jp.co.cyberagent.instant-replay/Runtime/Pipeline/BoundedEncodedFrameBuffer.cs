@@ -106,6 +106,25 @@ namespace InstantReplay
             return true;
         }
 
+        public RecordingBufferStatistics GetStatistics()
+        {
+            var bufferedDuration = 0.0;
+
+            lock (_videoQueue)
+            {
+                if (_videoQueueLatestTimestamp is { } latest)
+                    foreach (var frame in _videoQueue)
+                        if (frame.Kind == UniencSampleKind.Key)
+                        {
+                            bufferedDuration = Math.Max(0, latest - frame.Timestamp);
+                            break;
+                        }
+            }
+
+            return new RecordingBufferStatistics(bufferedDuration, Interlocked.Read(ref _currentMemoryUsage),
+                _maxMemoryBytes, false);
+        }
+
         /// <summary>
         ///     Gets frames for the specified duration, adjusted to start from a keyframe.
         /// </summary>

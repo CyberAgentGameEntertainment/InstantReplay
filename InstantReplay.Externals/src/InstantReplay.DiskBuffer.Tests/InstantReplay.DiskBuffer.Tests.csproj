@@ -35,6 +35,8 @@
                  Link="Linked\EncodedFrameMuxer.cs"/>
         <Compile Include="..\..\..\Packages\jp.co.cyberagent.instant-replay\Runtime\Pipeline\IEncodedFrameBuffer.cs"
                  Link="Linked\IEncodedFrameBuffer.cs"/>
+        <Compile Include="..\..\..\Packages\jp.co.cyberagent.instant-replay\Runtime\RecordingBufferStatistics.cs"
+                 Link="Linked\RecordingBufferStatistics.cs"/>
     </ItemGroup>
 
     <ItemGroup>

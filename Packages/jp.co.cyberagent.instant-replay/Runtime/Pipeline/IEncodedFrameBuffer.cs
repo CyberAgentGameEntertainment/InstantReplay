@@ -31,6 +31,11 @@ namespace InstantReplay
         ///     it, together with every frame read from it.
         /// </summary>
         ValueTask<EncodedFrameSelection> GetFramesForDurationAsync(double? durationSeconds);
+
+        /// <summary>
+        ///     Returns a snapshot of the buffer. Safe to call from any thread while frames are being added.
+        /// </summary>
+        RecordingBufferStatistics GetStatistics();
     }
 
     /// <summary>
