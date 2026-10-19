@@ -17,12 +17,20 @@ namespace InstantReplay.Suite.UI
     {
         private const string PackagePath = "Packages/jp.co.cyberagent.instant-replay/Suite/";
 
+        // One unit of the style sheet corresponds to 1/96 inch on desktops, following the CSS pixel, and to 1/160 inch on
+        // handheld devices, following the Android density-independent pixel and close to the iOS point.
+        private const float DesktopReferenceDpi = 96;
+        private const float HandheldReferenceDpi = 160;
+
         [SerializeField] private InstantReplaySuiteSettings settings;
         [SerializeField] private ThemeStyleSheet themeStyleSheet;
         [SerializeField] private StyleSheet styleSheet;
         [SerializeField] private int sortingOrder = 1000;
         [SerializeField] private bool dontDestroyOnLoad = true;
         [SerializeField] private bool showOverlayOnLaunch = true;
+
+        [Tooltip("Multiplier applied to the physical size of the interface.")]
+        [SerializeField] [Range(0.5f, 2f)] private float scale = 1f;
 
         private PanelSettings _panelSettings;
         private InstantReplayRecorder _recorder;
@@ -76,8 +84,11 @@ namespace InstantReplay.Suite.UI
             _panelSettings.themeStyleSheet = themeStyleSheet;
             _panelSettings.sortingOrder = sortingOrder;
             _panelSettings.scaleMode = PanelScaleMode.ConstantPhysicalSize;
-            _panelSettings.referenceDpi = 96;
-            _panelSettings.fallbackDpi = 96;
+            // The Device variant reports the simulated device in the Device Simulator.
+            var referenceDpi = UnityEngine.Device.SystemInfo.deviceType == DeviceType.Handheld ? HandheldReferenceDpi : DesktopReferenceDpi;
+            _panelSettings.referenceDpi = referenceDpi / Mathf.Clamp(scale, 0.1f, 10f);
+            // Used when the platform does not report the screen density, in which case one unit is one pixel.
+            _panelSettings.fallbackDpi = _panelSettings.referenceDpi;
 
             var document = gameObject.AddComponent<UIDocument>();
             document.hideFlags = HideFlags.DontSave | HideFlags.NotEditable;

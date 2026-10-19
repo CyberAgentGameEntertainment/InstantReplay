@@ -7,6 +7,8 @@ using System.Collections.Generic;
 using System.Globalization;
 using UnityEngine;
 using UnityEngine.UIElements;
+// The Device variants report the simulated device in the Device Simulator, and the actual device elsewhere.
+using Screen = UnityEngine.Device.Screen;
 
 namespace InstantReplay.Suite.UI
 {
