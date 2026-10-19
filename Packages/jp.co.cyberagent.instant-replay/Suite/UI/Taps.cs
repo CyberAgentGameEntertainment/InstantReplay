@@ -192,6 +192,7 @@ namespace InstantReplay.Suite.UI
 
             protected override void RegisterCallbacksOnTarget()
             {
+                target.RegisterCallback<AttachToPanelEvent>(OnAttachToPanel);
                 target.RegisterCallback<PointerDownEvent>(OnPointerDown, TrickleDown.TrickleDown);
                 target.RegisterCallback<PointerMoveEvent>(OnPointerMove, TrickleDown.TrickleDown);
                 target.RegisterCallback<PointerUpEvent>(OnPointerUp, TrickleDown.TrickleDown);
@@ -199,10 +200,12 @@ namespace InstantReplay.Suite.UI
                 target.RegisterCallback<PointerLeaveEvent>(OnPointerLeave);
                 target.RegisterCallback<MouseDownEvent>(OnMouseDown, TrickleDown.TrickleDown);
                 target.RegisterCallback<MouseUpEvent>(OnMouseUp, TrickleDown.TrickleDown);
+                if (target.panel != null) RegisterOnPanel(target.panel);
             }
 
             protected override void UnregisterCallbacksFromTarget()
             {
+                target.UnregisterCallback<AttachToPanelEvent>(OnAttachToPanel);
                 target.UnregisterCallback<PointerDownEvent>(OnPointerDown, TrickleDown.TrickleDown);
                 target.UnregisterCallback<PointerMoveEvent>(OnPointerMove, TrickleDown.TrickleDown);
                 target.UnregisterCallback<PointerUpEvent>(OnPointerUp, TrickleDown.TrickleDown);
@@ -214,30 +217,55 @@ namespace InstantReplay.Suite.UI
 
             private bool IsTracking => _pointerId != PointerId.invalidPointerId;
 
-            private void OnPointerDown(PointerDownEvent evt)
+            private void OnAttachToPanel(AttachToPanelEvent evt)
             {
-                _stopMouseUp = false;
-                // A mouse selects text, and a field that already has the focus places the cursor where it is touched.
-                if (evt.pointerType == PointerType.mouse || IsTracking || HasFocusWithin()) return;
-
-                evt.StopImmediatePropagation();
-                IgnoreFocus(evt);
-                if (evt.button != (int)MouseButton.LeftMouse || !target.enabledInHierarchy) return;
-
-                _pointerId = evt.pointerId;
-                _start = evt.position;
+                RegisterOnPanel(evt.destinationPanel);
             }
 
-            // The panel focuses the pressed element after the event has been handled, or the field when the element
-            // cannot take the focus, such as the label of the field.
-            private void IgnoreFocus(PointerDownEvent evt)
+            // The focus is kept from moving by a handler at the root of the panel, because a scroll view that is still
+            // moving stops a touch before it reaches the field, and the panel focuses the field all the same. Registering
+            // the same handler again has no effect.
+            private static void RegisterOnPanel(IPanel panel)
             {
+                panel.visualTree.RegisterCallback<PointerDownEvent>(IgnoreFocusOnTouch, TrickleDown.TrickleDown);
+            }
+
+            private static void IgnoreFocusOnTouch(PointerDownEvent evt)
+            {
+                if (evt.pointerType == PointerType.mouse) return;
+                var field = FindField(evt.target as VisualElement);
+                if (field == null || HasFocusWithin(field)) return;
+
+                // The panel focuses the pressed element after the event has been handled, or the field when the element
+                // cannot take the focus, such as the label of the field.
 #if UNITY_2023_2_OR_NEWER
-                target.focusController?.IgnoreEvent(evt);
+                field.focusController?.IgnoreEvent(evt);
 #else
                 // Unity 2022.3 changes the focus in the default action of the event.
                 evt.PreventDefault();
 #endif
+            }
+
+            private static VisualElement FindField(VisualElement element)
+            {
+                for (; element != null; element = element.parent)
+                    if (element.ClassListContains(HandledClassName) &&
+                        element.ClassListContains(TextInputBaseField<string>.ussClassName))
+                        return element;
+                return null;
+            }
+
+            private void OnPointerDown(PointerDownEvent evt)
+            {
+                _stopMouseUp = false;
+                // A mouse selects text, and a field that already has the focus places the cursor where it is touched.
+                if (evt.pointerType == PointerType.mouse || IsTracking || HasFocusWithin(target)) return;
+
+                evt.StopImmediatePropagation();
+                if (evt.button != (int)MouseButton.LeftMouse || !target.enabledInHierarchy) return;
+
+                _pointerId = evt.pointerId;
+                _start = evt.position;
             }
 
             private void OnPointerMove(PointerMoveEvent evt)
@@ -280,11 +308,11 @@ namespace InstantReplay.Suite.UI
                 evt.StopImmediatePropagation();
             }
 
-            private bool HasFocusWithin()
+            private static bool HasFocusWithin(VisualElement field)
             {
                 // The focus controller reports the field, not the text element in it, as focused.
-                return target.focusController?.focusedElement is VisualElement focused &&
-                       (focused == target || target.Contains(focused));
+                return field.focusController?.focusedElement is VisualElement focused &&
+                       (focused == field || field.Contains(focused));
             }
 
             private void Cancel()
