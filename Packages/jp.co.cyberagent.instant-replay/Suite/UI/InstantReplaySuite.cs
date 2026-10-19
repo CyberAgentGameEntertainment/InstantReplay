@@ -44,6 +44,9 @@ namespace InstantReplay.Suite.UI
         [SerializeField] [Range(0.5f, 2f)] private float scale = 1f;
 
         private PanelSettings _panelSettings;
+#if !UNITY_6000_0_OR_NEWER
+        private SystemFontFallback _systemFontFallback;
+#endif
         private InstantReplayRecorder _recorder;
         private SuiteView _view;
 
@@ -155,6 +158,10 @@ namespace InstantReplay.Suite.UI
             _panelSettings.referenceDpi = referenceDpi / Mathf.Clamp(scale, 0.1f, 10f);
             // Used when the platform does not report the screen density, in which case one unit is one pixel.
             _panelSettings.fallbackDpi = _panelSettings.referenceDpi;
+#if !UNITY_6000_0_OR_NEWER
+            _systemFontFallback = SystemFontFallback.Create();
+            if (_systemFontFallback != null) _panelSettings.textSettings = _systemFontFallback.TextSettings;
+#endif
 
             var document = gameObject.AddComponent<UIDocument>();
             document.hideFlags = HideFlags.DontSave | HideFlags.NotEditable;
@@ -181,6 +188,10 @@ namespace InstantReplay.Suite.UI
             _recorder?.Dispose();
             _recorder = null;
             if (_panelSettings != null) Destroy(_panelSettings);
+#if !UNITY_6000_0_OR_NEWER
+            _systemFontFallback?.Dispose();
+            _systemFontFallback = null;
+#endif
         }
 
 #if UNITY_EDITOR
