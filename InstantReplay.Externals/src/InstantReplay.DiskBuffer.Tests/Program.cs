@@ -323,7 +323,7 @@ namespace InstantReplay.DiskBufferTests
         {
             const string name = "end to end: encode, persist, recover, mux";
 
-            if (!EndToEnd.IsSupported())
+            if (!EndToEnd.IsSupported)
             {
                 Console.WriteLine($"  [skip] {name} (native library unavailable on this platform)");
                 return;
