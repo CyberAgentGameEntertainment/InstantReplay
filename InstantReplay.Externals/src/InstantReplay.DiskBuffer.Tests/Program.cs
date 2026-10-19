@@ -37,6 +37,7 @@ namespace InstantReplay.DiskBufferTests
             Run("retained duration follows eviction", RetainedDurationFollowsEviction);
             Run("captured range starts at a key frame", CapturedRangeStartsAtKeyFrame);
             Run("in-memory capture can be read repeatedly", InMemoryCaptureCanBeReadRepeatedly);
+            Run("capture duration ignores a trailing frame at time zero", DurationIgnoresTrailingFrameAtTimeZero);
             Run("disk capture reads ranges and releases its directory", DiskCaptureReadsRanges);
             RunEndToEnd();
 
@@ -508,6 +509,30 @@ namespace InstantReplay.DiskBufferTests
             }
 
             AssertTrue(threw, "a range that ends at its key frame is rejected");
+        }
+
+        private static void DurationIgnoresTrailingFrameAtTimeZero(string directory)
+        {
+            _ = directory;
+
+            using (var captured = CreateInMemoryCapture(out _, out _))
+                AssertTrue(Math.Abs(captured.GetDurationSeconds() - 0.9) < 1e-9, "duration runs to the last frame");
+
+            // MediaCodec (Android) may end the stream with a frame at time zero, which sorts before the first sample.
+            var video = new List<EncodedFrame>
+                { EncodedFrame.CreateWithCopy(Payload(7, 0xAA), 0, UniencSampleKind.Metadata) };
+            for (var i = 0; i < 10; i++)
+                video.Add(EncodedFrame.CreateWithCopy(Payload(100 + i, (byte)i), 10 + i * 0.1,
+                    i % 5 == 0 ? UniencSampleKind.Key : UniencSampleKind.Interpolated));
+            video.Add(EncodedFrame.CreateWithCopy(Payload(16, 0xBB), 0, UniencSampleKind.Interpolated));
+
+            using var trailing = new InMemoryCapturedFrames(video.ToArray(), Array.Empty<EncodedFrame>());
+            AssertTrue(Math.Abs(trailing.GetDurationSeconds() - 0.9) < 1e-9,
+                "duration runs to the latest frame, not the trailing one");
+
+            trailing.ResolveRange(0.55, 0.85, out var videoStart, out var videoEnd, out _, out _);
+            AssertEqual(5, videoStart, "range starts at the key frame before the requested start");
+            AssertEqual(9, videoEnd, "range ends before the first frame at or after the end");
         }
 
         private static void InMemoryCaptureCanBeReadRepeatedly(string directory)

@@ -53,10 +53,10 @@ namespace InstantReplay
                 if (video[i].Kind == UniencSampleKind.Key)
                     keyFrames.Add(video[i].Timestamp);
             _keyFrameTimestamps = keyFrames.ToArray();
-            DurationSeconds = video.Count > 0 ? Math.Max(0, video[video.Count - 1].Timestamp) : 0;
+            DurationSeconds = frames.GetDurationSeconds();
         }
 
-        /// <summary>Seconds from the first to the last video frame.</summary>
+        /// <summary>Seconds from the first to the latest video frame.</summary>
         public double DurationSeconds { get; }
 
         /// <summary>

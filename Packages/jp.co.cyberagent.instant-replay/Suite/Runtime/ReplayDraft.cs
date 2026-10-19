@@ -45,7 +45,7 @@ namespace InstantReplay.Suite
         /// <summary>Time at which the footage was taken from the buffer, which is the end of the footage.</summary>
         public DateTime CapturedAtUtc { get; }
 
-        /// <summary>Seconds from the first to the last video frame.</summary>
+        /// <summary>Seconds from the first to the latest video frame.</summary>
         public double DurationSeconds => _capture.DurationSeconds;
 
         /// <summary>Times of the video key frames in seconds from the start, in ascending order. The first is zero.</summary>

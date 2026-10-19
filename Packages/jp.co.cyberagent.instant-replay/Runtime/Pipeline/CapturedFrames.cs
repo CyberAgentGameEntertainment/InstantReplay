@@ -33,6 +33,19 @@ namespace InstantReplay
         public abstract void Dispose();
 
         /// <summary>
+        ///     Returns the seconds from the first video sample to the latest one. The latest one is not always the last
+        ///     sample: MediaCodec (Android) may produce a frame with timestamp zero at the end of the stream.
+        /// </summary>
+        public double GetDurationSeconds()
+        {
+            var video = Video;
+            var duration = 0.0;
+            for (var i = 0; i < video.Count; i++)
+                duration = Math.Max(duration, video[i].Timestamp);
+            return duration;
+        }
+
+        /// <summary>
         ///     Finds the samples to mux for a range in seconds. The video starts at the latest key frame at or before
         ///     <paramref name="startSeconds" />, and the audio covers the same span of time.
         /// </summary>
