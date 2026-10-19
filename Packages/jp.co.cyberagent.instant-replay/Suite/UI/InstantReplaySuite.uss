@@ -118,3 +118,40 @@
     flex-grow: 1;
     flex-shrink: 1;
 }
+
+.irs-panel {
+    max-height: 90%;
+}
+
+.irs-panel__scroll {
+    flex-shrink: 1;
+}
+
+.irs-preset-editor {
+    margin-top: 4px;
+}
+
+.irs-preset-editor .unity-base-field {
+    flex-direction: column;
+    align-items: stretch;
+    margin-top: 4px;
+}
+
+.irs-preset-editor .unity-base-field__label {
+    min-width: 0;
+    margin-bottom: 2px;
+    font-size: 11px;
+}
+
+.irs-preset-editor .unity-toggle {
+    flex-direction: row;
+    align-items: center;
+}
+
+.irs-preset-editor .unity-foldout__checkmark {
+    -unity-background-image-tint-color: rgb(200, 200, 200);
+}
+
+.irs-preset-editor .unity-foldout__text {
+    color: rgb(230, 230, 230);
+}

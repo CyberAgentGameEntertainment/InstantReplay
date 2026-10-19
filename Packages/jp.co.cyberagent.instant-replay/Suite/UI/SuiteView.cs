@@ -26,6 +26,7 @@ namespace InstantReplay.Suite.UI
         private readonly VisualElement _panel;
         private readonly Button _pauseButton;
         private readonly DropdownField _presetDropdown;
+        private readonly PresetEditorView _presetEditor;
         private readonly InstantReplayRecorder _recorder;
         private readonly IVisualElementScheduledItem _refresh;
         private readonly VisualElement _root;
@@ -60,13 +61,19 @@ namespace InstantReplay.Suite.UI
             _panel.AddToClassList("irs-panel--hidden");
             _root.Add(_panel);
 
+            // The panel can be taller than a landscape phone screen once the preset editor is expanded.
+            var scroll = new ScrollView(ScrollViewMode.Vertical);
+            scroll.AddToClassList("irs-panel__scroll");
+            _panel.Add(scroll);
+            var content = scroll.contentContainer;
+
             var title = new Label("Instant Replay");
             title.AddToClassList("irs-panel__title");
-            _panel.Add(title);
+            content.Add(title);
 
             _bufferingToggle = new Toggle("Continuous buffering");
             _bufferingToggle.RegisterValueChangedCallback(e => Run(() => _recorder.SetBufferingEnabled(e.newValue)));
-            _panel.Add(_bufferingToggle);
+            content.Add(_bufferingToggle);
 
             var actions = new VisualElement();
             actions.AddToClassList("irs-panel__row");
@@ -75,14 +82,14 @@ namespace InstantReplay.Suite.UI
             _unboundedButton = new Button(ToggleUnbounded);
             actions.Add(_saveButton);
             actions.Add(_unboundedButton);
-            _panel.Add(actions);
+            content.Add(actions);
 
             _pauseButton = new Button(() => Run(() =>
             {
                 if (_recorder.IsPaused) _recorder.Resume();
                 else _recorder.Pause();
             }));
-            _panel.Add(_pauseButton);
+            content.Add(_pauseButton);
 
             var presetSection = new VisualElement();
             presetSection.AddToClassList("irs-panel__section");
@@ -100,11 +107,13 @@ namespace InstantReplay.Suite.UI
             _detailsLabel.AddToClassList("irs-panel__details");
             presetSection.Add(_presetDropdown);
             presetSection.Add(_detailsLabel);
-            _panel.Add(presetSection);
+            _presetEditor = new PresetEditorView(_recorder, Run);
+            presetSection.Add(_presetEditor.Root);
+            content.Add(presetSection);
 
             _errorLabel = new Label();
             _errorLabel.AddToClassList("irs-panel__error");
-            _panel.Add(_errorLabel);
+            content.Add(_errorLabel);
 
             _recorder.StateChanged += OnRecorderChanged;
             _recorder.ConfigurationChanged += OnRecorderChanged;
@@ -237,6 +246,7 @@ namespace InstantReplay.Suite.UI
                 : _recorder.ActivePreset.DisplayName;
             if (_presetDropdown.value != activeName) _presetDropdown.SetValueWithoutNotify(activeName);
             _detailsLabel.text = DescribePreset(_recorder.ActivePreset, stats);
+            _presetEditor.Refresh(idle);
 
             var error = _operationError ??
                         (state == RecorderState.Faulted ? _recorder.LastException?.Message ?? "Recording failed." : null);

@@ -21,6 +21,12 @@ namespace InstantReplay.Suite
         public bool hasBufferingEnabled;
         public bool bufferingEnabled;
 
+        /// <summary>
+        ///     The active preset serialized as JSON when it is not one of the presets in the settings, for example after
+        ///     the user has customized it. Empty otherwise.
+        /// </summary>
+        public string customPreset;
+
         private static string FilePath =>
             Path.Combine(Application.persistentDataPath, "InstantReplay", "suite-preferences.json");
 

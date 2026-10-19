@@ -88,6 +88,12 @@ namespace InstantReplay.Suite
         public RecordingPreset ActivePreset => _activePreset;
 
         /// <summary>
+        ///     Whether <see cref="ActivePreset" /> is not one of <see cref="Presets" />, for example because the user has
+        ///     customized it. Such a preset is persisted as a whole and restored on the next launch.
+        /// </summary>
+        public bool IsActivePresetCustomized => IndexOfPreset(_activePreset) < 0;
+
+        /// <summary>
         ///     Whether the user wants buffering. Buffering actually runs only while no replay is being saved and no
         ///     unbounded recording is running.
         /// </summary>
@@ -145,7 +151,7 @@ namespace InstantReplay.Suite
             _activated = true;
 
             _preferences = _settings.PersistUserPreferences ? RecorderPreferences.Load() : new RecorderPreferences();
-            var preset = FindPreset(_preferences.selectedPresetId);
+            var preset = LoadCustomPreset(_preferences.customPreset) ?? FindPreset(_preferences.selectedPresetId);
             if (preset != null) _activePreset = preset;
             _bufferingEnabled = _preferences.hasBufferingEnabled
                 ? _preferences.bufferingEnabled
@@ -169,7 +175,9 @@ namespace InstantReplay.Suite
 
         /// <summary>
         ///     Switches to the given preset, which need not be one of <see cref="Presets" />. Buffering restarts with the
-        ///     new parameters, discarding the footage buffered so far.
+        ///     new parameters, discarding the footage buffered so far. Changes made to the preset object afterwards take
+        ///     effect only when it is applied again; to customize a preset, apply a modified
+        ///     <see cref="RecordingPreset.Clone" />.
         /// </summary>
         /// <exception cref="InvalidOperationException">A replay is being saved or an unbounded recording is running.</exception>
         public void ApplyPreset(RecordingPreset preset)
@@ -566,6 +574,28 @@ namespace InstantReplay.Suite
             if (restart) StartBuffering();
         }
 
+        private int IndexOfPreset(RecordingPreset preset)
+        {
+            for (var i = 0; i < _presets.Count; i++)
+                if (ReferenceEquals(_presets[i], preset))
+                    return i;
+            return -1;
+        }
+
+        private static RecordingPreset LoadCustomPreset(string json)
+        {
+            if (string.IsNullOrEmpty(json)) return null;
+            try
+            {
+                return JsonUtility.FromJson<RecordingPreset>(json);
+            }
+            catch (Exception ex)
+            {
+                ILogger.LogExceptionCore(ex);
+                return null;
+            }
+        }
+
         private RecordingPreset FindPreset(string id)
         {
             if (string.IsNullOrEmpty(id)) return null;
@@ -584,6 +614,7 @@ namespace InstantReplay.Suite
         {
             if (_preferences == null || !_settings.PersistUserPreferences) return;
             _preferences.selectedPresetId = _activePreset.Id;
+            _preferences.customPreset = IsActivePresetCustomized ? JsonUtility.ToJson(_activePreset) : null;
             _preferences.hasBufferingEnabled = true;
             _preferences.bufferingEnabled = _bufferingEnabled;
             _preferences.Save();

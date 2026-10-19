@@ -126,6 +126,14 @@ namespace InstantReplay.Suite
         }
 
         /// <summary>
+        ///     Returns a copy that can be modified without affecting this preset.
+        /// </summary>
+        public RecordingPreset Clone()
+        {
+            return (RecordingPreset)MemberwiseClone();
+        }
+
+        /// <summary>
         ///     Creates the preset used when the settings define none.
         /// </summary>
         public static RecordingPreset CreateDefault()
