@@ -72,6 +72,7 @@ namespace InstantReplay.Suite
     {
         private const string VideoExtension = ".mp4";
         private const string SidecarExtension = ".json";
+        private const string ThumbnailExtension = ".png";
 
         private readonly int _maxRecordings;
         private readonly long _maxTotalBytes;
@@ -126,6 +127,28 @@ namespace InstantReplay.Suite
             if (entry == null) throw new ArgumentNullException(nameof(entry));
             DeleteFiles(entry);
             Changed?.Invoke();
+        }
+
+        /// <summary>
+        ///     Stores a PNG image as the thumbnail of the entry, replacing the current one.
+        /// </summary>
+        /// <param name="entry">The recording.</param>
+        /// <param name="png">PNG-encoded image, for example from <c>ImageConversion.EncodeToPNG</c>.</param>
+        /// <returns>The entry with the new <see cref="RecordingEntry.ThumbnailPath" />.</returns>
+        public RecordingEntry SetThumbnail(RecordingEntry entry, byte[] png)
+        {
+            if (entry == null) throw new ArgumentNullException(nameof(entry));
+            if (png == null || png.Length == 0) throw new ArgumentException("The image is empty.", nameof(png));
+            if (!File.Exists(entry.FilePath))
+                throw new FileNotFoundException("The recording no longer exists.", entry.FilePath);
+
+            var thumbnailName = WriteThumbnail(entry.FilePath, png);
+            WriteSidecar(entry.FilePath, entry.CreatedAtUtc, entry.DurationSeconds, entry.Source, entry.Metadata,
+                thumbnailName);
+
+            var updated = ReadEntry(entry.FilePath);
+            Changed?.Invoke();
+            return updated;
         }
 
         private static void DeleteFiles(RecordingEntry entry)
@@ -194,24 +217,14 @@ namespace InstantReplay.Suite
         }
 
         internal RecordingEntry Add(string filePath, RecordingSource source, DateTime createdAtUtc,
-            double durationSeconds, IReadOnlyDictionary<string, string> metadata)
+            double durationSeconds, IReadOnlyDictionary<string, string> metadata, byte[] thumbnailPng = null)
         {
             _pendingPaths.Remove(filePath);
 
-            var sidecar = new Sidecar
-            {
-                version = Sidecar.CurrentVersion,
-                createdAtUtcTicks = createdAtUtc.Ticks,
-                durationSeconds = durationSeconds,
-                source = source.ToString()
-            };
-            if (metadata != null)
-                foreach (var pair in metadata)
-                    sidecar.metadata.Add(new MetadataPair { key = pair.Key, value = pair.Value });
-
             try
             {
-                File.WriteAllText(GetSidecarPath(filePath), JsonUtility.ToJson(sidecar));
+                var thumbnailName = thumbnailPng is { Length: > 0 } ? WriteThumbnail(filePath, thumbnailPng) : null;
+                WriteSidecar(filePath, createdAtUtc, durationSeconds, source, metadata, thumbnailName);
             }
             catch (Exception ex)
             {
@@ -289,6 +302,32 @@ namespace InstantReplay.Suite
 
             return new RecordingEntry(id, videoPath, createdAtUtc, duration, info.Exists ? info.Length : 0, source,
                 metadata, thumbnailPath);
+        }
+
+        private static void WriteSidecar(string videoPath, DateTime createdAtUtc, double durationSeconds,
+            RecordingSource source, IReadOnlyDictionary<string, string> metadata, string thumbnailName)
+        {
+            var sidecar = new Sidecar
+            {
+                version = Sidecar.CurrentVersion,
+                createdAtUtcTicks = createdAtUtc.Ticks,
+                durationSeconds = durationSeconds,
+                source = source.ToString(),
+                thumbnail = thumbnailName
+            };
+            if (metadata != null)
+                foreach (var pair in metadata)
+                    sidecar.metadata.Add(new MetadataPair { key = pair.Key, value = pair.Value });
+
+            File.WriteAllText(GetSidecarPath(videoPath), JsonUtility.ToJson(sidecar));
+        }
+
+        // Returns the file name of the thumbnail relative to the directory of the video, as stored in the sidecar.
+        private static string WriteThumbnail(string videoPath, byte[] png)
+        {
+            var path = Path.ChangeExtension(videoPath, ThumbnailExtension);
+            File.WriteAllBytes(path, png);
+            return Path.GetFileName(path);
         }
 
         private static string GetSidecarPath(string videoPath)

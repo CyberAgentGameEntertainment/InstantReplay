@@ -326,6 +326,43 @@ namespace InstantReplay.Suite
         }
 
         /// <summary>
+        ///     Takes the buffered footage out of the buffer without saving it, so that the user can preview it and save
+        ///     only part of it. Buffering restarts with an empty buffer as soon as the footage has been taken. The caller
+        ///     owns the returned draft and must dispose it.
+        /// </summary>
+        /// <param name="request">
+        ///     <see cref="ReplaySaveRequest.DurationSeconds" /> limits the footage taken, and
+        ///     <see cref="ReplaySaveRequest.Metadata" /> is stored with every recording saved from the draft.
+        /// </param>
+        /// <exception cref="InvalidOperationException">The recorder is not buffering, or the buffer holds no footage.</exception>
+        public async ValueTask<ReplayDraft> CaptureReplayAsync(ReplaySaveRequest request = null)
+        {
+            ThrowIfNotMainThread();
+            ThrowIfDisposed();
+            if (State != RecorderState.Buffering || _session == null)
+                throw new InvalidOperationException($"Cannot capture a replay while the recorder is {State}.");
+
+            var session = DetachSession();
+            SetState(RecorderState.Exporting);
+
+            try
+            {
+                var capture = await session.StopAndCaptureAsync(request?.DurationSeconds);
+                return new ReplayDraft(Library, capture, DateTime.UtcNow, request?.Metadata);
+            }
+            catch (Exception ex)
+            {
+                LastException = ex;
+                throw;
+            }
+            finally
+            {
+                DisposeQuietly(session);
+                if (!_disposed) ResumeAfterRecording();
+            }
+        }
+
+        /// <summary>
         ///     Starts recording to a file in the library until <see cref="UnboundedRecording.StopAsync" /> is called.
         ///     Buffering is suspended meanwhile and the footage buffered so far is discarded.
         /// </summary>
