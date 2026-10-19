@@ -38,6 +38,7 @@ namespace InstantReplay
         private long _droppedFrameCount;
         private long _pendingBytes;
         private Task _quiesceTask;
+        private bool _storageCaptured;
         private double? _statisticsEarliestKeyFrameTimestamp;
         private double? _statisticsLatestVideoTimestamp;
         private long _statisticsTotalBytes;
@@ -169,6 +170,31 @@ namespace InstantReplay
             return DiskBufferSegmentReader.BuildSelection(scan, durationSeconds, ILogger.LogExceptionCore);
         }
 
+        public async ValueTask<CapturedFrames> CaptureAsync(double? durationSeconds)
+        {
+            if (_disposed) throw new ObjectDisposedException(nameof(DiskEncodedFrameBuffer));
+
+            await QuiesceAsync().ConfigureAwait(false);
+
+            var scan = DiskBufferSegmentReader.Scan(_sessionDirectory, ILogger.LogExceptionCore);
+            if (!DiskBufferSegmentReader.TrySelectRecords(scan, durationSeconds, out var video, out var audio,
+                    ILogger.LogExceptionCore))
+                return null;
+
+            // The captured frames own the directory from now on. It stays registered as live, so that recovery does not
+            // offer it while it is in use, and it is deleted when the captured frames are disposed.
+            lock (_lock)
+            {
+                _storageCaptured = true;
+            }
+
+            return new DiskCapturedFrames(scan, video, audio, () =>
+            {
+                DeleteSessionDirectory();
+                UnregisterLiveSession(_sessionDirectory);
+            }, ILogger.LogExceptionCore);
+        }
+
         public void Dispose()
         {
             lock (_lock)
@@ -180,6 +206,8 @@ namespace InstantReplay
             // Dispose is synchronous, so it blocks until the files are closed. The worker never resumes on the calling
             // thread's synchronization context, so blocking here cannot deadlock it.
             QuiesceAsync().GetAwaiter().GetResult();
+
+            if (_storageCaptured) return;
 
             if (!_retainOnDispose) DeleteSessionDirectory();
 
@@ -193,6 +221,7 @@ namespace InstantReplay
         /// </summary>
         public void CleanupStorage()
         {
+            if (_storageCaptured) return;
             DeleteSessionDirectory();
         }
 

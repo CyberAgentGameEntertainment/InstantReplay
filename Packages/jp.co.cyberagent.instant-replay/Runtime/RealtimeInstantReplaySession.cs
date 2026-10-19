@@ -17,11 +17,13 @@ namespace InstantReplay
     /// </summary>
     public class RealtimeInstantReplaySession : IDisposable
     {
+        private readonly AudioEncoderOptions _audioOptions;
         private readonly AudioSampleProviderSubscription _audioPipeline;
         private readonly IEncodedFrameBuffer _buffer;
         private readonly EncodingSystem _encodingSystem;
         private readonly object _lock = new();
         private readonly TemporalController _temporalController = new();
+        private readonly VideoEncoderOptions _videoOptions;
         private readonly FrameProviderSubscription _videoPipeline;
         private bool _disposed;
 
@@ -66,6 +68,8 @@ namespace InstantReplay
                 null => 0
             };
 
+            _videoOptions = options.VideoOptions;
+            _audioOptions = options.AudioOptions;
             var encodingSystem = _encodingSystem = new EncodingSystem(options.VideoOptions, options.AudioOptions);
             var videoEncoder = encodingSystem.CreateVideoEncoder();
             var audioEncoder = encodingSystem.CreateAudioEncoder();
@@ -262,6 +266,50 @@ namespace InstantReplay
                 if (_buffer is DiskEncodedFrameBuffer diskBuffer)
                     diskBuffer.CleanupStorage();
                 return outputPath;
+            }
+            catch (Exception)
+            {
+                State = SessionState.Invalid;
+                throw;
+            }
+        }
+
+        /// <summary>
+        ///     Stops recording and takes the buffered footage out of the session, so that it can be previewed and exported
+        ///     over any range. Like <see cref="StopAndExportAsync" />, it can be called only once. The returned capture
+        ///     remains valid after this session is disposed and must be disposed by the caller.
+        /// </summary>
+        /// <param name="seconds">Duration to capture in seconds, counted back from the latest frame. Null captures the whole buffer.</param>
+        /// <exception cref="InvalidOperationException">The buffer holds no video key frame.</exception>
+        public async ValueTask<CapturedReplay> StopAndCaptureAsync(double? seconds = default)
+        {
+            if (seconds <= 0)
+                throw new ArgumentException("Duration must be positive", nameof(seconds));
+
+            lock (_lock)
+            {
+                if (_disposed)
+                    throw new ObjectDisposedException(nameof(RealtimeInstantReplaySession));
+
+                if (State != SessionState.Recording)
+                    throw new InvalidOperationException(
+                        $"Cannot capture when state is {State}. Capture can only be called once.");
+
+                State = SessionState.WaitForRecordingComplete;
+                _temporalController.Pause();
+            }
+
+            try
+            {
+                await Task.WhenAll(_videoPipeline.CompleteAsync().AsTask(), _audioPipeline.CompleteAsync().AsTask());
+
+                State = SessionState.Exporting;
+                var frames = await _buffer.CaptureAsync(seconds).ConfigureAwait(false);
+                if (frames == null)
+                    throw new InvalidOperationException("The buffer contains no muxable video frames.");
+
+                State = SessionState.Completed;
+                return new CapturedReplay(frames, _videoOptions, _audioOptions);
             }
             catch (Exception)
             {

@@ -134,26 +134,43 @@ namespace InstantReplay
         public static EncodedFrameSelection BuildSelection(DiskBufferScanResult scan, double? durationSeconds,
             Action<Exception> onError = null)
         {
-            if (scan == null) return default;
+            if (!TrySelectRecords(scan, durationSeconds, out var videoRecords, out var audioRecords, onError))
+                return default;
+
+            return new EncodedFrameSelection(
+                new DiskBufferRecordReader(scan.VideoMetadata, videoRecords, onError),
+                new DiskBufferRecordReader(scan.AudioMetadata, audioRecords, onError));
+        }
+
+        /// <summary>
+        ///     Selects the records that <see cref="BuildSelection" /> would mux, without opening any reader.
+        /// </summary>
+        public static bool TrySelectRecords(DiskBufferScanResult scan, double? durationSeconds,
+            out List<DiskBufferScannedRecord> videoRecords, out List<DiskBufferScannedRecord> audioRecords,
+            Action<Exception> onError = null)
+        {
+            videoRecords = null;
+            audioRecords = null;
+            if (scan == null) return false;
 
             var videoDescriptors = EncodedFrameSelector.ToDescriptors(scan.VideoSamples);
             var audioDescriptors = EncodedFrameSelector.ToDescriptors(scan.AudioSamples);
 
             if (!EncodedFrameSelector.TrySelect(videoDescriptors, audioDescriptors, scan.LatestVideoTimestamp,
                     durationSeconds, out var videoStart, out var audioStart))
-                return default;
+                return false;
 
-            var videoRecords = scan.VideoSamples.GetRange(videoStart, scan.VideoSamples.Count - videoStart);
-            var audioRecords = audioStart >= 0 && scan.AudioSamples.Count > 0
+            videoRecords = scan.VideoSamples.GetRange(videoStart, scan.VideoSamples.Count - videoStart);
+            audioRecords = audioStart >= 0 && scan.AudioSamples.Count > 0
                 ? scan.AudioSamples.GetRange(audioStart, scan.AudioSamples.Count - audioStart)
                 : new List<DiskBufferScannedRecord>();
 
             // A corrupt first sample would truncate the video stream to nothing.
-            if (!VerifyPayload(videoRecords[0], onError)) return default;
+            if (VerifyPayload(videoRecords[0], onError)) return true;
 
-            return new EncodedFrameSelection(
-                new DiskBufferRecordReader(scan.VideoMetadata, videoRecords, onError),
-                new DiskBufferRecordReader(scan.AudioMetadata, audioRecords, onError));
+            videoRecords = null;
+            audioRecords = null;
+            return false;
         }
 
         /// <summary>

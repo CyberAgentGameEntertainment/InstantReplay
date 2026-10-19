@@ -141,6 +141,14 @@ namespace InstantReplay
         /// <summary>
         ///     Gets frames for the specified duration, adjusted to start from a keyframe.
         /// </summary>
+        public ValueTask<CapturedFrames> CaptureAsync(double? durationSeconds)
+        {
+            GetFramesForDuration(durationSeconds, out var videoFrames, out var audioFrames);
+            return new ValueTask<CapturedFrames>(videoFrames.IsEmpty
+                ? null
+                : new InMemoryCapturedFrames(videoFrames.Span, audioFrames.Span, ILogger.LogExceptionCore));
+        }
+
         public void GetFramesForDuration(double? durationSeconds, out ReadOnlyMemory<EncodedFrame> videoFrames,
             out ReadOnlyMemory<EncodedFrame> audioFrames)
         {
