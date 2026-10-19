@@ -15,14 +15,21 @@ fn output_path(name: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(name)
 }
 
-#[test]
-fn encodes_and_muxes_a_playable_mp4() {
-    let config = E2eConfig::default();
-
-    match unienc_testkit::run_and_verify(&config, &output_path("e2e.mp4")) {
+fn run_and_verify(config: &E2eConfig, name: &str) {
+    match unienc_testkit::run_and_verify(config, &output_path(&format!("{name}.mp4"))) {
         // Printed unconditionally: when this fails on a machine that is not to
         // hand, the log is the only evidence of what came out.
         Ok(description) => println!("{description}"),
         Err(message) => panic!("{message}"),
     }
+}
+
+#[test]
+fn encodes_and_muxes_a_playable_mp4() {
+    run_and_verify(&E2eConfig::default(), "e2e");
+}
+
+#[test]
+fn honours_a_custom_idr_interval() {
+    run_and_verify(&E2eConfig::custom_idr_interval(), "e2e-idr-interval");
 }

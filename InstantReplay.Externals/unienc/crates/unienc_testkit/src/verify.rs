@@ -11,7 +11,7 @@
 use std::fmt;
 
 use crate::e2e::{E2eConfig, E2eReport};
-use crate::mp4::{Mp4Summary, Track, TrackKind};
+use crate::mp4::{ColorDescription, Mp4Summary, Track, TrackKind};
 
 /// An AAC frame always covers 1024 samples per channel.
 const AAC_SAMPLES_PER_FRAME: u64 = 1024;
@@ -28,6 +28,17 @@ const DURATION_TOLERANCE_SECS: f64 = 0.25;
 /// How far apart the tracks may start before playback is audibly out of sync.
 /// Encoder priming shifts one track by a few milliseconds at most.
 const SYNC_TOLERANCE_SECS: f64 = 0.05;
+
+/// How many frames an IDR frame may land away from where the configured
+/// interval puts it. FFmpeg and WebCodecs decide per frame by comparing
+/// timestamps, so floating-point rounding can push the decision one frame late,
+/// and Media Foundation rounds the interval to a whole number of frames.
+const IDR_TOLERANCE_FRAMES: u32 = 1;
+
+/// Whether the muxer on this target writes a `colr` box. muxide, which the web
+/// backend muxes with, writes none, so the SPS VUI is the only place the web
+/// output can state its color space.
+const MUXER_WRITES_COLR: bool = !cfg!(target_os = "emscripten");
 
 /// Everything that did not hold.
 #[derive(Debug)]
@@ -206,10 +217,14 @@ fn verify_video_track(
         )
     });
 
+    verify_video_color(findings, track);
+
     // A decoder joining at the start needs the first sample to be a keyframe.
     findings.check(track.is_sync_sample(1), || {
         "the first video sample is not a sync sample".to_string()
     });
+
+    verify_idr_interval(findings, track, config);
 
     let times = track.sample_times();
     let out_of_order = times.windows(2).position(|pair| pair[1] <= pair[0]);
@@ -237,6 +252,80 @@ fn verify_video_track(
             interval
         )
     });
+}
+
+/// Checks that IDR frames are as far apart as the run asked for.
+///
+/// Both bounds matter. Too long a gap is what a backend ignoring the interval
+/// produces, and it leaves `BoundedEncodedFrameBuffer` unable to cut a segment
+/// close to the requested length. Too short a gap is what a backend falling back
+/// to its own default or to the one-second interval it used to hardcode
+/// produces, which no other check would notice.
+fn verify_idr_interval(findings: &mut Findings, track: &Track, config: &E2eConfig) {
+    let expected = config.idr_interval_frames();
+    let shortest = expected.saturating_sub(IDR_TOLERANCE_FRAMES).max(1);
+    let longest = expected + IDR_TOLERANCE_FRAMES;
+
+    let sync: Vec<u32> = (1..=track.sample_count)
+        .filter(|&number| track.is_sync_sample(number))
+        .collect();
+    let describe = || {
+        format!(
+            "{} s at {} fps is an IDR frame every {} frames, but the sync samples are {:?}",
+            config.idr_interval_secs, config.fps, expected, sync
+        )
+    };
+
+    let gaps: Vec<u32> = sync.windows(2).map(|pair| pair[1] - pair[0]).collect();
+    findings.check(gaps.iter().all(|gap| *gap >= shortest), || {
+        format!("IDR frames are too close together: {}", describe())
+    });
+    findings.check(gaps.iter().all(|gap| *gap <= longest), || {
+        format!("IDR frames are too far apart: {}", describe())
+    });
+
+    // The last group of pictures is cut short by the end of the input, so only
+    // its upper bound applies.
+    if let Some(&last) = sync.last() {
+        findings.check(track.sample_count - last < longest, || {
+            format!("no IDR frame near the end: {}", describe())
+        });
+    }
+}
+
+/// Every backend converts to BT.709 limited range, so that is what the file has
+/// to declare. Without a declaration players guess, and they guess differently.
+///
+/// The container's `colr` box and the SPS VUI are checked separately because
+/// they come from different places: the box from the muxer's track format, the
+/// VUI from the encoder. Players disagree on which one wins, so wherever both
+/// are present they have to agree.
+///
+/// This checks the declaration only. Whether the pixels were converted with the
+/// matrix it names takes decoding, which this harness does not do.
+fn verify_video_color(findings: &mut Findings, track: &Track) {
+    let expected = ColorDescription::BT709_LIMITED;
+
+    match track.colr {
+        Some(colr) => findings.check(colr.is_bt709_limited(), || {
+            format!("the 'colr' box declares {colr}, expected {expected}")
+        }),
+        None => findings.check(!MUXER_WRITES_COLR, || {
+            "video track carries no 'colr' box, so players have to guess its color space"
+                .to_string()
+        }),
+    }
+
+    match track.sps_color {
+        Some(sps) => findings.check(sps.is_bt709_limited(), || {
+            format!("the SPS VUI declares {sps}, expected {expected}")
+        }),
+        None => findings.check(MUXER_WRITES_COLR, || {
+            "the SPS VUI declares no color space, and this muxer writes no 'colr' box, \
+             so nothing does"
+                .to_string()
+        }),
+    }
 }
 
 fn verify_audio_track(
@@ -299,7 +388,7 @@ pub fn describe(summary: &Mp4Summary) -> String {
     for track in &summary.tracks {
         out.push_str(&match track.kind {
             TrackKind::Video => format!(
-                "  video: {} {}x{} ({}), {} frames, start {:.3} s, {:.3} s\n",
+                "  video: {} {}x{} ({}), {} frames, {} sync, start {:.3} s, {:.3} s\n         colr: {}; SPS: {}\n",
                 track.format,
                 track.width,
                 track.height,
@@ -308,8 +397,14 @@ pub fn describe(summary: &Mp4Summary) -> String {
                     None => "no decoder config".to_string(),
                 },
                 track.sample_count,
+                match &track.sync_samples {
+                    Some(samples) => samples.len().to_string(),
+                    None => "all".to_string(),
+                },
                 track.start_time,
                 track.duration,
+                describe_color(track.colr),
+                describe_color(track.sps_color),
             ),
             TrackKind::Audio => format!(
                 "  audio: {} {} Hz {} ch, {} frames, start {:.3} s, {:.3} s, decoder config: {}\n",
@@ -325,4 +420,11 @@ pub fn describe(summary: &Mp4Summary) -> String {
         });
     }
     out
+}
+
+fn describe_color(color: Option<ColorDescription>) -> String {
+    match color {
+        Some(color) => color.to_string(),
+        None => "none".to_string(),
+    }
 }

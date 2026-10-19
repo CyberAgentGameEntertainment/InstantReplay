@@ -364,7 +364,10 @@ impl Decode<()> for VideoEncodedData {
         };
 
         if not_sync {
-            let attachments = unsafe { sample_buffer.sample_attachments_array(false) };
+            // A sample buffer built from scratch has no attachments array yet, so it has to be
+            // created here. Without it the flag is silently dropped and the muxer marks every
+            // frame as a sync sample.
+            let attachments = unsafe { sample_buffer.sample_attachments_array(true) };
             if let Some(attachments) = attachments {
                 let dict = unsafe {
                     Retained::<CFMutableDictionary<CFString, CFType>>::retain(

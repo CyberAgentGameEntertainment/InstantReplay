@@ -9,6 +9,17 @@ static LIBRARY: LazyLock<Library> = LazyLock::new(Library::new);
 
 struct Library;
 
+/// A frame in the layout the JavaScript side reads: I420 with the Y, U and V planes packed one
+/// after another, sized for `coded_width` x `coded_height`, of which the top-left `width` x
+/// `height` is the picture.
+pub struct I420Frame<'a> {
+    pub data: &'a [u8],
+    pub width: u32,
+    pub height: u32,
+    pub coded_width: u32,
+    pub coded_height: u32,
+}
+
 pub struct VideoEncoderHandle {
     id: i32,
     callback: *mut Box<dyn Fn(&[u8], f64, bool)>,
@@ -32,13 +43,11 @@ impl VideoEncoderHandle {
 
     pub fn push_video_frame(
         &self,
-        data: &[u8],
-        width: u32,
-        height: u32,
+        frame: &I420Frame<'_>,
         timestamp: f64,
         is_key: bool,
     ) -> Result<(), JavaScriptError> {
-        LIBRARY.push_video_frame(self.id, data, width, height, timestamp, is_key)
+        LIBRARY.push_video_frame(self.id, frame, timestamp, is_key)
     }
 
     pub async fn flush(&self) -> Result<(), JavaScriptError> {
@@ -249,9 +258,7 @@ impl Library {
     fn push_video_frame(
         &self,
         encoder_index: i32,
-        data: &[u8],
-        width: u32,
-        height: u32,
+        frame: &I420Frame<'_>,
         timestamp: f64,
         is_key: bool,
     ) -> Result<(), JavaScriptError> {
@@ -262,13 +269,19 @@ impl Library {
             const dataLength = {data_length};
             const width = {width};
             const height = {height};
+            const codedWidth = {coded_width};
+            const codedHeight = {coded_height};
             const timestamp = {timestamp};
             const isKey = {is_key};
             const dataArray = Module.HEAPU8.subarray(dataPtr, dataPtr + dataLength);
-            window.unienc_webcodecs.video.push(encoderIndex, dataArray, {{width, height, timestamp, isKey}});
+            window.unienc_webcodecs.video.push(encoderIndex, dataArray, {{width, height, codedWidth, codedHeight, timestamp, isKey}});
             ",
-            data_ptr = data.as_ptr() as usize,
-            data_length = data.len(),
+            data_ptr = frame.data.as_ptr() as usize,
+            data_length = frame.data.len(),
+            width = frame.width,
+            height = frame.height,
+            coded_width = frame.coded_width,
+            coded_height = frame.coded_height,
             timestamp = timestamp
         );
         self.run_script(&script)

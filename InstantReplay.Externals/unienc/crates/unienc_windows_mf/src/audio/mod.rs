@@ -53,6 +53,7 @@ impl MediaFoundationAudioEncoder {
             },
             input_type,
             output_type,
+            &|_| {},
             runtime,
         )?;
 

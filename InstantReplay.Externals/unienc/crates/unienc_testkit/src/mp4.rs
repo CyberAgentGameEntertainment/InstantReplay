@@ -11,9 +11,19 @@ use std::fmt;
 
 #[derive(Debug)]
 pub enum Mp4Error {
-    Truncated { at: usize, need: usize },
+    Truncated {
+        at: usize,
+        need: usize,
+    },
     MissingBox(&'static str),
-    UnsupportedVersion { box_type: &'static str, version: u8 },
+    UnsupportedVersion {
+        box_type: &'static str,
+        version: u8,
+    },
+    Malformed {
+        what: &'static str,
+        reason: &'static str,
+    },
 }
 
 impl fmt::Display for Mp4Error {
@@ -26,6 +36,7 @@ impl fmt::Display for Mp4Error {
             Mp4Error::UnsupportedVersion { box_type, version } => {
                 write!(f, "unsupported '{box_type}' version {version}")
             }
+            Mp4Error::Malformed { what, reason } => write!(f, "malformed {what}: {reason}"),
         }
     }
 }
@@ -70,6 +81,12 @@ pub struct Track {
     /// the web it is negotiated with the browser at run time — so this reports
     /// what the file actually contains.
     pub avc_profile: Option<AvcProfile>,
+    /// Color description from the sample entry's `colr` box. `None` when the
+    /// box is absent or describes color with an ICC profile instead.
+    pub colr: Option<ColorDescription>,
+    /// Color description from the VUI of the SPS in `avcC`. `None` when the SPS
+    /// signals no video type, which leaves the color space to the player.
+    pub sps_color: Option<ColorDescription>,
     pub timescale: u32,
     /// Track duration in seconds, from `mdhd`.
     ///
@@ -178,6 +195,8 @@ fn parse_track(trak: &[u8], movie_timescale: u32) -> Result<Track> {
         format: entry.format,
         has_decoder_config: entry.has_decoder_config,
         avc_profile: entry.avc_profile,
+        colr: entry.colr,
+        sps_color: entry.sps_color,
         timescale,
         duration: duration as f64 / timescale.max(1) as f64,
         width: entry.width,
@@ -253,11 +272,76 @@ impl fmt::Display for AvcProfile {
     }
 }
 
+/// A color space as ITU-T H.273 code points, which `colr` boxes and H.264 VUI
+/// share.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ColorDescription {
+    pub primaries: u16,
+    pub transfer: u16,
+    pub matrix: u16,
+    /// `None` for a QuickTime `nclc` box, which has no range flag.
+    pub full_range: Option<bool>,
+}
+
+impl ColorDescription {
+    /// BT.709 primaries, transfer and matrix in limited range, which is what
+    /// every backend is meant to produce.
+    pub const BT709_LIMITED: Self = Self {
+        primaries: 1,
+        transfer: 1,
+        matrix: 1,
+        full_range: Some(false),
+    };
+
+    /// True when this describes BT.709 in limited range. A QuickTime `nclc`
+    /// box states no range and is taken as limited, which is how QuickTime
+    /// defines it.
+    pub fn is_bt709_limited(&self) -> bool {
+        self.primaries == 1
+            && self.transfer == 1
+            && self.matrix == 1
+            && self.full_range != Some(true)
+    }
+}
+
+impl fmt::Display for ColorDescription {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "primaries {}, transfer {}, matrix {}, ",
+            self.primaries, self.transfer, self.matrix
+        )?;
+        match self.full_range {
+            Some(true) => write!(f, "full range"),
+            Some(false) => write!(f, "limited range"),
+            None => write!(f, "range unstated"),
+        }
+    }
+}
+
+/// Reads an `nclx` (ISO/IEC 14496-12) or `nclc` (QuickTime) `colr` body.
+fn parse_colr(colr: &[u8]) -> Result<Option<ColorDescription>> {
+    let full_range = match &read_array::<4>(colr, 0)? {
+        b"nclx" => Some(read_array::<1>(colr, 10)?[0] & 0x80 != 0),
+        b"nclc" => None,
+        // An ICC profile does not reduce to code points.
+        _ => return Ok(None),
+    };
+    Ok(Some(ColorDescription {
+        primaries: read_u16(colr, 4)?,
+        transfer: read_u16(colr, 6)?,
+        matrix: read_u16(colr, 8)?,
+        full_range,
+    }))
+}
+
 #[derive(Default)]
 struct SampleEntry {
     format: String,
     has_decoder_config: bool,
     avc_profile: Option<AvcProfile>,
+    colr: Option<ColorDescription>,
+    sps_color: Option<ColorDescription>,
     width: u32,
     height: u32,
     sample_rate: u32,
@@ -317,7 +401,15 @@ impl SampleEntry {
                         if let (Some(&profile), Some(&level)) = (body.get(1), body.get(3)) {
                             parsed.avc_profile = Some(AvcProfile { profile, level });
                         }
+                        parsed.sps_color =
+                            crate::h264::sps_color_from_avcc(body).map_err(|reason| {
+                                Mp4Error::Malformed {
+                                    what: "SPS",
+                                    reason,
+                                }
+                            })?;
                     }
+                    b"colr" => parsed.colr = parse_colr(body)?,
                     b"esds" => parsed.has_decoder_config = true,
                     _ => {}
                 }

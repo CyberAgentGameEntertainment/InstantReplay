@@ -1,4 +1,4 @@
-use crate::js::VideoEncoderHandle;
+use crate::js::{I420Frame, VideoEncoderHandle};
 use bincode::{Decode, Encode};
 use futures::StreamExt;
 use futures::channel::mpsc;
@@ -20,6 +20,7 @@ pub struct WebCodecsVideoEncoderInput<R: Runtime> {
     fps_hint: f64,
     tx: mpsc::Sender<VideoEncodedData>,
     prev_key_timestamp: Option<f64>,
+    idr_interval_seconds: f64,
     runtime: R,
 }
 
@@ -49,6 +50,8 @@ impl<R: Runtime> WebCodecsVideoEncoder<R> {
                 encoder_handle: None,
                 tx,
                 prev_key_timestamp: None,
+                // WebCodecs has no GOP-length knob, so keyframes are requested per frame.
+                idr_interval_seconds: options.idr_interval_seconds() as f64,
                 runtime: runtime.clone(),
             },
             output: WebCodecsVideoEncoderOutput { rx },
@@ -103,21 +106,31 @@ impl<R: Runtime + 'static> EncoderInput for WebCodecsVideoEncoderInput<R> {
 
         let encoder_handle = self.encoder_handle.as_ref().unwrap();
 
-        let pixels = &frame.buffer.data()[..frame.buffer.len()];
+        // Converted here rather than by the browser, whose choice of YUV color space for an
+        // RGB frame varies between versions. I420 needs even dimensions, so odd ones are padded
+        // and the padding is cropped off again by the frame's visible rectangle.
+        let coded_width = frame.width.next_multiple_of(2);
+        let coded_height = frame.height.next_multiple_of(2);
+        let i420 = frame.to_i420(Some((coded_width, coded_height)))?;
         let since_prev_key = match self.prev_key_timestamp {
             Some(prev) => data.timestamp - prev,
             None => f64::INFINITY,
         };
-        if since_prev_key >= 1.0 {
+        let is_key = since_prev_key >= self.idr_interval_seconds;
+        if is_key {
             self.prev_key_timestamp = Some(data.timestamp);
         }
         encoder_handle
             .push_video_frame(
-                pixels,
-                frame.width,
-                frame.height,
+                &I420Frame {
+                    data: &i420,
+                    width: frame.width,
+                    height: frame.height,
+                    coded_width,
+                    coded_height,
+                },
                 data.timestamp,
-                since_prev_key >= 1.0,
+                is_key,
             )
             .context("Failed to push video frame to WebCodecs EncoderHandle")?;
         Ok(())
