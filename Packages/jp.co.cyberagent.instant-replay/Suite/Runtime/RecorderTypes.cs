@@ -81,4 +81,16 @@ namespace InstantReplay.Suite
         /// <summary>Key-value pairs stored with the recording.</summary>
         public IReadOnlyDictionary<string, string> Metadata { get; set; }
     }
+
+    /// <summary>
+    ///     Parameters of <see cref="RecordingLibrary.ImportRecoveredAsync" />.
+    /// </summary>
+    public sealed class RecoveryImportRequest
+    {
+        /// <summary>Seconds to export, counted back from the end of the recovered footage. Null exports all of it.</summary>
+        public double? DurationSeconds { get; set; }
+
+        /// <summary>Key-value pairs stored with the recording.</summary>
+        public IReadOnlyDictionary<string, string> Metadata { get; set; }
+    }
 }

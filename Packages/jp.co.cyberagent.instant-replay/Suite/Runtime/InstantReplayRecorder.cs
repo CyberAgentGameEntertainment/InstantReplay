@@ -5,7 +5,6 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using UnityEngine;
@@ -72,7 +71,15 @@ namespace InstantReplay.Suite
             _frameSlot = new ProviderSlot<IFrameProvider>(static () => new ScreenshotFrameProvider());
             _audioSlot = new ProviderSlot<IAudioSampleProvider>(static () => new UnityAudioSampleProvider());
 
-            Library = new RecordingLibrary(_settings.ResolveOutputDirectory());
+            Library = new RecordingLibrary(_settings.ResolveOutputDirectory(), _settings.MaxRecordings,
+                (long)_settings.MaxTotalMegabytes * 1024 * 1024);
+
+            var shareTargets = new List<ShareTarget>();
+            if (_settings.ShareTargets != null)
+                foreach (var target in _settings.ShareTargets)
+                    if (target != null)
+                        shareTargets.Add(target);
+            ShareTargets = shareTargets;
         }
 
         public InstantReplaySuiteSettings Settings => _settings;
@@ -106,6 +113,13 @@ namespace InstantReplay.Suite
 
         public RecordingLibrary Library { get; }
 
+        /// <summary>
+        ///     Destinations offered when the user shares a recording, initialized from
+        ///     <see cref="InstantReplaySuiteSettings.ShareTargets" />. Targets can be added at runtime, for example to
+        ///     supply credentials that are not stored in the build.
+        /// </summary>
+        public IList<ShareTarget> ShareTargets { get; }
+
         /// <summary>Raised when <see cref="State" /> changes.</summary>
         public event Action<RecorderState> StateChanged;
 
@@ -129,7 +143,7 @@ namespace InstantReplay.Suite
                 {
                     _unbounded.Fail(new ObjectDisposedException(nameof(InstantReplayRecorder)));
                     // The file cannot be finalized synchronously and would not be playable.
-                    DeleteQuietly(_unbounded.OutputPath);
+                    Library.Abandon(_unbounded.OutputPath);
                     _unbounded = null;
                 }
             }
@@ -306,7 +320,7 @@ namespace InstantReplay.Suite
             finally
             {
                 DisposeQuietly(session);
-                if (!completed) DeleteQuietly(path);
+                if (!completed) Library.Abandon(path);
                 if (!_disposed) ResumeAfterRecording();
             }
         }
@@ -338,7 +352,7 @@ namespace InstantReplay.Suite
             catch (Exception ex)
             {
                 LastException = ex;
-                DeleteQuietly(path);
+                Library.Abandon(path);
                 ResumeAfterRecording();
                 throw;
             }
@@ -440,7 +454,7 @@ namespace InstantReplay.Suite
             finally
             {
                 DisposeQuietly(session);
-                if (!completed) DeleteQuietly(recording.OutputPath);
+                if (!completed) Library.Abandon(recording.OutputPath);
                 _unbounded = null;
                 if (!_disposed) ResumeAfterRecording();
             }
@@ -529,7 +543,7 @@ namespace InstantReplay.Suite
                 {
                     _unbounded.Fail(exception);
                     // The file was not finalized and cannot be played.
-                    DeleteQuietly(_unbounded.OutputPath);
+                    Library.Abandon(_unbounded.OutputPath);
                     _unbounded = null;
                 }
 
@@ -654,18 +668,6 @@ namespace InstantReplay.Suite
             try
             {
                 disposable.Dispose();
-            }
-            catch (Exception ex)
-            {
-                ILogger.LogExceptionCore(ex);
-            }
-        }
-
-        private static void DeleteQuietly(string path)
-        {
-            try
-            {
-                if (File.Exists(path)) File.Delete(path);
             }
             catch (Exception ex)
             {

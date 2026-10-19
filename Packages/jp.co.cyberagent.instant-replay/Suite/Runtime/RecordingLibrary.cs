@@ -6,6 +6,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
+using System.Threading.Tasks;
 using UnityEngine;
 
 namespace InstantReplay.Suite
@@ -72,9 +73,17 @@ namespace InstantReplay.Suite
         private const string VideoExtension = ".mp4";
         private const string SidecarExtension = ".json";
 
-        internal RecordingLibrary(string directoryPath)
+        private readonly int _maxRecordings;
+        private readonly long _maxTotalBytes;
+
+        // Files being written are not recordings yet, so they are hidden from the listing and from retention.
+        private readonly HashSet<string> _pendingPaths = new(StringComparer.Ordinal);
+
+        internal RecordingLibrary(string directoryPath, int maxRecordings = 0, long maxTotalBytes = 0)
         {
             DirectoryPath = directoryPath;
+            _maxRecordings = maxRecordings;
+            _maxTotalBytes = maxTotalBytes;
         }
 
         /// <summary>Absolute path of the directory that holds the recordings.</summary>
@@ -93,6 +102,8 @@ namespace InstantReplay.Suite
             if (!Directory.Exists(DirectoryPath)) return entries;
 
             foreach (var videoPath in Directory.GetFiles(DirectoryPath, "*" + VideoExtension))
+            {
+                if (_pendingPaths.Contains(videoPath)) continue;
                 try
                 {
                     entries.Add(ReadEntry(videoPath));
@@ -101,6 +112,7 @@ namespace InstantReplay.Suite
                 {
                     ILogger.LogExceptionCore(ex);
                 }
+            }
 
             entries.Sort((a, b) => b.CreatedAtUtc.CompareTo(a.CreatedAtUtc));
             return entries;
@@ -112,10 +124,40 @@ namespace InstantReplay.Suite
         public void Delete(RecordingEntry entry)
         {
             if (entry == null) throw new ArgumentNullException(nameof(entry));
+            DeleteFiles(entry);
+            Changed?.Invoke();
+        }
+
+        private static void DeleteFiles(RecordingEntry entry)
+        {
             DeleteIfExists(entry.FilePath);
             DeleteIfExists(GetSidecarPath(entry.FilePath));
             if (!string.IsNullOrEmpty(entry.ThumbnailPath)) DeleteIfExists(entry.ThumbnailPath);
-            Changed?.Invoke();
+        }
+
+        /// <summary>
+        ///     Exports a disk buffer left behind by an abnormal termination into the library as a
+        ///     <see cref="RecordingSource.Recovered" /> recording. The recovered session is kept; call
+        ///     <see cref="DiskEncodedFrameBufferRecovery.Delete" /> once it is no longer needed.
+        /// </summary>
+        /// <remarks>Call it on the main thread. <see cref="Changed" /> is raised on the main thread when it completes.</remarks>
+        public async ValueTask<RecordingEntry> ImportRecoveredAsync(DiskEncodedFrameBufferRecovery recovery,
+            RecoveryImportRequest request = null)
+        {
+            if (recovery == null) throw new ArgumentNullException(nameof(recovery));
+
+            var path = CreateOutputPath(RecordingSource.Recovered);
+            var completed = false;
+            try
+            {
+                await recovery.ExportAsync(request?.DurationSeconds, path);
+                completed = true;
+                return Add(path, RecordingSource.Recovered, recovery.StartedAtUtc, 0, request?.Metadata);
+            }
+            finally
+            {
+                if (!completed) Abandon(path);
+            }
         }
 
         internal string CreateOutputPath(RecordingSource source)
@@ -131,12 +173,31 @@ namespace InstantReplay.Suite
             var path = Path.Combine(DirectoryPath, stem + VideoExtension);
             for (var i = 1; File.Exists(path); i++)
                 path = Path.Combine(DirectoryPath, $"{stem}_{i}{VideoExtension}");
+            _pendingPaths.Add(path);
             return path;
+        }
+
+        /// <summary>
+        ///     Deletes a file returned by <see cref="CreateOutputPath" /> that could not be completed.
+        /// </summary>
+        internal void Abandon(string filePath)
+        {
+            _pendingPaths.Remove(filePath);
+            try
+            {
+                DeleteIfExists(filePath);
+            }
+            catch (Exception ex)
+            {
+                ILogger.LogExceptionCore(ex);
+            }
         }
 
         internal RecordingEntry Add(string filePath, RecordingSource source, DateTime createdAtUtc,
             double durationSeconds, IReadOnlyDictionary<string, string> metadata)
         {
+            _pendingPaths.Remove(filePath);
+
             var sidecar = new Sidecar
             {
                 version = Sidecar.CurrentVersion,
@@ -158,8 +219,41 @@ namespace InstantReplay.Suite
             }
 
             var entry = ReadEntry(filePath);
+            ApplyRetention(entry);
             Changed?.Invoke();
             return entry;
+        }
+
+        // Deletes the oldest recordings beyond the configured count or total size. The recording just added is kept even
+        // when it alone exceeds the size, because deleting what the user has just saved would be surprising.
+        private void ApplyRetention(RecordingEntry added)
+        {
+            if (_maxRecordings <= 0 && _maxTotalBytes <= 0) return;
+
+            var entries = GetEntries();
+            var count = 0;
+            long total = 0;
+            foreach (var entry in entries)
+            {
+                var keep = entry.FilePath == added.FilePath ||
+                           ((_maxRecordings <= 0 || count < _maxRecordings) &&
+                            (_maxTotalBytes <= 0 || total + entry.SizeBytes <= _maxTotalBytes));
+                if (keep)
+                {
+                    count++;
+                    total += entry.SizeBytes;
+                    continue;
+                }
+
+                try
+                {
+                    DeleteFiles(entry);
+                }
+                catch (Exception ex)
+                {
+                    ILogger.LogExceptionCore(ex);
+                }
+            }
         }
 
         private static RecordingEntry ReadEntry(string videoPath)

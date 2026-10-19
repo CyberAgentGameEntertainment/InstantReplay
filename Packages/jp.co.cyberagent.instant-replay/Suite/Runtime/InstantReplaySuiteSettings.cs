@@ -21,8 +21,18 @@ namespace InstantReplay.Suite
         [Tooltip("Relative paths are resolved against Application.persistentDataPath.")] [SerializeField]
         private string outputDirectory = "InstantReplay/Recordings";
 
+        [Tooltip("Oldest recordings are deleted beyond this number. Zero keeps every recording.")] [SerializeField]
+        private int maxRecordings;
+
+        [Tooltip("Oldest recordings are deleted beyond this total size in MiB. Zero keeps every recording.")]
+        [SerializeField]
+        private int maxTotalMegabytes;
+
         [Tooltip("Remember the preset and the buffering toggle chosen by the user across launches.")] [SerializeField]
         private bool persistUserPreferences = true;
+
+        [Tooltip("Destinations offered when the user shares a recording.")] [SerializeField]
+        private List<ShareTarget> shareTargets = new();
 
         public List<RecordingPreset> Presets => presets;
 
@@ -51,11 +61,37 @@ namespace InstantReplay.Suite
             set => outputDirectory = value;
         }
 
+        /// <summary>
+        ///     Number of recordings the library keeps. When a recording is added beyond it, the oldest ones are deleted.
+        ///     Zero or less keeps every recording. Read when the recorder is created.
+        /// </summary>
+        public int MaxRecordings
+        {
+            get => maxRecordings;
+            set => maxRecordings = value;
+        }
+
+        /// <summary>
+        ///     Total size in MiB of the recordings the library keeps. When a recording is added beyond it, the oldest ones
+        ///     are deleted; the recording just added is always kept. Zero or less keeps every recording. Read when the
+        ///     recorder is created.
+        /// </summary>
+        public int MaxTotalMegabytes
+        {
+            get => maxTotalMegabytes;
+            set => maxTotalMegabytes = value;
+        }
+
         public bool PersistUserPreferences
         {
             get => persistUserPreferences;
             set => persistUserPreferences = value;
         }
+
+        /// <summary>
+        ///     Share targets the recorder starts with. See <see cref="InstantReplayRecorder.ShareTargets" />.
+        /// </summary>
+        public List<ShareTarget> ShareTargets => shareTargets;
 
         /// <summary>
         ///     Returns the preset with the given identifier, or null.
