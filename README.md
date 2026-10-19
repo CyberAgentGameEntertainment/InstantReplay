@@ -155,6 +155,8 @@ Recording uses memory in two places: buffers for compressed output, and buffers 
 
 `VideoInputQueueSize`, `AudioInputQueueSizeSeconds`, and `MaxNumberOfRawFrameBuffers` (optional) control how many raw frames and audio samples are queued for encoding. These queues are needed because the encoder runs asynchronously, receiving the next frame while encoding the current one. Reducing these values decreases memory usage but may increase the likelihood of dropped frames.
 
+`IdrIntervalSeconds` sets the maximum interval between IDR (key) frames. An export can only begin at a key frame, so this bounds how closely `StopAndExportAsync` can match the requested duration. `null` applies `VideoEncoderOptions.DefaultIdrIntervalSeconds`, which is one second, rather than deferring to the platform encoder, whose own default differs per platform and may be considerably longer. A longer interval spends less of the bitrate on key frames, but an interval longer than the retained duration can leave the buffer with no key frame to start from, in which case the export produces nothing.
+
 ```csharp
 // Default settings
 var options = new RealtimeEncodingOptions
@@ -164,7 +166,8 @@ var options = new RealtimeEncodingOptions
         Width = 1280,
         Height = 720,
         FpsHint = 30,
-        Bitrate = 2500000 // 2.5 Mbps
+        Bitrate = 2500000, // 2.5 Mbps
+        IdrIntervalSeconds = 1f // Max interval between IDR (key) frames in seconds. null applies the default of 1 second.
     },
     AudioOptions = new AudioEncoderOptions
     {

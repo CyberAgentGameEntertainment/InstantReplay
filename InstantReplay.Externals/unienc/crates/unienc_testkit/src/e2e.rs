@@ -46,6 +46,9 @@ pub struct E2eConfig {
     /// zero, so a pipeline that quietly assumes a zero-based timeline has to
     /// fail here.
     pub timestamp_offset: f64,
+    /// Longest stretch, in seconds, the video encoder is asked to go without an
+    /// IDR frame.
+    pub idr_interval_secs: f32,
 }
 
 impl Default for E2eConfig {
@@ -60,6 +63,8 @@ impl Default for E2eConfig {
             audio_bitrate: 128_000,
             duration_secs: 10,
             timestamp_offset: 100.0,
+            // The interval every backend applied before it became configurable.
+            idr_interval_secs: 1.0,
         }
     }
 }
@@ -68,6 +73,39 @@ impl E2eConfig {
     /// Number of frames the run pushes into the video encoder.
     pub fn video_frames(&self) -> u32 {
         self.duration_secs * self.fps
+    }
+
+    /// Number of frames from one IDR frame to the next that the configured
+    /// interval amounts to.
+    pub fn idr_interval_frames(&self) -> u32 {
+        ((self.idr_interval_secs as f64 * self.fps as f64).round() as u32).max(1)
+    }
+
+    /// A run with a key-frame interval other than the default.
+    ///
+    /// At the default one frame per second every frame is a keyframe whatever
+    /// the interval, so this one raises the frame rate. The interval is not a
+    /// whole number of seconds either, so a backend that truncates or rounds it
+    /// to an integer, as `MediaFormat.setInteger` would, ends up with a
+    /// different spacing and fails the check.
+    pub fn custom_idr_interval() -> Self {
+        Self {
+            fps: 10,
+            duration_secs: 6,
+            idr_interval_secs: 1.5,
+            ..Self::default()
+        }
+    }
+
+    /// Every run a driver makes, each with the base name of its output file.
+    ///
+    /// A driver that cannot be a `cargo test`, such as the Android or browser
+    /// harness, iterates this so that it covers the same runs as the desktop.
+    pub fn cases() -> [(&'static str, Self); 2] {
+        [
+            ("e2e", Self::default()),
+            ("e2e-idr-interval", Self::custom_idr_interval()),
+        ]
     }
 }
 

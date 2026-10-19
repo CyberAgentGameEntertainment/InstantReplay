@@ -6,6 +6,7 @@ pub struct TestVideoOptions {
     pub height: u32,
     pub fps_hint: u32,
     pub bitrate: u32,
+    pub idr_interval_seconds: f32,
 }
 
 impl From<&E2eConfig> for TestVideoOptions {
@@ -15,6 +16,7 @@ impl From<&E2eConfig> for TestVideoOptions {
             height: config.height,
             fps_hint: config.fps,
             bitrate: config.video_bitrate,
+            idr_interval_seconds: config.idr_interval_secs,
         }
     }
 }
@@ -34,6 +36,10 @@ impl unienc_common::VideoEncoderOptions for TestVideoOptions {
 
     fn bitrate(&self) -> u32 {
         self.bitrate
+    }
+
+    fn idr_interval_seconds(&self) -> f32 {
+        self.idr_interval_seconds
     }
 }
 
