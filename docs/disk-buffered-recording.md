@@ -213,11 +213,9 @@ a separate journal:
    in the file, stop. The same applies to an out-of-range track or kind, or a non-finite timestamp.
 4. Accept the record and continue.
 
-Scanning reads headers only and seeks over payloads, so it does not have to read the whole buffer.
-The checksum is verified when a payload is read for muxing; a record whose checksum does not match
-truncates the stream there, because a decoder cannot proceed past a corrupt sample. Scanning stops
-at the first record that cannot be complete, rather than skipping it and continuing, so a stream
-with a hole in the middle is never produced.
+Scanning reads headers only and seeks over payloads, so it does not have to read the whole buffer. The checksum is verified when a payload is read for muxing, which happens while the output file is being written; a record whose checksum does not match truncates its stream at that point, because a decoder cannot proceed past a corrupt sample. The first selected video sample is read and verified before the muxer is created, so a buffer whose video stream would be empty is rejected without producing an output file. Scanning stops at the first record that cannot be complete, rather than skipping it and continuing, so a stream with a hole in the middle is never produced.
+
+Export reads the selected payloads one at a time and passes each to the muxer before reading the next. The video and audio streams are read concurrently through separate file handles, and the muxer applies backpressure to both, so the memory used by an export is bounded by the muxer's queues rather than by the size of the buffer. The session directory must therefore remain in place until the export has finished reading it; both export paths delete it only afterwards.
 
 ## 4. Recovery API
 
@@ -304,8 +302,7 @@ clutter in the user's file browser.
 
 ## 6. Relationship to the In-Memory Buffer
 
-When `DiskBuffer` is set, the disk buffer replaces the in-memory buffer rather than augmenting it.
-Encoded payloads are held in memory only while they sit in the write queue.
+When `DiskBuffer` is set, the disk buffer replaces the in-memory buffer rather than augmenting it. Encoded payloads are held in memory only while they sit in the write queue, and, during export, while an individual payload is being passed to the muxer.
 
 Both implementations satisfy `IEncodedFrameBuffer`, so the pipeline construction in
 `RealtimeInstantReplaySession` differs only in which implementation it instantiates.
@@ -315,6 +312,8 @@ rebasing timestamps to zero, and prepending the codec configuration — is ident
 implemented once in `EncodedFrameSelector`. The disk implementation reads its records back from the
 files rather than keeping a parallel in-memory index, so the live export path and the crash-recovery
 path run the same reader and the same selection, and every export exercises the recovery code.
+
+Both implementations present the selection to the muxer as one sequential reader per stream. The in-memory implementation reads from frames it already holds, while the disk implementation holds only the scanned record locations and reads each payload when the muxer requests it.
 
 ## 7. I/O Threading
 
@@ -337,7 +336,7 @@ Shutdown order, on both `Dispose` and export:
 1. Stop accepting new frames.
 2. Complete the queue and join the writer thread, so every accepted frame reaches a file.
 3. Flush the open segment to the storage device and close it.
-4. For export, read the files back and select frames.
+4. For export, scan the files, select frames, and stream the selected payloads to the muxer.
 5. On `Dispose`, delete the session directory unless `RetainOnDispose` is set. After a successful
    export the directory is deleted, because the exported file supersedes it.
 
@@ -354,18 +353,9 @@ dotnet run
 The project links the storage-layer sources rather than copying them, so a UnityEngine reference
 added to one of those files breaks the build, which is the intended guard.
 
-The checks cover the record round trip, recovery from a file truncated in the middle of a payload
-and from one truncated in the middle of a record header, detection of a corrupt payload by checksum,
-the hard bound on disk usage under sustained eviction, survival of the codec configuration across
-eviction of every segment, deduplication of repeated configuration, the key-frame alignment of
-segment boundaries, the manifest round trip, and frame selection.
+The checks cover the record round trip, recovery from a file truncated in the middle of a payload and from one truncated in the middle of a record header, detection of a corrupt payload by checksum, the hard bound on disk usage under sustained eviction, survival of the codec configuration across eviction of every segment, deduplication of repeated configuration, the key-frame alignment of segment boundaries, the manifest round trip, and frame selection. Further checks confirm that payloads are read while the selection is consumed rather than all at once beforehand, by corrupting a record after reading has begun and observing that the stream ends at that record, and that a selection whose first video key frame is corrupt is empty, so that export fails before a muxer is created.
 
-The final check is an end-to-end run: it drives the real platform encoder, persists every encoded
-frame through the disk buffer, reads the buffer back from the files and the manifest alone, and
-muxes the result. It is skipped when the native library for the running platform is absent. On macOS
-it produces a valid MP4 that `ffprobe` reports as H.264 with the expected frame count alongside an
-AAC track, and that `ffmpeg` decodes without error. This is the check that validates the premise of
-the feature.
+The final check is an end-to-end run: it drives the real platform encoder, persists every encoded frame through the disk buffer, reads the buffer back from the files and the manifest alone, and muxes the result. It then muxes the same buffer a second time while corrupting a video payload after muxing has begun, and confirms that the muxer completes with the video stream ending at the corrupt record. It is skipped when the native library for the running platform is absent. On macOS it produces a valid MP4 that `ffprobe` reports as H.264 with the expected frame count alongside an AAC track, and that `ffmpeg` decodes without error. This is the check that validates the premise of the feature.
 
 ## 9. Risks and Open Questions
 
