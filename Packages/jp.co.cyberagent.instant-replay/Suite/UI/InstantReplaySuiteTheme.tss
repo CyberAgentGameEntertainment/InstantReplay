@@ -1,1 +1,36 @@
 @import url("unity-theme://default");
+
+/* Drop-down menus open at the root of the panel, outside the elements that the suite style sheet applies to. */
+
+.unity-base-dropdown__container-outer {
+    border-radius: 8px;
+    border-width: 1px;
+    border-color: rgb(52, 55, 62);
+    background-color: rgb(30, 33, 39);
+}
+
+.unity-base-dropdown__container-inner {
+    margin: 4px;
+    border-width: 0;
+    background-color: rgba(0, 0, 0, 0);
+}
+
+.unity-base-dropdown__item {
+    min-height: 28px;
+    padding: 0 8px;
+    border-radius: 6px;
+}
+
+.unity-base-dropdown__item:hover,
+.unity-base-dropdown__item:hover:enabled {
+    background-color: rgb(46, 49, 57);
+}
+
+.unity-base-dropdown__label {
+    color: rgb(236, 238, 242);
+    font-size: 13px;
+}
+
+.unity-base-dropdown__checkmark {
+    -unity-background-image-tint-color: rgb(62, 196, 136);
+}

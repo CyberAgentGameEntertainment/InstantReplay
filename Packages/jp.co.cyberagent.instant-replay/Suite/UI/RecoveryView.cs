@@ -82,7 +82,7 @@ namespace InstantReplay.Suite.UI
 
             var buttons = new VisualElement();
             buttons.AddToClassList("irs-panel__row");
-            buttons.Add(new Button(() => Recover(recovery)) { text = "Recover" });
+            buttons.Add(new Button(() => Recover(recovery)) { text = "Recover" }.WithClass(Controls.Primary));
             buttons.Add(new ConfirmButton("Delete", () => Delete(recovery)));
             row.Add(buttons);
             return row;

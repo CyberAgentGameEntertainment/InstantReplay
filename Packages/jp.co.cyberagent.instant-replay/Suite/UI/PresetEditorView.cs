@@ -87,11 +87,11 @@ namespace InstantReplay.Suite.UI
                     ? BufferSpec.Disk(Math.Max(1, v))
                     : BufferSpec.InMemory(Math.Max(1, v)));
 
-            _forceReadback = new Toggle("Force readback");
+            _forceReadback = new Toggle("Force readback").AsSwitch();
             _forceReadback.RegisterValueChangedCallback(e => Apply(p => p.ForceReadback = e.newValue));
             Root.Add(_forceReadback);
 
-            _resetButton = new Button(ResetToBase) { text = "Reset to preset" };
+            _resetButton = new Button(ResetToBase) { text = "Reset to preset" }.WithClass(Controls.Ghost);
             Root.Add(_resetButton);
         }
 

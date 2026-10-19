@@ -77,7 +77,8 @@ namespace InstantReplay.Suite.UI
             _selectionBar.Add(_selectAllToggle);
             _selectionBar.Add(_deleteCheckedButton);
             toolbar.Add(_selectionBar);
-            _selectButton = new Button(() => SetSelectionMode(!_selectionMode)) { text = "Select" };
+            _selectButton = new Button(() => SetSelectionMode(!_selectionMode)) { text = "Select" }
+                .WithClass(Controls.Ghost);
             _selectButton.AddToClassList("irs-library__select");
             toolbar.Add(_selectButton);
             _listSection.Add(toolbar);
@@ -98,7 +99,7 @@ namespace InstantReplay.Suite.UI
             _detail.AddToClassList("irs-library__detail");
             Root.Add(_detail);
 
-            var back = new Button(CloseDetail) { text = "‹ Recordings" };
+            var back = new Button(CloseDetail) { text = "‹ Recordings" }.WithClass(Controls.Ghost);
             back.AddToClassList("irs-library__back");
             _detail.Add(back);
 
@@ -126,7 +127,7 @@ namespace InstantReplay.Suite.UI
             _shareTarget.RegisterValueChangedCallback(_ => RefreshShare());
             _shareComment = new TextField("Comment") { multiline = true };
             _shareComment.AddToClassList("irs-library__comment");
-            _shareButton = new Button(ToggleShare) { text = "Share" };
+            _shareButton = new Button(ToggleShare) { text = "Share" }.WithClass(Controls.Primary);
             _shareStatus = new Label();
             _shareStatus.AddToClassList("irs-panel__details");
             _openResultButton = new Button(() =>

@@ -25,6 +25,7 @@ namespace InstantReplay.Suite.UI
             _label = label;
             _action = action;
             text = label;
+            AddToClassList(Controls.Danger);
             clicked += OnClicked;
         }
 

@@ -17,6 +17,7 @@ namespace InstantReplay.Suite.UI
         private const long TickIntervalMs = 50;
         private const double MinimumLengthSeconds = 0.1;
         private const int ThumbnailLongSide = 320;
+        private const long LeaveTransitionMs = 180;
 
         private readonly Button _cancelButton;
         private readonly ReplayDraft _draft;
@@ -122,12 +123,15 @@ namespace InstantReplay.Suite.UI
             actions.AddToClassList("irs-panel__row");
             actions.AddToClassList("irs-panel__section");
             _cancelButton = new Button(() => Close(null)) { text = "Discard" };
-            _saveButton = new Button(Save) { text = "Save" };
+            _saveButton = new Button(Save) { text = "Save" }.WithClass(Controls.Primary);
             actions.Add(_cancelButton);
             actions.Add(_saveButton);
             content.Add(actions);
 
+            // The view is laid out in its initial state first, so that the transition to the final state runs.
+            Root.AddToClassList("irs-modal--entering");
             parent.Add(Root);
+            Root.schedule.Execute(() => Root.RemoveFromClassList("irs-modal--entering")).StartingIn(16);
             _tick = Root.schedule.Execute(Tick).Every(TickIntervalMs);
             RefreshLabels();
             StartPreview();
@@ -146,7 +150,12 @@ namespace InstantReplay.Suite.UI
             _preview.Dispose();
             _draft.Dispose();
             if (_thumbnailTexture != null) UnityEngine.Object.Destroy(_thumbnailTexture);
-            Root.RemoveFromHierarchy();
+
+            // The view fades out before it is removed. Its controls no longer respond meanwhile.
+            Root.pickingMode = PickingMode.Ignore;
+            Root.SetEnabled(false);
+            Root.AddToClassList("irs-modal--leaving");
+            Root.schedule.Execute(Root.RemoveFromHierarchy).StartingIn(LeaveTransitionMs);
         }
 
         private async void StartPreview()

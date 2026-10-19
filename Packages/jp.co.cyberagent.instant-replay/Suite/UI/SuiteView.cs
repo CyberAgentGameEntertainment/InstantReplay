@@ -18,6 +18,8 @@ namespace InstantReplay.Suite.UI
     internal sealed class SuiteView : IDisposable
     {
         private const long RefreshIntervalMs = 250;
+        private const long PulseIntervalMs = 600;
+        private const long PanelTransitionMs = 160;
 
         private readonly Toggle _bufferingToggle;
         private readonly Label _detailsLabel;
@@ -35,6 +37,7 @@ namespace InstantReplay.Suite.UI
         private readonly InstantReplayRecorder _recorder;
         private readonly VisualElement _recorderTab;
         private readonly Button _recorderTabButton;
+        private readonly IVisualElementScheduledItem _pulse;
         private readonly IVisualElementScheduledItem _refresh;
         private readonly VisualElement _root;
         private readonly Transform _previewParent;
@@ -104,7 +107,7 @@ namespace InstantReplay.Suite.UI
             content.Add(_recorderTab);
             content = _recorderTab;
 
-            _bufferingToggle = new Toggle("Continuous buffering");
+            _bufferingToggle = new Toggle("Continuous buffering").AsSwitch();
             _bufferingToggle.RegisterValueChangedCallback(e => Run(() => _recorder.SetBufferingEnabled(e.newValue)));
             content.Add(_bufferingToggle);
 
@@ -112,7 +115,7 @@ namespace InstantReplay.Suite.UI
             actions.AddToClassList("irs-panel__row");
             actions.AddToClassList("irs-panel__section");
             // Saving a replay always goes through the trim view, where the whole footage is selected initially.
-            _saveButton = new Button(SaveReplay) { text = "Save replay" };
+            _saveButton = new Button(SaveReplay) { text = "Save replay" }.WithClass(Controls.Primary);
             _unboundedButton = new Button(ToggleUnbounded);
             actions.Add(_saveButton);
             actions.Add(_unboundedButton);
@@ -154,6 +157,7 @@ namespace InstantReplay.Suite.UI
             _root.RegisterCallback<GeometryChangedEvent>(_ => ApplySafeArea());
 
             _refresh = _root.schedule.Execute(Refresh).Every(RefreshIntervalMs);
+            _pulse = _root.schedule.Execute(Pulse).Every(PulseIntervalMs);
             SelectTab(false);
             Refresh();
         }
@@ -167,6 +171,7 @@ namespace InstantReplay.Suite.UI
         public void Dispose()
         {
             _refresh.Pause();
+            _pulse.Pause();
             _trim?.Dispose();
             _library.Dispose();
             _recorder.StateChanged -= OnRecorderChanged;
@@ -174,12 +179,37 @@ namespace InstantReplay.Suite.UI
             _root.RemoveFromHierarchy();
         }
 
-        private bool IsPanelOpen => !_panel.ClassListContains("irs-panel--hidden");
+        private bool IsPanelOpen => !_panel.ClassListContains("irs-panel--hidden") &&
+                                    !_panel.ClassListContains("irs-panel--entering");
 
         private void TogglePanel()
         {
-            _panel.ToggleInClassList("irs-panel--hidden");
+            if (IsPanelOpen)
+            {
+                // The panel fades out before it is removed from the layout.
+                _panel.AddToClassList("irs-panel--entering");
+                _panel.schedule.Execute(() =>
+                {
+                    if (_panel.ClassListContains("irs-panel--entering")) _panel.AddToClassList("irs-panel--hidden");
+                }).StartingIn(PanelTransitionMs);
+            }
+            else
+            {
+                // The panel is laid out in its initial state first, so that the transition to the final state runs.
+                _panel.AddToClassList("irs-panel--entering");
+                _panel.RemoveFromClassList("irs-panel--hidden");
+                _panel.schedule.Execute(() => _panel.RemoveFromClassList("irs-panel--entering")).StartingIn(16);
+            }
+
             _library.SetVisible(IsPanelOpen && _libraryTabSelected);
+        }
+
+        // The dot blinks while an unbounded recording runs.
+        private void Pulse()
+        {
+            var blinking = _recorder.State == RecorderState.RecordingUnbounded && !_recorder.IsPaused;
+            _overlayDot.EnableInClassList("irs-overlay__dot--dim",
+                blinking && !_overlayDot.ClassListContains("irs-overlay__dot--dim"));
         }
 
         private void SelectTab(bool library)
@@ -297,6 +327,7 @@ namespace InstantReplay.Suite.UI
             _bufferingToggle.SetValueWithoutNotify(_recorder.IsBufferingEnabled);
             _saveButton.SetEnabled(!_busy && _trim == null && state == RecorderState.Buffering);
             _unboundedButton.text = state == RecorderState.RecordingUnbounded ? "Stop recording" : "Start recording";
+            _unboundedButton.EnableInClassList("irs-button--recording", state == RecorderState.RecordingUnbounded);
             _unboundedButton.SetEnabled(!_busy && state != RecorderState.Exporting);
             _pauseButton.text = _recorder.IsPaused ? "Resume" : "Pause";
             _presetDropdown.SetEnabled(idle);
