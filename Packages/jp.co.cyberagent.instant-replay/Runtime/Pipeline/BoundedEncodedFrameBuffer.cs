@@ -112,7 +112,11 @@ namespace InstantReplay
         public ValueTask<EncodedFrameSelection> GetFramesForDurationAsync(double? durationSeconds)
         {
             GetFramesForDuration(durationSeconds, out var videoFrames, out var audioFrames);
-            return new ValueTask<EncodedFrameSelection>(new EncodedFrameSelection(videoFrames, audioFrames));
+            // Nothing muxable. No audio frame is selected either in that case, so nothing is left to release.
+            if (videoFrames.IsEmpty) return default;
+
+            return new ValueTask<EncodedFrameSelection>(new EncodedFrameSelection(
+                new EncodedFrameArrayReader(videoFrames), new EncodedFrameArrayReader(audioFrames)));
         }
 
         /// <summary>

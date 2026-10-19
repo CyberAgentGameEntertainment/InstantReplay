@@ -24,13 +24,16 @@ namespace InstantReplay.DiskBufferTests
             Run("record round trip", RecordRoundTrip);
             Run("torn tail is truncated", TornTailIsTruncated);
             Run("torn header is truncated", TornHeaderIsTruncated);
-            Run("corrupt payload stops materialization", CorruptPayloadStopsMaterialization);
+            Run("corrupt payload stops reading", CorruptPayloadStopsReading);
             Run("disk usage stays within the hard bound", DiskUsageStaysWithinHardBound);
             Run("metadata survives segment eviction", MetadataSurvivesEviction);
             Run("duplicate metadata is stored once", DuplicateMetadataStoredOnce);
             Run("segments start at key frames", SegmentsStartAtKeyFrames);
             Run("manifest round trip", ManifestRoundTrip);
             Run("selection starts at the nearest key frame", SelectionStartsAtNearestKeyFrame);
+            Run("selection streams payloads while it is read", SelectionStreamsPayloads);
+            Run("corrupt first key frame yields an empty selection", CorruptFirstKeyFrameYieldsEmptySelection);
+            Run("in-memory reader ends on dispose", ArrayReaderReleasesUnreadFrames);
             RunEndToEnd();
 
             Console.WriteLine(_failures == 0
@@ -70,8 +73,8 @@ namespace InstantReplay.DiskBufferTests
             AssertEqual(0, scan.AudioMetadata.Count, "audio metadata count");
             AssertTrue(Math.Abs(scan.LatestVideoTimestamp - 0.9) < 1e-9, "latest video timestamp");
 
-            var frames = DiskBufferSegmentReader.Materialize(scan.VideoSamples);
-            AssertEqual(10, frames.Length, "materialized frame count");
+            var frames = ReadAll(new DiskBufferRecordReader(null, scan.VideoSamples));
+            AssertEqual(10, frames.Length, "read frame count");
 
             for (var i = 0; i < frames.Length; i++)
             {
@@ -102,8 +105,8 @@ namespace InstantReplay.DiskBufferTests
             var scan = DiskBufferSegmentReader.Scan(directory);
             AssertEqual(5, scan.VideoSamples.Count, "records before the tear are recovered");
 
-            var frames = DiskBufferSegmentReader.Materialize(scan.VideoSamples);
-            AssertEqual(5, frames.Length, "torn record is not materialized");
+            var frames = ReadAll(new DiskBufferRecordReader(null, scan.VideoSamples));
+            AssertEqual(5, frames.Length, "torn record is not read");
             foreach (var frame in frames) frame.Dispose();
         }
 
@@ -126,7 +129,7 @@ namespace InstantReplay.DiskBufferTests
             AssertEqual(3, scan.VideoSamples.Count, "records before the torn header are recovered");
         }
 
-        private static void CorruptPayloadStopsMaterialization(string directory)
+        private static void CorruptPayloadStopsReading(string directory)
         {
             using (var writer = CreateWriter(directory))
             {
@@ -149,8 +152,8 @@ namespace InstantReplay.DiskBufferTests
                 stream.WriteByte((byte)(b ^ 0xFF));
             }
 
-            var frames = DiskBufferSegmentReader.Materialize(scan.VideoSamples);
-            AssertEqual(2, frames.Length, "materialization stops at the corrupt record");
+            var frames = ReadAll(new DiskBufferRecordReader(null, scan.VideoSamples));
+            AssertEqual(2, frames.Length, "reading stops at the corrupt record");
             foreach (var frame in frames) frame.Dispose();
         }
 
@@ -213,8 +216,8 @@ namespace InstantReplay.DiskBufferTests
             AssertEqual(1, scan.VideoMetadata.Count, "video metadata still present");
             AssertEqual(1, scan.AudioMetadata.Count, "audio metadata still present");
 
-            var frames = DiskBufferSegmentReader.Materialize(scan.VideoMetadata);
-            AssertEqual(1, frames.Length, "video metadata materializes");
+            var frames = ReadAll(new DiskBufferRecordReader(scan.VideoMetadata, null));
+            AssertEqual(1, frames.Length, "video metadata is read");
             AssertTrue(frames[0].Data.SequenceEqual(metadataPayload), "video metadata payload is intact");
             AssertEqual(UniencSampleKind.Metadata, frames[0].Kind, "video metadata kind");
             foreach (var frame in frames) frame.Dispose();
@@ -319,9 +322,119 @@ namespace InstantReplay.DiskBufferTests
                 out _, out _), "selection fails on an empty buffer");
         }
 
+        private static void SelectionStreamsPayloads(string directory)
+        {
+            var metadataPayload = Payload(16, 0x42);
+
+            using (var writer = CreateWriter(directory))
+            {
+                writer.SetManifestBytes(0);
+                Write(writer, DiskBufferTrack.Video, UniencSampleKind.Metadata, 0.0, metadataPayload);
+                for (var i = 0; i < 10; i++)
+                    Write(writer, DiskBufferTrack.Video, i % 5 == 0 ? UniencSampleKind.Key
+                        : UniencSampleKind.Interpolated, 1.0 + i * 0.1, Payload(32 * 1024, (byte)i));
+                for (var i = 0; i < 8; i++)
+                    Write(writer, DiskBufferTrack.Audio, UniencSampleKind.Key, 1.0 + i * 0.125,
+                        Payload(32, (byte)(i + 50)));
+            }
+
+            var scan = DiskBufferSegmentReader.Scan(directory);
+
+            using var selection = DiskBufferSegmentReader.BuildSelection(scan, null);
+            AssertTrue(!selection.IsEmpty, "selection is not empty");
+            if (selection.IsEmpty) return;
+
+            // Configuration first, with its timestamp unchanged.
+            AssertTrue(selection.VideoFrames.TryReadNext(out var metadata), "configuration is read");
+            using (metadata)
+            {
+                AssertEqual(UniencSampleKind.Metadata, metadata.Kind, "configuration comes first");
+                AssertTrue(metadata.Data.SequenceEqual(metadataPayload), "configuration payload is intact");
+            }
+
+            var read = 0;
+            for (; read < 3; read++)
+            {
+                AssertTrue(selection.VideoFrames.TryReadNext(out var frame), $"sample {read} is read");
+                using (frame)
+                {
+                    AssertTrue(Math.Abs(frame.Timestamp - read * 0.1) < 1e-9, $"sample {read} is rebased to zero");
+                }
+            }
+
+            // Corrupt a record that has not been read yet. Had the selection materialized every payload up front, the
+            // corruption would go unnoticed and all ten samples would be returned. The payloads are large enough that the
+            // corrupt record lies beyond what the file stream has buffered so far.
+            Corrupt(scan.VideoSamples[6]);
+
+            while (selection.VideoFrames.TryReadNext(out var frame))
+            {
+                frame.Dispose();
+                read++;
+            }
+
+            AssertEqual(6, read, "the video stream ends at the record corrupted after reading began");
+
+            // The audio reader is independent of the video reader.
+            var audio = 0;
+            while (selection.AudioFrames.TryReadNext(out var frame))
+            {
+                if (audio == 0) AssertTrue(Math.Abs(frame.Timestamp) < 1e-9, "audio is rebased to zero");
+                frame.Dispose();
+                audio++;
+            }
+
+            AssertEqual(8, audio, "every audio sample is read");
+        }
+
+        private static void CorruptFirstKeyFrameYieldsEmptySelection(string directory)
+        {
+            using (var writer = CreateWriter(directory))
+            {
+                writer.SetManifestBytes(0);
+                Write(writer, DiskBufferTrack.Video, UniencSampleKind.Metadata, 0.0, Payload(16, 0x42));
+                for (var i = 0; i < 6; i++)
+                    Write(writer, DiskBufferTrack.Video, i % 3 == 0 ? UniencSampleKind.Key
+                        : UniencSampleKind.Interpolated, i * 0.1, Payload(64, (byte)i));
+                Write(writer, DiskBufferTrack.Audio, UniencSampleKind.Key, 0.0, Payload(32, 0x10));
+            }
+
+            var scan = DiskBufferSegmentReader.Scan(directory);
+            Corrupt(scan.VideoSamples[0]);
+
+            // The selection starts at the corrupt key frame, so no video could be muxed. This must be known before a
+            // muxer is created, which is what lets recovery fail without producing an output file.
+            using var selection = DiskBufferSegmentReader.BuildSelection(scan, null);
+            AssertTrue(selection.IsEmpty, "a selection whose first key frame is corrupt is empty");
+
+            // A later key frame is unaffected.
+            using var later = DiskBufferSegmentReader.BuildSelection(scan, 0.2);
+            AssertTrue(!later.IsEmpty, "a selection starting at an intact key frame is not empty");
+        }
+
+        private static void ArrayReaderReleasesUnreadFrames(string directory)
+        {
+            _ = directory;
+
+            // Disposing the reader releases the frames that were not read and ends the stream. A second disposal must
+            // not release them again.
+            var frames = new EncodedFrame[4];
+            for (var i = 0; i < frames.Length; i++)
+                frames[i] = EncodedFrame.CreateWithCopy(Payload(1000 + i, (byte)i), i, UniencSampleKind.Key);
+
+            var reader = new EncodedFrameArrayReader(frames);
+            AssertTrue(reader.TryReadNext(out var first), "first frame is read");
+            AssertTrue(first.Data.SequenceEqual(Payload(1000, 0)), "first frame is intact");
+            first.Dispose();
+
+            reader.Dispose();
+            AssertTrue(!reader.TryReadNext(out _), "nothing is read after disposal");
+            reader.Dispose();
+        }
+
         private static void RunEndToEnd()
         {
-            const string name = "end to end: encode, persist, recover, mux";
+            const string name = "end to end: encode, persist, recover, mux, truncate while muxing";
 
             if (!EndToEnd.IsSupported)
             {
@@ -347,11 +460,25 @@ namespace InstantReplay.DiskBufferTests
                     AssertTrue(IsMp4(result.OutputPath), "recovered file carries an MP4 signature");
 
                     var keep = Environment.GetEnvironmentVariable("INSTANTREPLAY_TEST_KEEP_OUTPUT");
-                    if (!string.IsNullOrEmpty(keep)) File.Copy(result.OutputPath, keep, true);
+                    if (!string.IsNullOrEmpty(keep))
+                    {
+                        File.Copy(result.OutputPath, keep, true);
+
+                        var truncated = Path.Combine(Path.GetDirectoryName(result.OutputPath), "truncated.mp4");
+                        if (File.Exists(truncated))
+                            File.Copy(truncated, Path.ChangeExtension(keep, ".truncated.mp4"), true);
+                    }
                 }
+
+                AssertEqual(result.CorruptVideoIndex, result.TruncatedVideoFrames,
+                    "video corrupted during muxing ends at the corrupt record");
+                AssertTrue(result.TruncatedOutputBytes > 4096,
+                    $"truncated MP4 is non-trivial ({result.TruncatedOutputBytes} bytes)");
 
                 Console.WriteLine($"         video={result.VideoRecords} audio={result.AudioRecords} " +
                                   $"metadata={result.MetadataRecords} mp4={result.OutputBytes} bytes");
+                Console.WriteLine($"         truncated: video={result.TruncatedVideoFrames}/{result.VideoRecords} " +
+                                  $"(corrupted at {result.CorruptVideoIndex}) mp4={result.TruncatedOutputBytes} bytes");
             }
             catch (Exception ex)
             {
@@ -386,6 +513,27 @@ namespace InstantReplay.DiskBufferTests
         }
 
         // ---------------------------------------------------------------- helpers
+
+        private static EncodedFrame[] ReadAll(IEncodedFrameReader reader)
+        {
+            var frames = new List<EncodedFrame>();
+            using (reader)
+            {
+                while (reader.TryReadNext(out var frame)) frames.Add(frame);
+            }
+
+            return frames.ToArray();
+        }
+
+        private static void Corrupt(in DiskBufferScannedRecord record)
+        {
+            // Flip one byte inside the payload. The header stays intact, so only the checksum can detect it.
+            using var stream = new FileStream(record.FilePath, FileMode.Open, FileAccess.ReadWrite);
+            stream.Position = record.PayloadOffset + record.PayloadLength / 2;
+            var b = stream.ReadByte();
+            stream.Position = record.PayloadOffset + record.PayloadLength / 2;
+            stream.WriteByte((byte)(b ^ 0xFF));
+        }
 
         private static DiskBufferSegmentWriter CreateWriter(string directory)
         {

@@ -183,9 +183,11 @@ namespace InstantReplay
                 Directory.CreateDirectory(directory);
 
             var scan = DiskBufferSegmentReader.Scan(StoragePath, ILogger.LogExceptionCore);
-            var selection = DiskBufferSegmentReader.BuildSelection(scan, durationSeconds, ILogger.LogExceptionCore);
+            // The selection reads the session directory while it is muxed, and is disposed before this method returns.
+            using var selection = DiskBufferSegmentReader.BuildSelection(scan, durationSeconds,
+                ILogger.LogExceptionCore);
 
-            if (selection.VideoFrames.Length == 0)
+            if (selection.IsEmpty)
                 throw new InvalidOperationException("The disk buffer contains no muxable video frames.");
 
             using var encodingSystem = new EncodingSystem(_manifest.ToVideoOptions(), _manifest.ToAudioOptions());

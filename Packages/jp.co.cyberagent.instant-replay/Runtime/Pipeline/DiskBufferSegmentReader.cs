@@ -117,9 +117,19 @@ namespace InstantReplay
         ///     when a session left behind by an abnormal termination is recovered, so that the two produce the same result.
         /// </summary>
         /// <remarks>
-        ///     The codec configuration is prepended to both streams, which the muxer requires before any sample. On Apple
-        ///     platforms no configuration record is produced, because the parameter sets travel inside every sample; the
-        ///     empty case is therefore normal rather than an error.
+        ///     <para>
+        ///         The selection reads payloads from the segment files one at a time while it is consumed, so the session
+        ///         directory must not be modified or deleted until the selection has been disposed.
+        ///     </para>
+        ///     <para>
+        ///         The first selected video sample is read and verified here, so that a buffer whose stream cannot start
+        ///         yields an empty selection before an output file is created.
+        ///     </para>
+        ///     <para>
+        ///         The codec configuration is prepended to both streams, which the muxer requires before any sample. On
+        ///         Apple platforms no configuration record is produced, because the parameter sets travel inside every
+        ///         sample; the empty case is therefore normal rather than an error.
+        ///     </para>
         /// </remarks>
         public static EncodedFrameSelection BuildSelection(DiskBufferScanResult scan, double? durationSeconds,
             Action<Exception> onError = null)
@@ -138,76 +148,45 @@ namespace InstantReplay
                 ? scan.AudioSamples.GetRange(audioStart, scan.AudioSamples.Count - audioStart)
                 : new List<DiskBufferScannedRecord>();
 
-            var videoFrames = Materialize(videoRecords, onError);
-            var audioFrames = Materialize(audioRecords, onError);
-            var videoMetadata = Materialize(scan.VideoMetadata, onError);
-            var audioMetadata = Materialize(scan.AudioMetadata, onError);
-
-            if (videoFrames.Length == 0)
-            {
-                // Nothing muxable; release everything that was materialized so no pooled array is leaked.
-                EncodedFrameSelector.DisposeAll(videoFrames, onError);
-                EncodedFrameSelector.DisposeAll(audioFrames, onError);
-                EncodedFrameSelector.DisposeAll(videoMetadata, onError);
-                EncodedFrameSelector.DisposeAll(audioMetadata, onError);
-                return default;
-            }
-
-            EncodedFrameSelector.RebaseTimestamps(videoFrames);
-            EncodedFrameSelector.RebaseTimestamps(audioFrames);
+            // A corrupt first sample would truncate the video stream to nothing.
+            if (!VerifyPayload(videoRecords[0], onError)) return default;
 
             return new EncodedFrameSelection(
-                EncodedFrameSelector.PrependMetadata(videoFrames, videoMetadata),
-                EncodedFrameSelector.PrependMetadata(audioFrames, audioMetadata));
+                new DiskBufferRecordReader(scan.VideoMetadata, videoRecords, onError),
+                new DiskBufferRecordReader(scan.AudioMetadata, audioRecords, onError));
         }
 
         /// <summary>
-        ///     Reads the payloads of the given records and materializes them as frames. Records are grouped by file and
-        ///     read in offset order. A record whose checksum does not match truncates the result there, because the
-        ///     remainder of the stream cannot be decoded past a corrupt sample.
+        ///     Reads the payload of a record into the buffer, growing it as needed, and verifies its checksum. Returns
+        ///     false when the payload is incomplete or its checksum does not match.
         /// </summary>
-        public static EncodedFrame[] Materialize(IReadOnlyList<DiskBufferScannedRecord> records,
-            Action<Exception> onError = null)
+        internal static bool TryReadPayload(FileStream stream, in DiskBufferScannedRecord record, ref byte[] buffer)
         {
-            if (records == null || records.Count == 0) return Array.Empty<EncodedFrame>();
+            if (buffer.Length < record.PayloadLength) buffer = new byte[record.PayloadLength];
 
-            var frames = new List<EncodedFrame>(records.Count);
-            var buffer = Array.Empty<byte>();
-            FileStream stream = null;
-            var openPath = (string)null;
+            stream.Position = record.PayloadOffset;
+            if (!ReadExactly(stream, buffer, record.PayloadLength)) return false;
+            return Crc32.Compute(buffer, 0, record.PayloadLength) == record.Crc32;
+        }
 
+        internal static FileStream OpenSegmentForRead(string path)
+        {
+            return new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, 64 * 1024);
+        }
+
+        private static bool VerifyPayload(in DiskBufferScannedRecord record, Action<Exception> onError)
+        {
             try
             {
-                foreach (var record in records)
-                {
-                    if (!string.Equals(openPath, record.FilePath, StringComparison.Ordinal))
-                    {
-                        stream?.Dispose();
-                        stream = new FileStream(record.FilePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite,
-                            64 * 1024);
-                        openPath = record.FilePath;
-                    }
-
-                    if (buffer.Length < record.PayloadLength) buffer = new byte[record.PayloadLength];
-
-                    stream.Position = record.PayloadOffset;
-                    if (!ReadExactly(stream, buffer, record.PayloadLength)) break;
-                    if (Crc32.Compute(buffer, 0, record.PayloadLength) != record.Crc32) break;
-
-                    frames.Add(EncodedFrame.CreateWithCopy(buffer.AsSpan(0, record.PayloadLength), record.Timestamp,
-                        record.Kind));
-                }
+                using var stream = OpenSegmentForRead(record.FilePath);
+                var buffer = Array.Empty<byte>();
+                return TryReadPayload(stream, record, ref buffer);
             }
             catch (Exception ex)
             {
                 onError?.Invoke(ex);
+                return false;
             }
-            finally
-            {
-                stream?.Dispose();
-            }
-
-            return frames.ToArray();
         }
 
         private static void ScanFile(string path, DiskBufferScanResult result, bool metadataFile,
@@ -275,6 +254,102 @@ namespace InstantReplay
                 read += n;
             }
 
+            return true;
+        }
+    }
+
+    /// <summary>
+    ///     Reads the frames of one stream back from the segment files, one payload at a time. The codec configuration
+    ///     records are returned first, unchanged, followed by the samples with timestamps rebased so that the first sample
+    ///     starts at zero.
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         Only the scanned records are held in memory; each payload is read, verified, and copied into a frame when
+    ///         it is requested. The files the records point to must therefore remain in place until the reader is
+    ///         disposed. Each reader owns its own file handle, so the video and audio readers of one selection can be
+    ///         consumed concurrently.
+    ///     </para>
+    ///     <para>
+    ///         A sample that cannot be read or whose checksum does not match ends the stream there, because the remainder
+    ///         cannot be decoded past a corrupt sample. A configuration record that fails in the same way ends the
+    ///         configuration, and the samples are still returned.
+    ///     </para>
+    /// </remarks>
+    internal sealed class DiskBufferRecordReader : IEncodedFrameReader
+    {
+        private readonly IReadOnlyList<DiskBufferScannedRecord> _metadata;
+        private readonly Action<Exception> _onError;
+        private readonly double _origin;
+        private readonly IReadOnlyList<DiskBufferScannedRecord> _samples;
+
+        private byte[] _buffer = Array.Empty<byte>();
+        private bool _ended;
+        private int _metadataPosition;
+        private string _openPath;
+        private int _samplePosition;
+        private FileStream _stream;
+
+        public DiskBufferRecordReader(IReadOnlyList<DiskBufferScannedRecord> metadata,
+            IReadOnlyList<DiskBufferScannedRecord> samples, Action<Exception> onError = null)
+        {
+            _metadata = metadata ?? Array.Empty<DiskBufferScannedRecord>();
+            _samples = samples ?? Array.Empty<DiskBufferScannedRecord>();
+            _onError = onError;
+            _origin = _samples.Count > 0 ? _samples[0].Timestamp : 0;
+        }
+
+        public bool TryReadNext(out EncodedFrame frame)
+        {
+            while (!_ended && _metadataPosition < _metadata.Count)
+            {
+                if (TryRead(_metadata[_metadataPosition++], 0, out frame)) return true;
+                _metadataPosition = _metadata.Count;
+            }
+
+            if (!_ended && _samplePosition < _samples.Count)
+            {
+                if (TryRead(_samples[_samplePosition++], _origin, out frame)) return true;
+                _ended = true;
+            }
+
+            frame = default;
+            return false;
+        }
+
+        public void Dispose()
+        {
+            _ended = true;
+            _stream?.Dispose();
+            _stream = null;
+            _openPath = null;
+        }
+
+        private bool TryRead(in DiskBufferScannedRecord record, double origin, out EncodedFrame frame)
+        {
+            frame = default;
+
+            try
+            {
+                if (!string.Equals(_openPath, record.FilePath, StringComparison.Ordinal))
+                {
+                    _stream?.Dispose();
+                    _stream = null;
+                    _openPath = null;
+                    _stream = DiskBufferSegmentReader.OpenSegmentForRead(record.FilePath);
+                    _openPath = record.FilePath;
+                }
+
+                if (!DiskBufferSegmentReader.TryReadPayload(_stream, record, ref _buffer)) return false;
+            }
+            catch (Exception ex)
+            {
+                _onError?.Invoke(ex);
+                return false;
+            }
+
+            frame = EncodedFrame.CreateWithCopy(_buffer.AsSpan(0, record.PayloadLength), record.Timestamp - origin,
+                record.Kind);
             return true;
         }
     }

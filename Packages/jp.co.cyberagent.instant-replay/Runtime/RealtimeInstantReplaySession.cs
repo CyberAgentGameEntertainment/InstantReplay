@@ -232,12 +232,14 @@ namespace InstantReplay
                 // Create a temporary muxer for this export
                 using var muxer = _encodingSystem.CreateMuxer(outputPath);
 
-                // Get frames for the requested duration
-                var selection = await _buffer.GetFramesForDurationAsync(seconds).ConfigureAwait(false);
-
-                // Mux the segment
-                await EncodedFrameMuxer.MuxAsync(muxer, selection.VideoFrames, selection.AudioFrames)
-                    .ConfigureAwait(false);
+                // Get frames for the requested duration. A disk-backed selection reads the session directory while it
+                // is muxed, so it is disposed before the storage is cleaned up below.
+                using (var selection = await _buffer.GetFramesForDurationAsync(seconds).ConfigureAwait(false))
+                {
+                    // Mux the segment
+                    await EncodedFrameMuxer.MuxAsync(muxer, selection.VideoFrames, selection.AudioFrames)
+                        .ConfigureAwait(false);
+                }
 
                 State = SessionState.Completed;
 

@@ -16,29 +16,30 @@ namespace InstantReplay
     internal static class EncodedFrameMuxer
     {
         /// <summary>
-        ///     Muxes the given frames. Every frame is disposed, whether or not it was accepted by the muxer.
+        ///     Muxes the frames of the given readers, which are typically the two streams of an
+        ///     <see cref="EncodedFrameSelection" />. A null reader is treated as an empty stream. Every frame read is
+        ///     disposed, whether or not it was accepted by the muxer. After a failure, no further frame is read from that
+        ///     stream; the readers are not disposed here, so the caller releases the unread frames by disposing them.
         /// </summary>
-        public static async ValueTask MuxAsync(Muxer muxer, ReadOnlyMemory<EncodedFrame> videoFrames,
-            ReadOnlyMemory<EncodedFrame> audioFrames)
+        public static async ValueTask MuxAsync(Muxer muxer, IEncodedFrameReader videoFrames,
+            IEncodedFrameReader audioFrames)
         {
             async ValueTask MuxVideoAsync()
             {
                 Exception exception = null;
-                for (var i = 0; i < videoFrames.Span.Length; i++)
+                try
                 {
-                    var frame = videoFrames.Span[i];
-                    try
-                    {
+                    // Frames are read one at a time, so that a reader backed by storage holds only the frame being
+                    // pushed. The muxer applies backpressure, which bounds how far reading runs ahead of it.
+                    while (videoFrames != null && videoFrames.TryReadNext(out var frame))
                         using (frame)
                         {
-                            if (exception == null)
-                                await muxer.PushVideoDataAsync(frame).ConfigureAwait(false);
+                            await muxer.PushVideoDataAsync(frame).ConfigureAwait(false);
                         }
-                    }
-                    catch (Exception ex)
-                    {
-                        exception = ex;
-                    }
+                }
+                catch (Exception ex)
+                {
+                    exception = ex;
                 }
 
                 // Errors in the input to the muxer do not propagate as exceptions in PushVideoDataAsync;
@@ -54,21 +55,17 @@ namespace InstantReplay
             async ValueTask MuxAudioAsync()
             {
                 Exception exception = null;
-                for (var i = 0; i < audioFrames.Span.Length; i++)
+                try
                 {
-                    var frame = audioFrames.Span[i];
-                    try
-                    {
+                    while (audioFrames != null && audioFrames.TryReadNext(out var frame))
                         using (frame)
                         {
-                            if (exception == null)
-                                await muxer.PushAudioDataAsync(frame).ConfigureAwait(false);
+                            await muxer.PushAudioDataAsync(frame).ConfigureAwait(false);
                         }
-                    }
-                    catch (Exception ex)
-                    {
-                        exception = ex;
-                    }
+                }
+                catch (Exception ex)
+                {
+                    exception = ex;
                 }
 
                 // same as video

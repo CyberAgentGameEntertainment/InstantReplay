@@ -4,6 +4,7 @@
 
 using System;
 using System.Buffers;
+using System.Collections.Generic;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
@@ -125,22 +126,68 @@ namespace InstantReplay.DiskBufferTests
                 return new Result(false, "manifest could not be read back", 0, 0, 0, 0);
 
             var scan = DiskBufferSegmentReader.Scan(directory);
-            var selection = DiskBufferSegmentReader.BuildSelection(scan, null);
-
-            if (selection.VideoFrames.Length == 0)
-                return new Result(false, "no muxable video frames were recovered", videoRecords, audioRecords,
-                    metadataRecords, 0);
-
             var outputPath = Path.Combine(directory, "recovered.mp4");
 
-            using (var system = new EncodingSystem(recovered.ToVideoOptions(), recovered.ToAudioOptions()))
-            using (var muxer = system.CreateMuxer(outputPath))
+            using (var selection = DiskBufferSegmentReader.BuildSelection(scan, null))
             {
+                if (selection.IsEmpty)
+                    return new Result(false, "no muxable video frames were recovered", videoRecords, audioRecords,
+                        metadataRecords, 0);
+
+                using var system = new EncodingSystem(recovered.ToVideoOptions(), recovered.ToAudioOptions());
+                using var muxer = system.CreateMuxer(outputPath);
                 await EncodedFrameMuxer.MuxAsync(muxer, selection.VideoFrames, selection.AudioFrames);
             }
 
             var size = new FileInfo(outputPath).Length;
-            return new Result(true, null, videoRecords, audioRecords, metadataRecords, size, outputPath);
+
+            // --- pass three: corruption found while muxing ------------------------------------
+            // A video payload is corrupted only after muxing has started, which can be observed only if payloads are
+            // read while they are muxed rather than all at once beforehand. The video stream must end just before it.
+            var truncatedPath = Path.Combine(directory, "truncated.mp4");
+            var corruptIndex = FindRecordBeyondReadBuffer(scan.VideoSamples, scan.VideoSamples.Count / 2);
+            int truncatedVideoFrames;
+
+            using (var selection = DiskBufferSegmentReader.BuildSelection(scan, null))
+            {
+                if (selection.IsEmpty)
+                    return new Result(false, "no muxable video frames were recovered for the truncation pass",
+                        videoRecords, audioRecords, metadataRecords, size, outputPath);
+
+                var video = new CorruptingReader(selection.VideoFrames, scan.VideoSamples[corruptIndex],
+                    scan.VideoMetadata.Count + 1);
+
+                using (var system = new EncodingSystem(recovered.ToVideoOptions(), recovered.ToAudioOptions()))
+                using (var muxer = system.CreateMuxer(truncatedPath))
+                {
+                    await EncodedFrameMuxer.MuxAsync(muxer, video, selection.AudioFrames);
+                }
+
+                truncatedVideoFrames = video.SampleCount;
+            }
+
+            return new Result(true, null, videoRecords, audioRecords, metadataRecords, size, outputPath)
+            {
+                CorruptVideoIndex = corruptIndex,
+                TruncatedVideoFrames = truncatedVideoFrames,
+                TruncatedOutputBytes = new FileInfo(truncatedPath).Length
+            };
+        }
+
+        /// <summary>
+        ///     Finds a record at or after the given index that lies outside the window a file stream may already have
+        ///     buffered while reading the first record, so that a corruption written to it is visible to the reader.
+        /// </summary>
+        private static int FindRecordBeyondReadBuffer(IReadOnlyList<DiskBufferScannedRecord> records, int start)
+        {
+            const long margin = 256 * 1024;
+
+            var first = records[0];
+            for (var i = Math.Max(start, 1); i < records.Count; i++)
+                if (records[i].FilePath != first.FilePath || records[i].PayloadOffset - first.PayloadOffset > margin)
+                    return i;
+
+            return start;
         }
 
         private static async Task ProduceVideoAsync(VideoEncoder encoder)
@@ -232,7 +279,57 @@ namespace InstantReplay.DiskBufferTests
             };
         }
 
-        internal readonly struct Result
+        /// <summary>
+        ///     Passes frames through and corrupts the payload of a record on disk once a given number of frames have been
+        ///     read, so that the corruption can only be detected by reading that happens after muxing has begun.
+        /// </summary>
+        private sealed class CorruptingReader : IEncodedFrameReader
+        {
+            private readonly IEncodedFrameReader _inner;
+            private readonly DiskBufferScannedRecord _target;
+            private readonly int _triggerAfter;
+            private bool _corrupted;
+            private int _read;
+
+            public CorruptingReader(IEncodedFrameReader inner, DiskBufferScannedRecord target, int triggerAfter)
+            {
+                _inner = inner;
+                _target = target;
+                _triggerAfter = triggerAfter;
+            }
+
+            /// <summary>
+            ///     Number of samples returned, excluding codec configuration.
+            /// </summary>
+            public int SampleCount { get; private set; }
+
+            public bool TryReadNext(out EncodedFrame frame)
+            {
+                if (!_inner.TryReadNext(out frame)) return false;
+
+                if (frame.Kind != UniencSampleKind.Metadata) SampleCount++;
+
+                if (++_read >= _triggerAfter && !_corrupted)
+                {
+                    _corrupted = true;
+                    using var stream = new FileStream(_target.FilePath, FileMode.Open, FileAccess.ReadWrite,
+                        FileShare.ReadWrite);
+                    stream.Position = _target.PayloadOffset;
+                    var b = stream.ReadByte();
+                    stream.Position = _target.PayloadOffset;
+                    stream.WriteByte((byte)(b ^ 0xFF));
+                }
+
+                return true;
+            }
+
+            public void Dispose()
+            {
+                _inner.Dispose();
+            }
+        }
+
+        internal struct Result
         {
             public readonly bool Success;
             public readonly string Error;
@@ -241,6 +338,9 @@ namespace InstantReplay.DiskBufferTests
             public readonly int MetadataRecords;
             public readonly long OutputBytes;
             public readonly string OutputPath;
+            public int CorruptVideoIndex;
+            public int TruncatedVideoFrames;
+            public long TruncatedOutputBytes;
 
             public Result(bool success, string error, int videoRecords, int audioRecords, int metadataRecords,
                 long outputBytes, string outputPath = null)
@@ -252,6 +352,9 @@ namespace InstantReplay.DiskBufferTests
                 MetadataRecords = metadataRecords;
                 OutputBytes = outputBytes;
                 OutputPath = outputPath;
+                CorruptVideoIndex = 0;
+                TruncatedVideoFrames = 0;
+                TruncatedOutputBytes = 0;
             }
         }
     }
