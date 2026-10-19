@@ -1,0 +1,25 @@
+{
+    "name": "InstantReplay.Suite.Sharing.Slack",
+    "rootNamespace": "InstantReplay.Suite.Sharing.Slack",
+    "references": [
+        "GUID:25c8672757ac24477a1d557ebceaba3f"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [
+        "!EXCLUDE_INSTANTREPLAY",
+        "INSTANTREPLAY_UNITYWEBREQUEST"
+    ],
+    "versionDefines": [
+        {
+            "name": "com.unity.modules.unitywebrequest",
+            "expression": "",
+            "define": "INSTANTREPLAY_UNITYWEBREQUEST"
+        }
+    ],
+    "noEngineReferences": false
+}
