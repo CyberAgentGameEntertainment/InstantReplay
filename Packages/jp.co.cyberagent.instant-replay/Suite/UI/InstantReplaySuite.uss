@@ -39,7 +39,10 @@
    Overlay
    ------------------------------------------------------------------ */
 
+/* The overlay keeps its height when the panel below it fills the screen. */
+
 .irs-overlay {
+    flex-shrink: 0;
     flex-direction: row;
     align-items: center;
     margin: 8px;

@@ -183,6 +183,8 @@ The preview of recordings requires the Video module, and thumbnails require the 
 | Sorting Order | Sorting order of the panel that displays the user interface. |
 | Dont Destroy On Load | Whether the game object is kept across scene loads. |
 | Show Overlay On Launch | Whether the overlay is shown at startup. Recording continues while the overlay is hidden. |
+| Overlay Opens Panel | Whether clicking or tapping the overlay opens the panel. When disabled, the overlay only shows the recording status and lets clicks and taps through. |
+| Language | Language of the user interface. `Automatic` uses Japanese when the system language is Japanese and English otherwise. |
 | Scale | Multiplier applied to the size of the user interface. |
 
 The user interface keeps a constant physical size on every screen. One unit of the style sheet corresponds to 1/96 inch on desktop platforms and to 1/160 inch on handheld devices.
@@ -401,6 +403,17 @@ var entries = await suite.PickRecordingsAsync(allowMultiple: false);
 
 // When the debug menu closes
 suite.Recorder.Resume();
+```
+
+When the application controls the recorder with its own interface, the overlay and the panel need not be used. Disable Show Overlay On Launch to hide the overlay, or disable Overlay Opens Panel to keep the overlay as a status indicator only. The same settings are available from code as `IsOverlayVisible` and `OverlayOpensPanel`. Every operation of the panel is available from `suite.Recorder`.
+
+```csharp
+var recorder = InstantReplaySuite.Current.Recorder;
+
+recorder.SetBufferingEnabled(true); // the "Continuous buffering" switch
+
+var recording = recorder.StartUnbounded(); // "Start recording"
+var entry = await recording.StopAsync(); // "Stop recording"; the recording is added to the library
 ```
 
 #### Using the Recorder without the User Interface

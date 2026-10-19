@@ -33,6 +33,13 @@ namespace InstantReplay.Suite.UI
         [SerializeField] private bool dontDestroyOnLoad = true;
         [SerializeField] private bool showOverlayOnLaunch = true;
 
+        [Tooltip("Whether tapping the overlay opens the panel. Turn it off to show only the recording status.")]
+        [SerializeField]
+        private bool overlayOpensPanel = true;
+
+        [Tooltip("Language of the interface. Automatic follows the system language.")] [SerializeField]
+        private SuiteLanguage language = SuiteLanguage.Automatic;
+
         [Tooltip("Multiplier applied to the physical size of the interface.")]
         [SerializeField] [Range(0.5f, 2f)] private float scale = 1f;
 
@@ -59,6 +66,20 @@ namespace InstantReplay.Suite.UI
             {
                 showOverlayOnLaunch = value;
                 if (_view != null) _view.IsVisible = value;
+            }
+        }
+
+        /// <summary>
+        ///     Whether tapping the overlay opens the panel. When false, the overlay only shows the recording status, and
+        ///     taps pass through it. Turn it off when the application controls the recorder with its own interface.
+        /// </summary>
+        public bool OverlayOpensPanel
+        {
+            get => overlayOpensPanel;
+            set
+            {
+                overlayOpensPanel = value;
+                if (_view != null) _view.OverlayOpensPanel = value;
             }
         }
 
@@ -139,8 +160,9 @@ namespace InstantReplay.Suite.UI
             document.hideFlags = HideFlags.DontSave | HideFlags.NotEditable;
             document.panelSettings = _panelSettings;
 
+            Strings.SetLanguage(language);
             _view = new SuiteView(document.rootVisualElement, styleSheet, Recorder, transform)
-                { IsVisible = showOverlayOnLaunch };
+                { IsVisible = showOverlayOnLaunch, OverlayOpensPanel = overlayOpensPanel };
         }
 
         private void Start()

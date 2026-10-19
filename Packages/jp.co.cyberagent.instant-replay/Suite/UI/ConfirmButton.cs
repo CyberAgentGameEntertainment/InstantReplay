@@ -53,7 +53,7 @@ namespace InstantReplay.Suite.UI
             if (!_armed)
             {
                 _armed = true;
-                text = "Tap again to confirm";
+                text = Strings.Current.ConfirmDelete;
                 AddToClassList("irs-button--armed");
                 _reset?.Pause();
                 _reset = schedule.Execute(Disarm).StartingIn(ConfirmWindowMs);

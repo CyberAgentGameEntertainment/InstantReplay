@@ -26,11 +26,11 @@ namespace InstantReplay.Suite.UI
             Root = new VisualElement();
             Root.AddToClassList("irs-recovery");
 
-            var title = new Label("Unfinished recordings");
+            var title = new Label(Strings.Current.UnfinishedRecordings);
             title.AddToClassList("irs-recovery__title");
             Root.Add(title);
 
-            var description = new Label("Footage buffered on disk before the application ended unexpectedly.");
+            var description = new Label(Strings.Current.UnfinishedRecordingsDescription);
             description.AddToClassList("irs-panel__details");
             Root.Add(description);
 
@@ -76,15 +76,15 @@ namespace InstantReplay.Suite.UI
             row.AddToClassList("irs-recovery__row");
 
             var text = $"{Formatting.LocalDateTime(recovery.StartedAtUtc)} · {Formatting.Bytes(recovery.SizeBytes)}";
-            if (!recovery.IsCompatible) text += $"\nRecorded by {recovery.Platform} {recovery.ApplicationVersion}";
+            if (!recovery.IsCompatible) text += "\n" + Strings.Format(Strings.Current.RecordedBy, recovery.Platform, recovery.ApplicationVersion);
             var label = new Label(text);
             label.AddToClassList("irs-recovery__label");
             row.Add(label);
 
             var buttons = new VisualElement();
             buttons.AddToClassList("irs-panel__row");
-            buttons.Add(new Button(() => Recover(recovery)) { text = "Recover" }.WithClass(Controls.Primary));
-            buttons.Add(new ConfirmButton("Delete", () => Delete(recovery)));
+            buttons.Add(new Button(() => Recover(recovery)) { text = Strings.Current.Recover }.WithClass(Controls.Primary));
+            buttons.Add(new ConfirmButton(Strings.Current.Delete, () => Delete(recovery)));
             row.Add(buttons);
             return row;
         }
@@ -94,18 +94,18 @@ namespace InstantReplay.Suite.UI
             if (_busy) return;
             _busy = true;
             _list.SetEnabled(false);
-            _status.text = "Recovering…";
+            _status.text = Strings.Current.Recovering;
             try
             {
                 await _recorder.Library.ImportRecoveredAsync(recovery);
                 // The footage now exists in the library, so the raw buffer is no longer the only copy.
                 recovery.Delete();
-                _status.text = "Recovered into the library.";
+                _status.text = Strings.Current.Recovered;
             }
             catch (Exception ex)
             {
                 Debug.LogException(ex);
-                _status.text = $"Recovery failed: {ex.Message}";
+                _status.text = Strings.Format(Strings.Current.RecoveryFailed, ex.Message);
             }
             finally
             {

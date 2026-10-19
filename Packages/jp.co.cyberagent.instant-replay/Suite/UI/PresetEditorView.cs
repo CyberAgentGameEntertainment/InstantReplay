@@ -15,12 +15,12 @@ namespace InstantReplay.Suite.UI
     /// </summary>
     internal sealed class PresetEditorView
     {
-        private const string ScreenRelative = "Screen relative";
-        private const string FixedSize = "Fixed size";
-        private const string BitsPerPixel = "Bits per pixel";
-        private const string FixedBitrate = "Fixed";
-        private const string InMemory = "Memory";
-        private const string OnDisk = "Disk";
+        private readonly string _screenRelative = Strings.Current.ScreenRelative;
+        private readonly string _fixedSize = Strings.Current.FixedSize;
+        private readonly string _bitsPerPixelMode = Strings.Current.BitsPerPixel;
+        private readonly string _fixedBitrate = Strings.Current.FixedBitrate;
+        private readonly string _inMemory = Strings.Current.Memory;
+        private readonly string _onDisk = Strings.Current.Disk;
 
         private readonly IntegerField _audioBitrateKbps;
         private readonly DropdownField _bitrateMode;
@@ -44,54 +44,54 @@ namespace InstantReplay.Suite.UI
             _recorder = recorder;
             _run = run;
 
-            Root = new Foldout { text = "Customize", value = false };
+            Root = new Foldout { text = Strings.Current.Customize, value = false };
             Root.AddToClassList("irs-preset-editor");
 
-            _resolutionMode = AddDropdown("Resolution", new List<string> { ScreenRelative, FixedSize },
-                (p, v) => p.Resolution = v == FixedSize
+            _resolutionMode = AddDropdown(Strings.Current.Resolution, new List<string> { _screenRelative, _fixedSize },
+                (p, v) => p.Resolution = v == _fixedSize
                     ? ResolutionSpec.Fixed(Math.Max(2, p.Resolution.Width > 0 ? p.Resolution.Width : 1280),
                         Math.Max(2, p.Resolution.Height > 0 ? p.Resolution.Height : 720))
                     : ResolutionSpec.ScreenRelative(p.Resolution.Scale > 0 ? p.Resolution.Scale : 1f,
                         p.Resolution.MaxLongSide));
-            _scale = AddFloat("Scale",
+            _scale = AddFloat(Strings.Current.Scale,
                 (p, v) => p.Resolution = ResolutionSpec.ScreenRelative(Mathf.Clamp(v, 0.05f, 4f),
                     p.Resolution.MaxLongSide));
-            _maxLongSide = AddInteger("Max long side",
+            _maxLongSide = AddInteger(Strings.Current.MaxLongSide,
                 (p, v) => p.Resolution = ResolutionSpec.ScreenRelative(p.Resolution.Scale, Math.Max(0, v)));
-            _fixedWidth = AddInteger("Width",
+            _fixedWidth = AddInteger(Strings.Current.Width,
                 (p, v) => p.Resolution = ResolutionSpec.Fixed(Math.Max(2, v), p.Resolution.Height));
-            _fixedHeight = AddInteger("Height",
+            _fixedHeight = AddInteger(Strings.Current.Height,
                 (p, v) => p.Resolution = ResolutionSpec.Fixed(p.Resolution.Width, Math.Max(2, v)));
 
-            _frameRate = AddInteger("Frame rate", (p, v) => p.FrameRate = Mathf.Clamp(v, 1, 240));
+            _frameRate = AddInteger(Strings.Current.FrameRate, (p, v) => p.FrameRate = Mathf.Clamp(v, 1, 240));
 
-            _bitrateMode = AddDropdown("Video bitrate", new List<string> { BitsPerPixel, FixedBitrate },
-                (p, v) => p.VideoBitrate = v == FixedBitrate
+            _bitrateMode = AddDropdown(Strings.Current.VideoBitrate, new List<string> { _bitsPerPixelMode, _fixedBitrate },
+                (p, v) => p.VideoBitrate = v == _fixedBitrate
                     ? BitrateSpec.Fixed(ResolveBitrate(p))
                     : BitrateSpec.BitsPerPixel(p.VideoBitrate.BitsPerPixelValue > 0
                         ? p.VideoBitrate.BitsPerPixelValue
                         : 0.1f));
-            _bitsPerPixel = AddFloat("Bits per pixel",
+            _bitsPerPixel = AddFloat(Strings.Current.BitsPerPixel,
                 (p, v) => p.VideoBitrate = BitrateSpec.BitsPerPixel(Mathf.Clamp(v, 0.001f, 10f)));
-            _fixedBitrateMbps = AddFloat("Mbps",
+            _fixedBitrateMbps = AddFloat(Strings.Current.Mbps,
                 (p, v) => p.VideoBitrate = BitrateSpec.Fixed((int)Math.Round(Mathf.Clamp(v, 0.05f, 100f) * 1e6)));
 
-            _audioBitrateKbps = AddInteger("Audio kbps", (p, v) => p.AudioBitrate = Mathf.Clamp(v, 16, 512) * 1000);
+            _audioBitrateKbps = AddInteger(Strings.Current.AudioKbps, (p, v) => p.AudioBitrate = Mathf.Clamp(v, 16, 512) * 1000);
 
-            _bufferMode = AddDropdown("Buffer", new List<string> { InMemory, OnDisk },
-                (p, v) => p.Buffer = v == OnDisk
+            _bufferMode = AddDropdown(Strings.Current.Buffer, new List<string> { _inMemory, _onDisk },
+                (p, v) => p.Buffer = v == _onDisk
                     ? BufferSpec.Disk(p.Buffer.MaxMegabytes)
                     : BufferSpec.InMemory(p.Buffer.MaxMegabytes));
-            _bufferMegabytes = AddInteger("Buffer MiB",
+            _bufferMegabytes = AddInteger(Strings.Current.BufferMegabytes,
                 (p, v) => p.Buffer = p.Buffer.Mode == BufferSpec.SpecMode.Disk
                     ? BufferSpec.Disk(Math.Max(1, v))
                     : BufferSpec.InMemory(Math.Max(1, v)));
 
-            _forceReadback = new Toggle("Force readback").AsSwitch();
+            _forceReadback = new Toggle(Strings.Current.ForceReadback).AsSwitch();
             _forceReadback.RegisterValueChangedCallback(e => Apply(p => p.ForceReadback = e.newValue));
             Root.Add(_forceReadback);
 
-            _resetButton = new Button(ResetToBase) { text = "Reset to preset" }.WithClass(Controls.Ghost);
+            _resetButton = new Button(ResetToBase) { text = Strings.Current.ResetToPreset }.WithClass(Controls.Ghost);
             Root.Add(_resetButton);
         }
 
@@ -104,7 +104,7 @@ namespace InstantReplay.Suite.UI
 
             var resolution = preset.Resolution;
             var isFixed = resolution.Mode == ResolutionSpec.SpecMode.Fixed;
-            _resolutionMode.SetValueWithoutNotify(isFixed ? FixedSize : ScreenRelative);
+            _resolutionMode.SetValueWithoutNotify(isFixed ? _fixedSize : _screenRelative);
             SetVisible(_scale, !isFixed);
             SetVisible(_maxLongSide, !isFixed);
             SetVisible(_fixedWidth, isFixed);
@@ -118,7 +118,7 @@ namespace InstantReplay.Suite.UI
 
             var bitrate = preset.VideoBitrate;
             var isFixedBitrate = bitrate.Mode == BitrateSpec.SpecMode.Fixed;
-            _bitrateMode.SetValueWithoutNotify(isFixedBitrate ? FixedBitrate : BitsPerPixel);
+            _bitrateMode.SetValueWithoutNotify(isFixedBitrate ? _fixedBitrate : _bitsPerPixelMode);
             SetVisible(_bitsPerPixel, !isFixedBitrate);
             SetVisible(_fixedBitrateMbps, isFixedBitrate);
             SetIfIdle(_bitsPerPixel, bitrate.BitsPerPixelValue);
@@ -126,7 +126,7 @@ namespace InstantReplay.Suite.UI
 
             SetIfIdle(_audioBitrateKbps, preset.AudioBitrate / 1000);
 
-            _bufferMode.SetValueWithoutNotify(preset.Buffer.Mode == BufferSpec.SpecMode.Disk ? OnDisk : InMemory);
+            _bufferMode.SetValueWithoutNotify(preset.Buffer.Mode == BufferSpec.SpecMode.Disk ? _onDisk : _inMemory);
             SetIfIdle(_bufferMegabytes, preset.Buffer.MaxMegabytes);
 
             _forceReadback.SetValueWithoutNotify(preset.ForceReadback);
@@ -164,7 +164,7 @@ namespace InstantReplay.Suite.UI
                 var basePreset = FindBase(_recorder.ActivePreset);
                 var preset = _recorder.ActivePreset.Clone();
                 modify(preset);
-                if (basePreset != null) preset.DisplayName = basePreset.DisplayName + " (custom)";
+                if (basePreset != null) preset.DisplayName = Strings.Format(Strings.Current.CustomizedPreset, basePreset.DisplayName);
                 _recorder.ApplyPreset(preset);
             });
         }

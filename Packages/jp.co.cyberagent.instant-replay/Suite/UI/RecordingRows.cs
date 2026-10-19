@@ -52,7 +52,7 @@ namespace InstantReplay.Suite.UI
 
         public static string Title(RecordingEntry entry)
         {
-            return $"{entry.Source} · {Formatting.LocalDateTime(entry.CreatedAtUtc)}";
+            return $"{Strings.Current.Source(entry.Source)} · {Formatting.LocalDateTime(entry.CreatedAtUtc)}";
         }
 
         public static string DescribeShort(RecordingEntry entry)

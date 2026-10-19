@@ -45,7 +45,7 @@ namespace InstantReplay.Suite.UI
             panel.AddToClassList("irs-picker");
             Root.Add(panel);
 
-            var title = new Label(allowMultiple ? "Choose recordings" : "Choose a recording");
+            var title = new Label(allowMultiple ? Strings.Current.ChooseRecordings : Strings.Current.ChooseRecording);
             title.AddToClassList("irs-panel__title");
             panel.Add(title);
 
@@ -54,7 +54,7 @@ namespace InstantReplay.Suite.UI
             panel.Add(scroll);
             _list = scroll.contentContainer;
 
-            _emptyLabel = new Label("No recordings yet.");
+            _emptyLabel = new Label(Strings.Current.NoRecordings);
             _emptyLabel.AddToClassList("irs-panel__details");
             panel.Add(_emptyLabel);
 
@@ -66,8 +66,8 @@ namespace InstantReplay.Suite.UI
             actions.AddToClassList("irs-panel__row");
             actions.AddToClassList("irs-panel__section");
             actions.AddToClassList("irs-picker__actions");
-            _cancelButton = new Button(Cancel) { text = "Cancel" };
-            _confirmButton = new Button(Confirm) { text = "Use" }.WithClass(Controls.Primary);
+            _cancelButton = new Button(Cancel) { text = Strings.Current.Cancel };
+            _confirmButton = new Button(Confirm) { text = Strings.Current.Use }.WithClass(Controls.Primary);
             actions.Add(_cancelButton);
             actions.Add(_confirmButton);
             panel.Add(actions);
@@ -136,8 +136,8 @@ namespace InstantReplay.Suite.UI
             foreach (var recovery in _recoveries)
             {
                 var details = Formatting.Bytes(recovery.SizeBytes);
-                if (!recovery.IsCompatible) details += $"\nRecorded by {recovery.Platform} {recovery.ApplicationVersion}";
-                var row = RecordingRows.Create($"Unfinished · {Formatting.LocalDateTime(recovery.StartedAtUtc)}",
+                if (!recovery.IsCompatible) details += "\n" + Strings.Format(Strings.Current.RecordedBy, recovery.Platform, recovery.ApplicationVersion);
+                var row = RecordingRows.Create(Strings.Format(Strings.Current.Unfinished, Formatting.LocalDateTime(recovery.StartedAtUtc)),
                     details, null, _allowMultiple, _checked.Contains(recovery));
                 row.AddToClassList("irs-picker__row--unfinished");
                 row.OnTap(() => Toggle(recovery));
@@ -156,7 +156,7 @@ namespace InstantReplay.Suite.UI
 
             _emptyLabel.style.display =
                 _entries.Count == 0 && _recoveries.Count == 0 ? DisplayStyle.Flex : DisplayStyle.None;
-            _confirmButton.text = _allowMultiple && _checked.Count > 1 ? $"Use {_checked.Count}" : "Use";
+            _confirmButton.text = _allowMultiple && _checked.Count > 1 ? Strings.Format(Strings.Current.UseCount, _checked.Count) : Strings.Current.Use;
             _confirmButton.SetEnabled(!_busy && _checked.Count > 0);
             _cancelButton.SetEnabled(!_busy);
             _list.SetEnabled(!_busy);
@@ -187,7 +187,7 @@ namespace InstantReplay.Suite.UI
                 foreach (var recovery in _recoveries)
                 {
                     if (!_checked.Contains(recovery)) continue;
-                    _statusLabel.text = "Recovering…";
+                    _statusLabel.text = Strings.Current.Recovering;
                     var entry = await _recorder.Library.ImportRecoveredAsync(recovery);
                     // The footage now exists in the library, so the raw buffer is no longer the only copy.
                     recovery.Delete();
@@ -206,7 +206,7 @@ namespace InstantReplay.Suite.UI
                 _busy = false;
                 _checked.Clear();
                 Reload();
-                _statusLabel.text = $"Recovery failed: {ex.Message}";
+                _statusLabel.text = Strings.Format(Strings.Current.RecoveryFailed, ex.Message);
                 return;
             }
 

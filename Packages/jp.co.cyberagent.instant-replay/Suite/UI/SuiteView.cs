@@ -4,7 +4,6 @@
 
 using System;
 using System.Collections.Generic;
-using System.Globalization;
 using System.Threading;
 using System.Threading.Tasks;
 using UnityEngine;
@@ -66,9 +65,10 @@ namespace InstantReplay.Suite.UI
 
             _overlay = new VisualElement();
             _overlay.AddToClassList("irs-overlay");
-            _overlayDot = new VisualElement();
+            // The overlay alone receives the pointer, so that it can let the pointer through when it does not open the panel.
+            _overlayDot = new VisualElement { pickingMode = PickingMode.Ignore };
             _overlayDot.AddToClassList("irs-overlay__dot");
-            _overlayLabel = new Label();
+            _overlayLabel = new Label { pickingMode = PickingMode.Ignore };
             _overlayLabel.AddToClassList("irs-overlay__label");
             _overlay.Add(_overlayDot);
             _overlay.Add(_overlayLabel);
@@ -88,13 +88,10 @@ namespace InstantReplay.Suite.UI
 
             var header = new VisualElement();
             header.AddToClassList("irs-panel__header");
-            var title = new Label("Instant Replay");
-            title.AddToClassList("irs-panel__title");
-            header.Add(title);
             var tabs = new VisualElement();
             tabs.AddToClassList("irs-tabs");
-            _recorderTabButton = new Button(() => SelectTab(false)) { text = "Recorder" };
-            _libraryTabButton = new Button(() => SelectTab(true)) { text = "Recordings" };
+            _recorderTabButton = new Button(() => SelectTab(false)) { text = Strings.Current.RecorderTab };
+            _libraryTabButton = new Button(() => SelectTab(true)) { text = Strings.Current.RecordingsTab };
             _recorderTabButton.AddToClassList("irs-tab");
             _libraryTabButton.AddToClassList("irs-tab");
             tabs.Add(_recorderTabButton);
@@ -111,7 +108,7 @@ namespace InstantReplay.Suite.UI
             content.Add(_recorderTab);
             content = _recorderTab;
 
-            _bufferingToggle = new Toggle("Continuous buffering").AsSwitch();
+            _bufferingToggle = new Toggle(Strings.Current.ContinuousBuffering).AsSwitch();
             _bufferingToggle.RegisterValueChangedCallback(e => Run(() => _recorder.SetBufferingEnabled(e.newValue)));
             content.Add(_bufferingToggle);
 
@@ -119,7 +116,7 @@ namespace InstantReplay.Suite.UI
             actions.AddToClassList("irs-panel__row");
             actions.AddToClassList("irs-panel__section");
             // Saving a replay always goes through the trim view, where the whole footage is selected initially.
-            _saveButton = new Button(SaveReplay) { text = "Save replay" }.WithClass(Controls.Primary);
+            _saveButton = new Button(SaveReplay) { text = Strings.Current.SaveReplay }.WithClass(Controls.Primary);
             _unboundedButton = new Button(ToggleUnbounded);
             actions.Add(_saveButton);
             actions.Add(_unboundedButton);
@@ -136,7 +133,7 @@ namespace InstantReplay.Suite.UI
             presetSection.AddToClassList("irs-panel__section");
             var presetNames = new List<string>();
             foreach (var preset in _recorder.Presets) presetNames.Add(preset.DisplayName);
-            _presetDropdown = new DropdownField("Preset", presetNames, 0);
+            _presetDropdown = new DropdownField(Strings.Current.Preset, presetNames, 0);
             _presetDropdown.RegisterValueChangedCallback(_ => Run(() =>
             {
                 var index = _presetDropdown.index;
@@ -177,6 +174,20 @@ namespace InstantReplay.Suite.UI
             {
                 _root.EnableInClassList("irs-root--chrome-hidden", !value);
                 _library.SetVisible(value && IsPanelOpen && _libraryTabSelected);
+            }
+        }
+
+        /// <summary>
+        ///     Whether tapping the overlay opens the panel. Otherwise the overlay only shows the status, and the pointer
+        ///     passes through it to the content behind.
+        /// </summary>
+        public bool OverlayOpensPanel
+        {
+            get => _overlay.pickingMode == PickingMode.Position;
+            set
+            {
+                _overlay.pickingMode = value ? PickingMode.Position : PickingMode.Ignore;
+                if (!value && IsPanelOpen) TogglePanel();
             }
         }
 
@@ -400,10 +411,10 @@ namespace InstantReplay.Suite.UI
             var idle = !_busy && state is not (RecorderState.Exporting or RecorderState.RecordingUnbounded);
             _bufferingToggle.SetValueWithoutNotify(_recorder.IsBufferingEnabled);
             _saveButton.SetEnabled(!_busy && !HasModal && state == RecorderState.Buffering);
-            _unboundedButton.text = state == RecorderState.RecordingUnbounded ? "Stop recording" : "Start recording";
+            _unboundedButton.text = state == RecorderState.RecordingUnbounded ? Strings.Current.StopRecording : Strings.Current.StartRecording;
             _unboundedButton.EnableInClassList("irs-button--recording", state == RecorderState.RecordingUnbounded);
             _unboundedButton.SetEnabled(!_busy && state != RecorderState.Exporting);
-            _pauseButton.text = _recorder.IsPaused ? "Resume" : "Pause";
+            _pauseButton.text = _recorder.IsPaused ? Strings.Current.Resume : Strings.Current.Pause;
             _presetDropdown.SetEnabled(idle);
 
             var activeIndex = IndexOf(_recorder.Presets, _recorder.ActivePreset);
@@ -416,7 +427,7 @@ namespace InstantReplay.Suite.UI
             _presetEditor.Refresh(idle);
 
             var error = _operationError ??
-                        (state == RecorderState.Faulted ? _recorder.LastException?.Message ?? "Recording failed." : null);
+                        (state == RecorderState.Faulted ? _recorder.LastException?.Message ?? Strings.Current.RecordingFailed : null);
             _errorLabel.text = error ?? string.Empty;
             _errorLabel.EnableInClassList("irs-panel__error--hidden", string.IsNullOrEmpty(error));
         }
@@ -429,15 +440,17 @@ namespace InstantReplay.Suite.UI
             _overlayDot.EnableInClassList("irs-overlay__dot--faulted", state == RecorderState.Faulted);
             _overlayDot.EnableInClassList("irs-overlay__dot--paused", _recorder.IsPaused);
 
-            var pausedSuffix = _recorder.IsPaused ? " (paused)" : string.Empty;
+            var text = Strings.Current;
+            var pausedSuffix = _recorder.IsPaused ? text.OverlayPausedSuffix : string.Empty;
             _overlayLabel.text = state switch
             {
                 RecorderState.Buffering =>
                     $"{Formatting.Time(stats.BufferedDurationSeconds)} / ~{Formatting.Time(stats.EstimatedCapacitySeconds)}{pausedSuffix}",
-                RecorderState.RecordingUnbounded => $"REC {Formatting.Time(stats.UnboundedElapsedSeconds)}{pausedSuffix}",
-                RecorderState.Exporting => "Saving…",
-                RecorderState.Faulted => "Error",
-                _ => "Off"
+                RecorderState.RecordingUnbounded =>
+                    Strings.Format(text.OverlayRecording, Formatting.Time(stats.UnboundedElapsedSeconds)) + pausedSuffix,
+                RecorderState.Exporting => text.OverlaySaving,
+                RecorderState.Faulted => text.OverlayError,
+                _ => text.OverlayOff
             };
         }
 
@@ -464,12 +477,11 @@ namespace InstantReplay.Suite.UI
             var options = preset.ToEncodingOptions(context);
             var video = options.VideoOptions;
             var buffer = preset.Buffer;
-            var bufferKind = buffer.Mode == BufferSpec.SpecMode.Disk ? "on disk" : "in memory";
+            var bufferKind = buffer.Mode == BufferSpec.SpecMode.Disk ? Strings.Current.BufferOnDisk : Strings.Current.BufferInMemory;
             var estimate = stats.EstimatedCapacitySeconds > 0
                 ? stats.EstimatedCapacitySeconds
                 : preset.EstimateRecordableDurationSeconds(context);
-            return string.Format(CultureInfo.InvariantCulture,
-                "{0}×{1} @ {2} fps, {3:0.0} Mbps\nBuffer: {4} MiB {5} (≈ {6})",
+            return Strings.Format(Strings.Current.PresetDetails,
                 video.Width, video.Height, video.FpsHint, video.Bitrate / 1e6, buffer.GetCapacityBytes() >> 20,
                 bufferKind, Formatting.Time(estimate));
         }

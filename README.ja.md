@@ -181,6 +181,8 @@ Suite は以下のアセンブリで構成されます。
 | Sorting Order | UI を表示するパネルの描画順。 |
 | Dont Destroy On Load | シーンの読み込みをまたいでゲームオブジェクトを保持するかどうか。 |
 | Show Overlay On Launch | 起動時にオーバーレイを表示するかどうか。オーバーレイを非表示にしている間も録画は継続します。 |
+| Overlay Opens Panel | オーバーレイのクリックまたはタップでパネルを開くかどうか。無効にすると、オーバーレイは録画の状態を表示するだけになり、クリックやタップを背後に通します。 |
+| Language | UI の言語。`Automatic` では、システム言語が日本語の場合は日本語、それ以外の場合は英語で表示します。 |
 | Scale | UI の大きさに掛ける倍率。 |
 
 UI はどの画面でも一定の物理サイズで表示されます。スタイルシートの 1 単位は、デスクトッププラットフォームでは 1/96 インチ、携帯端末では 1/160 インチに相当します。
@@ -399,6 +401,17 @@ var entries = await suite.PickRecordingsAsync(allowMultiple: false);
 
 // デバッグメニューを閉じたとき
 suite.Recorder.Resume();
+```
+
+アプリケーションが独自の UI でレコーダーを制御する場合、オーバーレイとパネルを使用する必要はありません。Show Overlay On Launch を無効にするとオーバーレイを非表示にでき、Overlay Opens Panel を無効にするとオーバーレイを状態表示としてのみ使用できます。これらの設定は、コードからも `IsOverlayVisible` と `OverlayOpensPanel` として変更できます。パネルの操作はすべて `suite.Recorder` から行えます。
+
+```csharp
+var recorder = InstantReplaySuite.Current.Recorder;
+
+recorder.SetBufferingEnabled(true); // 「常時バッファリング」スイッチ
+
+var recording = recorder.StartUnbounded(); // 「録画開始」
+var entry = await recording.StopAsync(); // 「録画停止」。録画はライブラリに追加される
 ```
 
 #### UI を使用せずにレコーダーを使用する

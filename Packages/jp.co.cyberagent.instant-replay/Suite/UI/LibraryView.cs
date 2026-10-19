@@ -4,7 +4,6 @@
 
 using System;
 using System.Collections.Generic;
-using System.Globalization;
 using System.IO;
 using System.Text;
 using System.Threading;
@@ -69,15 +68,15 @@ namespace InstantReplay.Suite.UI
             toolbar.AddToClassList("irs-library__toolbar");
             _selectionBar = new VisualElement();
             _selectionBar.AddToClassList("irs-library__selection");
-            _selectAllToggle = new Toggle("All");
+            _selectAllToggle = new Toggle(Strings.Current.All);
             _selectAllToggle.AddToClassList("irs-library__select-all");
             _selectAllToggle.RegisterValueChangedCallback(e => SetAllChecked(e.newValue));
-            _deleteCheckedButton = new ConfirmButton("Delete", DeleteChecked);
+            _deleteCheckedButton = new ConfirmButton(Strings.Current.Delete, DeleteChecked);
             _deleteCheckedButton.AddToClassList("irs-library__delete-checked");
             _selectionBar.Add(_selectAllToggle);
             _selectionBar.Add(_deleteCheckedButton);
             toolbar.Add(_selectionBar);
-            _selectButton = new Button(() => SetSelectionMode(!_selectionMode)) { text = "Select" }
+            _selectButton = new Button(() => SetSelectionMode(!_selectionMode)) { text = Strings.Current.Select }
                 .WithClass(Controls.Ghost);
             _selectButton.AddToClassList("irs-library__select");
             toolbar.Add(_selectButton);
@@ -91,7 +90,7 @@ namespace InstantReplay.Suite.UI
             _list.AddToClassList("irs-library__list");
             _listSection.Add(_list);
 
-            _emptyLabel = new Label("No recordings yet.");
+            _emptyLabel = new Label(Strings.Current.NoRecordings);
             _emptyLabel.AddToClassList("irs-panel__details");
             _listSection.Add(_emptyLabel);
 
@@ -99,12 +98,12 @@ namespace InstantReplay.Suite.UI
             _detail.AddToClassList("irs-library__detail");
             Root.Add(_detail);
 
-            var back = new Button(CloseDetail) { text = "‹ Recordings" }.WithClass(Controls.Ghost);
+            var back = new Button(CloseDetail) { text = Strings.Current.BackToRecordings }.WithClass(Controls.Ghost);
             back.AddToClassList("irs-library__back");
             _detail.Add(back);
 
             _preview = new PreviewPlayer(previewParent);
-            _preview.Error += message => _detailInfo.text += $"\nPreview failed: {message}";
+            _preview.Error += message => _detailInfo.text += "\n" + Strings.Format(Strings.Current.PreviewFailed, message);
             _preview.Image.OnTap(_preview.TogglePause);
             if (PreviewPlayer.IsSupported) _detail.Add(_preview.Image);
 
@@ -115,25 +114,25 @@ namespace InstantReplay.Suite.UI
             var actions = new VisualElement();
             actions.AddToClassList("irs-panel__row");
             actions.AddToClassList("irs-panel__section");
-            _thumbnailButton = new Button(SetThumbnailFromPreview) { text = "Use frame as thumbnail" };
+            _thumbnailButton = new Button(SetThumbnailFromPreview) { text = Strings.Current.UseFrameAsThumbnail };
             if (PreviewPlayer.IsSupported && PreviewPlayer.CanCaptureFrame) actions.Add(_thumbnailButton);
-            _deleteButton = new ConfirmButton("Delete", DeleteSelected);
+            _deleteButton = new ConfirmButton(Strings.Current.Delete, DeleteSelected);
             actions.Add(_deleteButton);
             _detail.Add(actions);
 
             _shareSection = new VisualElement();
             _shareSection.AddToClassList("irs-panel__section");
-            _shareTarget = new DropdownField("Share to", new List<string>(), 0);
+            _shareTarget = new DropdownField(Strings.Current.ShareTo, new List<string>(), 0);
             _shareTarget.RegisterValueChangedCallback(_ => RefreshShare());
-            _shareComment = new TextField("Comment") { multiline = true };
+            _shareComment = new TextField(Strings.Current.Comment) { multiline = true };
             _shareComment.AddToClassList("irs-library__comment");
-            _shareButton = new Button(ToggleShare) { text = "Share" }.WithClass(Controls.Primary);
+            _shareButton = new Button(ToggleShare) { text = Strings.Current.Share }.WithClass(Controls.Primary);
             _shareStatus = new Label();
             _shareStatus.AddToClassList("irs-panel__details");
             _openResultButton = new Button(() =>
             {
                 if (!string.IsNullOrEmpty(_resultUrl)) Application.OpenURL(_resultUrl);
-            }) { text = "Open" };
+            }) { text = Strings.Current.Open };
             _shareSection.Add(_shareTarget);
             _shareSection.Add(_shareComment);
             _shareSection.Add(_shareButton);
@@ -217,7 +216,7 @@ namespace InstantReplay.Suite.UI
             _selectionMode = enabled;
             _checkedPaths.Clear();
             _deleteCheckedButton.Disarm();
-            _selectButton.text = enabled ? "Done" : "Select";
+            _selectButton.text = enabled ? Strings.Current.Done : Strings.Current.Select;
             _selectionBar.style.display = enabled ? DisplayStyle.Flex : DisplayStyle.None;
             SetListStatus(string.Empty);
             if (_visible) RefreshList();
@@ -243,7 +242,7 @@ namespace InstantReplay.Suite.UI
         {
             var count = _checkedPaths.Count;
             _selectAllToggle.SetValueWithoutNotify(count > 0 && count == _entries.Count);
-            _deleteCheckedButton.Label = count > 0 ? $"Delete {count}" : "Delete";
+            _deleteCheckedButton.Label = count > 0 ? Strings.Format(Strings.Current.DeleteCount, count) : Strings.Current.Delete;
             _deleteCheckedButton.SetEnabled(count > 0);
             if (count == 0) _deleteCheckedButton.Disarm();
         }
@@ -332,7 +331,7 @@ namespace InstantReplay.Suite.UI
             catch (Exception ex)
             {
                 Debug.LogException(ex);
-                _detailInfo.text = DescribeLong(entry) + $"\nDeletion failed: {ex.Message}";
+                _detailInfo.text = DescribeLong(entry) + "\n" + Strings.Format(Strings.Current.DeletionFailed, ex.Message);
                 return;
             }
 
@@ -349,12 +348,12 @@ namespace InstantReplay.Suite.UI
                 var png = _preview.CaptureFramePng(320);
                 if (png == null) return;
                 _selected = _recorder.Library.SetThumbnail(entry, png);
-                _detailInfo.text = DescribeLong(_selected) + "\nThumbnail updated.";
+                _detailInfo.text = DescribeLong(_selected) + "\n" + Strings.Current.ThumbnailUpdated;
             }
             catch (Exception ex)
             {
                 Debug.LogException(ex);
-                _detailInfo.text = DescribeLong(entry) + $"\nThumbnail failed: {ex.Message}";
+                _detailInfo.text = DescribeLong(entry) + "\n" + Strings.Format(Strings.Current.ThumbnailFailed, ex.Message);
             }
         }
 
@@ -389,7 +388,7 @@ namespace InstantReplay.Suite.UI
             _openResultButton.style.display = string.IsNullOrEmpty(_resultUrl) ? DisplayStyle.None : DisplayStyle.Flex;
             if (_sharing != null)
             {
-                _shareButton.text = "Cancel";
+                _shareButton.text = Strings.Current.Cancel;
                 _shareButton.SetEnabled(true);
                 _deleteButton.SetEnabled(false);
                 _thumbnailButton.SetEnabled(false);
@@ -397,7 +396,7 @@ namespace InstantReplay.Suite.UI
                 return;
             }
 
-            _shareButton.text = "Share";
+            _shareButton.text = Strings.Current.Share;
             _deleteButton.SetEnabled(true);
             _thumbnailButton.SetEnabled(true);
             _shareTarget.SetEnabled(true);
@@ -414,7 +413,7 @@ namespace InstantReplay.Suite.UI
             _shareButton.SetEnabled(canShare);
             _shareStatus.text = canShare
                 ? _shareMessage ?? string.Empty
-                : reason ?? "This destination cannot accept the recording.";
+                : reason ?? Strings.Current.DestinationCannotAccept;
         }
 
         private async void ToggleShare()
@@ -433,13 +432,13 @@ namespace InstantReplay.Suite.UI
             _sharing = cancellation;
             _resultUrl = null;
             _shareMessage = null;
-            _shareStatus.text = $"Sharing to {target.DisplayName}…";
+            _shareStatus.text = Strings.Format(Strings.Current.SharingTo, target.DisplayName);
             RefreshShare();
 
             var context = new ShareContext(new Progress<float>(p =>
             {
                 if (_sharing == cancellation)
-                    _shareStatus.text = string.Format(CultureInfo.InvariantCulture, "Sharing to {0}… {1:0}%",
+                    _shareStatus.text = Strings.Format(Strings.Current.SharingProgress,
                         target.DisplayName, p * 100);
             }));
 
@@ -449,16 +448,16 @@ namespace InstantReplay.Suite.UI
             {
                 var result = await target.ShareAsync(CreateRequest(), context, cancellation.Token);
                 url = result.Url;
-                message = result.Message ?? $"Shared to {target.DisplayName}.";
+                message = result.Message ?? Strings.Format(Strings.Current.SharedTo, target.DisplayName);
             }
             catch (OperationCanceledException)
             {
-                message = "Sharing cancelled.";
+                message = Strings.Current.SharingCancelled;
             }
             catch (Exception ex)
             {
                 Debug.LogException(ex);
-                message = $"Sharing failed: {ex.Message}";
+                message = Strings.Format(Strings.Current.SharingFailed, ex.Message);
             }
 
             _sharing = null;
@@ -475,7 +474,7 @@ namespace InstantReplay.Suite.UI
         private static string DescribeLong(RecordingEntry entry)
         {
             var builder = new StringBuilder();
-            builder.Append(entry.Source).Append(" · ").AppendLine(Formatting.LocalDateTime(entry.CreatedAtUtc));
+            builder.Append(Strings.Current.Source(entry.Source)).Append(" · ").AppendLine(Formatting.LocalDateTime(entry.CreatedAtUtc));
             builder.Append(RecordingRows.DescribeShort(entry));
             foreach (var pair in entry.Metadata) builder.Append('\n').Append(pair.Key).Append(": ").Append(pair.Value);
             return builder.ToString();

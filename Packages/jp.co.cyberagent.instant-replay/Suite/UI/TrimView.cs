@@ -58,14 +58,14 @@ namespace InstantReplay.Suite.UI
             panel.AddToClassList("irs-panel");
             Root.Add(panel);
 
-            var title = new Label("Trim replay");
+            var title = new Label(Strings.Current.TrimReplay);
             title.AddToClassList("irs-panel__title");
             panel.Add(title);
 
             _preview = new PreviewPlayer(previewParent);
             _preview.Image.AddToClassList("irs-trim__preview");
             _preview.Image.OnTap(TogglePlay);
-            _preview.Error += message => _statusLabel.text = $"Preview failed: {message}";
+            _preview.Error += message => _statusLabel.text = Strings.Format(Strings.Current.PreviewFailed, message);
             if (PreviewPlayer.IsSupported) panel.Add(_preview.Image);
 
             // On a short screen the preview shrinks first, and the controls scroll once it has reached its minimum.
@@ -98,9 +98,9 @@ namespace InstantReplay.Suite.UI
             var playback = new VisualElement();
             playback.AddToClassList("irs-panel__row");
             playback.AddToClassList("irs-panel__section");
-            _setStartButton = new Button(() => SetRange(_preview.Time, _end, true)) { text = "Set start" };
-            _playButton = new Button(TogglePlay) { text = "Pause" };
-            _setEndButton = new Button(() => SetRange(_start, _preview.Time, false)) { text = "Set end" };
+            _setStartButton = new Button(() => SetRange(_preview.Time, _end, true)) { text = Strings.Current.SetStart };
+            _playButton = new Button(TogglePlay) { text = Strings.Current.Pause };
+            _setEndButton = new Button(() => SetRange(_start, _preview.Time, false)) { text = Strings.Current.SetEnd };
             playback.Add(_setStartButton);
             playback.Add(_playButton);
             playback.Add(_setEndButton);
@@ -113,7 +113,7 @@ namespace InstantReplay.Suite.UI
             _thumbnailImage = new Image { scaleMode = ScaleMode.ScaleToFit };
             _thumbnailImage.AddToClassList("irs-thumbnail");
             _thumbnailImage.style.display = DisplayStyle.None;
-            _thumbnailButton = new Button(CaptureThumbnail) { text = "Use frame as thumbnail" };
+            _thumbnailButton = new Button(CaptureThumbnail) { text = Strings.Current.UseFrameAsThumbnail };
             thumbnail.Add(_thumbnailImage);
             thumbnail.Add(_thumbnailButton);
             if (PreviewPlayer.IsSupported && PreviewPlayer.CanCaptureFrame) content.Add(thumbnail);
@@ -125,8 +125,8 @@ namespace InstantReplay.Suite.UI
             var actions = new VisualElement();
             actions.AddToClassList("irs-panel__row");
             actions.AddToClassList("irs-panel__section");
-            _cancelButton = new Button(Cancel) { text = saveToLibrary ? "Discard" : "Cancel" };
-            _saveButton = new Button(Confirm) { text = saveToLibrary ? "Save" : "Use" }.WithClass(Controls.Primary);
+            _cancelButton = new Button(Cancel) { text = saveToLibrary ? Strings.Current.Discard : Strings.Current.Cancel };
+            _saveButton = new Button(Confirm) { text = saveToLibrary ? Strings.Current.Save : Strings.Current.Use }.WithClass(Controls.Primary);
             actions.Add(_cancelButton);
             actions.Add(_saveButton);
             content.Add(actions);
@@ -175,7 +175,7 @@ namespace InstantReplay.Suite.UI
         private async void StartPreview()
         {
             if (!PreviewPlayer.IsSupported) return;
-            _statusLabel.text = "Preparing preview…";
+            _statusLabel.text = Strings.Current.PreparingPreview;
             try
             {
                 var path = await _draft.GetPreviewPathAsync();
@@ -187,7 +187,7 @@ namespace InstantReplay.Suite.UI
             {
                 if (_closed) return;
                 Debug.LogException(ex);
-                _statusLabel.text = $"Preview failed: {ex.Message}";
+                _statusLabel.text = Strings.Format(Strings.Current.PreviewFailed, ex.Message);
             }
         }
 
@@ -200,7 +200,7 @@ namespace InstantReplay.Suite.UI
             if (_timeline.IsDraggingPlayhead) return;
             _timeline.SetPlayhead(time);
             _playheadLabel.text = Formatting.PreciseTime(time);
-            _playButton.text = _preview.IsPlaying ? "Pause" : "Play";
+            _playButton.text = _preview.IsPlaying ? Strings.Current.Pause : Strings.Current.Play;
         }
 
         // Playback pauses while the knob is dragged, so that the frame under the knob stays on screen.
@@ -260,7 +260,7 @@ namespace InstantReplay.Suite.UI
             catch (Exception ex)
             {
                 Debug.LogException(ex);
-                _statusLabel.text = $"Thumbnail failed: {ex.Message}";
+                _statusLabel.text = Strings.Format(Strings.Current.ThumbnailFailed, ex.Message);
                 return;
             }
 
@@ -291,7 +291,7 @@ namespace InstantReplay.Suite.UI
             _saving = true;
             SetControlsEnabled(false);
             _preview.Pause();
-            _statusLabel.text = "Saving…";
+            _statusLabel.text = Strings.Current.Saving;
 
             try
             {
@@ -303,7 +303,7 @@ namespace InstantReplay.Suite.UI
             {
                 Debug.LogException(ex);
                 if (_closed) return;
-                _statusLabel.text = $"Saving failed: {ex.Message}";
+                _statusLabel.text = Strings.Format(Strings.Current.SavingFailed, ex.Message);
                 _saving = false;
                 SetControlsEnabled(true);
             }
