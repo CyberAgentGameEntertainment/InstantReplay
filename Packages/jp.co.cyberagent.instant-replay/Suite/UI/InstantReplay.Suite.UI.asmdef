@@ -15,6 +15,12 @@
     "defineConstraints": [
         "!EXCLUDE_INSTANTREPLAY"
     ],
-    "versionDefines": [],
+    "versionDefines": [
+        {
+            "name": "com.unity.modules.video",
+            "expression": "",
+            "define": "INSTANTREPLAY_VIDEO"
+        }
+    ],
     "noEngineReferences": false
 }

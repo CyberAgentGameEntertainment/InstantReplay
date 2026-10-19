@@ -56,7 +56,7 @@
 }
 
 .irs-panel {
-    width: 300px;
+    width: 320px;
     max-width: 90%;
     margin: 0 8px 8px 8px;
     padding: 10px;
@@ -154,4 +154,94 @@
 
 .irs-preset-editor .unity-foldout__text {
     color: rgb(230, 230, 230);
+}
+
+.irs-tabs {
+    flex-direction: row;
+    margin-bottom: 4px;
+}
+
+.irs-tab {
+    flex-grow: 1;
+    flex-basis: 0;
+    margin: 0 2px;
+    border-radius: 0;
+    border-width: 0 0 2px 0;
+    border-color: rgba(0, 0, 0, 0);
+    background-color: rgba(0, 0, 0, 0);
+    color: rgb(170, 170, 170);
+}
+
+.irs-tab:hover {
+    background-color: rgba(255, 255, 255, 0.06);
+}
+
+.irs-tab--selected {
+    border-color: rgb(80, 200, 120);
+    color: rgb(240, 240, 240);
+}
+
+.irs-library__row {
+    padding: 6px 6px;
+    margin: 2px 0;
+    border-radius: 4px;
+    background-color: rgba(255, 255, 255, 0.05);
+}
+
+.irs-library__row:hover {
+    background-color: rgba(255, 255, 255, 0.12);
+}
+
+.irs-panel .irs-library__row-title {
+    font-size: 12px;
+    -unity-font-style: bold;
+}
+
+.irs-library__back {
+    align-self: flex-start;
+}
+
+.irs-preview {
+    width: 100%;
+    height: 160px;
+    margin: 4px 0;
+    background-color: rgb(0, 0, 0);
+}
+
+.irs-library__comment .unity-text-field__input {
+    min-height: 40px;
+    -unity-text-align: upper-left;
+    white-space: normal;
+}
+
+.irs-panel .irs-library__comment {
+    flex-direction: column;
+    align-items: stretch;
+}
+
+.irs-recovery {
+    padding: 6px;
+    margin-bottom: 6px;
+    border-radius: 4px;
+    border-width: 1px;
+    border-color: rgb(240, 180, 40);
+}
+
+.irs-panel .irs-recovery__title {
+    -unity-font-style: bold;
+    color: rgb(240, 180, 40);
+}
+
+.irs-recovery__row {
+    margin-top: 6px;
+}
+
+.irs-panel .irs-recovery__label {
+    font-size: 11px;
+    white-space: normal;
+}
+
+.irs-button--armed {
+    background-color: rgb(160, 50, 45);
+    color: rgb(255, 255, 255);
 }

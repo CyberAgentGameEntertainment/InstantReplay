@@ -83,7 +83,8 @@ namespace InstantReplay.Suite.UI
             document.hideFlags = HideFlags.DontSave | HideFlags.NotEditable;
             document.panelSettings = _panelSettings;
 
-            _view = new SuiteView(document.rootVisualElement, styleSheet, Recorder) { IsVisible = showOverlayOnLaunch };
+            _view = new SuiteView(document.rootVisualElement, styleSheet, Recorder, transform)
+                { IsVisible = showOverlayOnLaunch };
         }
 
         private void Start()

@@ -20,6 +20,9 @@ namespace InstantReplay.Suite.UI
         private readonly Toggle _bufferingToggle;
         private readonly Label _detailsLabel;
         private readonly Label _errorLabel;
+        private readonly LibraryView _library;
+        private readonly VisualElement _libraryTab;
+        private readonly Button _libraryTabButton;
         private readonly VisualElement _overlay;
         private readonly VisualElement _overlayDot;
         private readonly Label _overlayLabel;
@@ -28,15 +31,19 @@ namespace InstantReplay.Suite.UI
         private readonly DropdownField _presetDropdown;
         private readonly PresetEditorView _presetEditor;
         private readonly InstantReplayRecorder _recorder;
+        private readonly VisualElement _recorderTab;
+        private readonly Button _recorderTabButton;
         private readonly IVisualElementScheduledItem _refresh;
         private readonly VisualElement _root;
         private readonly Button _saveButton;
         private readonly Button _unboundedButton;
 
         private bool _busy;
+        private bool _libraryTabSelected;
         private string _operationError;
 
-        public SuiteView(VisualElement documentRoot, StyleSheet styleSheet, InstantReplayRecorder recorder)
+        public SuiteView(VisualElement documentRoot, StyleSheet styleSheet, InstantReplayRecorder recorder,
+            Transform previewParent)
         {
             _recorder = recorder;
 
@@ -53,7 +60,7 @@ namespace InstantReplay.Suite.UI
             _overlayLabel.AddToClassList("irs-overlay__label");
             _overlay.Add(_overlayDot);
             _overlay.Add(_overlayLabel);
-            _overlay.RegisterCallback<ClickEvent>(_ => _panel.ToggleInClassList("irs-panel--hidden"));
+            _overlay.RegisterCallback<ClickEvent>(_ => TogglePanel());
             _root.Add(_overlay);
 
             _panel = new VisualElement();
@@ -67,9 +74,30 @@ namespace InstantReplay.Suite.UI
             _panel.Add(scroll);
             var content = scroll.contentContainer;
 
+            var header = new VisualElement();
+            header.AddToClassList("irs-panel__header");
             var title = new Label("Instant Replay");
             title.AddToClassList("irs-panel__title");
-            content.Add(title);
+            header.Add(title);
+            var tabs = new VisualElement();
+            tabs.AddToClassList("irs-tabs");
+            _recorderTabButton = new Button(() => SelectTab(false)) { text = "Recorder" };
+            _libraryTabButton = new Button(() => SelectTab(true)) { text = "Recordings" };
+            _recorderTabButton.AddToClassList("irs-tab");
+            _libraryTabButton.AddToClassList("irs-tab");
+            tabs.Add(_recorderTabButton);
+            tabs.Add(_libraryTabButton);
+            header.Add(tabs);
+            content.Add(header);
+
+            _libraryTab = new VisualElement();
+            _library = new LibraryView(recorder, previewParent);
+            _libraryTab.Add(_library.Root);
+            content.Add(_libraryTab);
+
+            _recorderTab = new VisualElement();
+            content.Add(_recorderTab);
+            content = _recorderTab;
 
             _bufferingToggle = new Toggle("Continuous buffering");
             _bufferingToggle.RegisterValueChangedCallback(e => Run(() => _recorder.SetBufferingEnabled(e.newValue)));
@@ -120,6 +148,7 @@ namespace InstantReplay.Suite.UI
             _root.RegisterCallback<GeometryChangedEvent>(_ => ApplySafeArea());
 
             _refresh = _root.schedule.Execute(Refresh).Every(RefreshIntervalMs);
+            SelectTab(false);
             Refresh();
         }
 
@@ -132,9 +161,28 @@ namespace InstantReplay.Suite.UI
         public void Dispose()
         {
             _refresh.Pause();
+            _library.Dispose();
             _recorder.StateChanged -= OnRecorderChanged;
             _recorder.ConfigurationChanged -= OnRecorderChanged;
             _root.RemoveFromHierarchy();
+        }
+
+        private bool IsPanelOpen => !_panel.ClassListContains("irs-panel--hidden");
+
+        private void TogglePanel()
+        {
+            _panel.ToggleInClassList("irs-panel--hidden");
+            _library.SetVisible(IsPanelOpen && _libraryTabSelected);
+        }
+
+        private void SelectTab(bool library)
+        {
+            _libraryTabSelected = library;
+            _recorderTabButton.EnableInClassList("irs-tab--selected", !library);
+            _libraryTabButton.EnableInClassList("irs-tab--selected", library);
+            _recorderTab.style.display = library ? DisplayStyle.None : DisplayStyle.Flex;
+            _libraryTab.style.display = library ? DisplayStyle.Flex : DisplayStyle.None;
+            _library.SetVisible(IsPanelOpen && library);
         }
 
         private void OnRecorderChanged(RecorderState _)
@@ -266,8 +314,8 @@ namespace InstantReplay.Suite.UI
             _overlayLabel.text = state switch
             {
                 RecorderState.Buffering =>
-                    $"{FormatTime(stats.BufferedDurationSeconds)} / ~{FormatTime(stats.EstimatedCapacitySeconds)}{pausedSuffix}",
-                RecorderState.RecordingUnbounded => $"REC {FormatTime(stats.UnboundedElapsedSeconds)}{pausedSuffix}",
+                    $"{Formatting.Time(stats.BufferedDurationSeconds)} / ~{Formatting.Time(stats.EstimatedCapacitySeconds)}{pausedSuffix}",
+                RecorderState.RecordingUnbounded => $"REC {Formatting.Time(stats.UnboundedElapsedSeconds)}{pausedSuffix}",
                 RecorderState.Exporting => "Saving…",
                 RecorderState.Faulted => "Error",
                 _ => "Off"
@@ -304,16 +352,7 @@ namespace InstantReplay.Suite.UI
             return string.Format(CultureInfo.InvariantCulture,
                 "{0}×{1} @ {2} fps, {3:0.0} Mbps\nBuffer: {4} MiB {5} (≈ {6})",
                 video.Width, video.Height, video.FpsHint, video.Bitrate / 1e6, buffer.GetCapacityBytes() >> 20,
-                bufferKind, FormatTime(estimate));
-        }
-
-        private static string FormatTime(double seconds)
-        {
-            if (double.IsNaN(seconds) || double.IsInfinity(seconds) || seconds < 0) seconds = 0;
-            var span = TimeSpan.FromSeconds(Math.Floor(seconds));
-            return span.TotalHours >= 1
-                ? span.ToString(@"h\:mm\:ss", CultureInfo.InvariantCulture)
-                : span.ToString(@"m\:ss", CultureInfo.InvariantCulture);
+                bufferKind, Formatting.Time(estimate));
         }
 
         private static int IndexOf(IReadOnlyList<RecordingPreset> presets, RecordingPreset target)
