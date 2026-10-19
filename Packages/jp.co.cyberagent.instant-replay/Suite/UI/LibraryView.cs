@@ -14,20 +14,27 @@ using UnityEngine.UIElements;
 namespace InstantReplay.Suite.UI
 {
     /// <summary>
-    ///     Lists the recordings in the library and shows one of them with a preview, deletion, and sharing.
+    ///     Lists the recordings in the library and shows one of them with a preview, deletion, and sharing. In selection
+    ///     mode, several recordings can be deleted at once.
     /// </summary>
     internal sealed class LibraryView : IDisposable
     {
+        private readonly HashSet<string> _checkedPaths = new(StringComparer.Ordinal);
         private readonly ConfirmButton _deleteButton;
+        private readonly ConfirmButton _deleteCheckedButton;
         private readonly VisualElement _detail;
         private readonly Label _detailInfo;
         private readonly Label _emptyLabel;
         private readonly VisualElement _list;
         private readonly VisualElement _listSection;
+        private readonly Label _listStatus;
         private readonly Button _openResultButton;
         private readonly PreviewPlayer _preview;
         private readonly InstantReplayRecorder _recorder;
         private readonly RecoveryView _recovery;
+        private readonly Toggle _selectAllToggle;
+        private readonly Button _selectButton;
+        private readonly VisualElement _selectionBar;
         private readonly Button _shareButton;
         private readonly TextField _shareComment;
         private readonly VisualElement _shareSection;
@@ -39,6 +46,8 @@ namespace InstantReplay.Suite.UI
         private string _resultUrl;
         private string _shareMessage;
         private RecordingEntry _selected;
+        private IReadOnlyList<RecordingEntry> _entries = Array.Empty<RecordingEntry>();
+        private bool _selectionMode;
         private CancellationTokenSource _sharing;
         private bool _visible;
 
@@ -54,6 +63,28 @@ namespace InstantReplay.Suite.UI
 
             _recovery = new RecoveryView(recorder);
             _listSection.Add(_recovery.Root);
+
+            var toolbar = new VisualElement();
+            toolbar.AddToClassList("irs-panel__row");
+            toolbar.AddToClassList("irs-library__toolbar");
+            _selectionBar = new VisualElement();
+            _selectionBar.AddToClassList("irs-library__selection");
+            _selectAllToggle = new Toggle("All");
+            _selectAllToggle.AddToClassList("irs-library__select-all");
+            _selectAllToggle.RegisterValueChangedCallback(e => SetAllChecked(e.newValue));
+            _deleteCheckedButton = new ConfirmButton("Delete", DeleteChecked);
+            _deleteCheckedButton.AddToClassList("irs-library__delete-checked");
+            _selectionBar.Add(_selectAllToggle);
+            _selectionBar.Add(_deleteCheckedButton);
+            toolbar.Add(_selectionBar);
+            _selectButton = new Button(() => SetSelectionMode(!_selectionMode)) { text = "Select" };
+            _selectButton.AddToClassList("irs-library__select");
+            toolbar.Add(_selectButton);
+            _listSection.Add(toolbar);
+
+            _listStatus = new Label();
+            _listStatus.AddToClassList("irs-panel__error");
+            _listSection.Add(_listStatus);
 
             _list = new VisualElement();
             _list.AddToClassList("irs-library__list");
@@ -111,6 +142,7 @@ namespace InstantReplay.Suite.UI
 
             _recorder.Library.Changed += OnLibraryChanged;
             CloseDetail();
+            SetSelectionMode(false);
         }
 
         public VisualElement Root { get; }
@@ -129,6 +161,7 @@ namespace InstantReplay.Suite.UI
             _visible = visible;
             if (visible)
             {
+                SetListStatus(string.Empty);
                 _recovery.Refresh(true);
                 RefreshList();
                 if (_selected != null && File.Exists(_selected.FilePath)) _preview.Play(_selected.FilePath);
@@ -161,14 +194,97 @@ namespace InstantReplay.Suite.UI
                 entries = Array.Empty<RecordingEntry>();
             }
 
+            _entries = entries;
+            var existing = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var entry in entries) existing.Add(entry.FilePath);
+            _checkedPaths.IntersectWith(existing);
+
             foreach (var entry in entries) _list.Add(CreateRow(entry));
             _emptyLabel.style.display = entries.Count == 0 ? DisplayStyle.Flex : DisplayStyle.None;
+            _selectButton.SetEnabled(entries.Count > 0 || _selectionMode);
+            RefreshSelection();
+        }
+
+        private void SetListStatus(string message)
+        {
+            _listStatus.text = message;
+            _listStatus.EnableInClassList("irs-panel__error--hidden", string.IsNullOrEmpty(message));
+        }
+
+        private void SetSelectionMode(bool enabled)
+        {
+            _selectionMode = enabled;
+            _checkedPaths.Clear();
+            _deleteCheckedButton.Disarm();
+            _selectButton.text = enabled ? "Done" : "Select";
+            _selectionBar.style.display = enabled ? DisplayStyle.Flex : DisplayStyle.None;
+            SetListStatus(string.Empty);
+            if (_visible) RefreshList();
+            else RefreshSelection();
+        }
+
+        private void SetAllChecked(bool value)
+        {
+            _checkedPaths.Clear();
+            if (value)
+                foreach (var entry in _entries)
+                    _checkedPaths.Add(entry.FilePath);
+            RefreshList();
+        }
+
+        private void ToggleChecked(RecordingEntry entry)
+        {
+            if (!_checkedPaths.Remove(entry.FilePath)) _checkedPaths.Add(entry.FilePath);
+            RefreshList();
+        }
+
+        private void RefreshSelection()
+        {
+            var count = _checkedPaths.Count;
+            _selectAllToggle.SetValueWithoutNotify(count > 0 && count == _entries.Count);
+            _deleteCheckedButton.Label = count > 0 ? $"Delete {count}" : "Delete";
+            _deleteCheckedButton.SetEnabled(count > 0);
+            if (count == 0) _deleteCheckedButton.Disarm();
+        }
+
+        private void DeleteChecked()
+        {
+            var targets = new List<RecordingEntry>();
+            foreach (var entry in _entries)
+                if (_checkedPaths.Contains(entry.FilePath))
+                    targets.Add(entry);
+            if (targets.Count == 0) return;
+
+            SetListStatus(string.Empty);
+            try
+            {
+                _recorder.Library.Delete(targets);
+            }
+            catch (Exception ex)
+            {
+                Debug.LogException(ex);
+                SetListStatus(ex.Message);
+            }
+
+            _checkedPaths.Clear();
+            RefreshList();
         }
 
         private VisualElement CreateRow(RecordingEntry entry)
         {
             var row = new VisualElement();
             row.AddToClassList("irs-library__row");
+
+            var isChecked = _selectionMode && _checkedPaths.Contains(entry.FilePath);
+            row.EnableInClassList("irs-library__row--checked", isChecked);
+            if (_selectionMode)
+            {
+                // The row handles the click, so the check box only displays the state.
+                var check = new Toggle { value = isChecked, pickingMode = PickingMode.Ignore };
+                check.AddToClassList("irs-library__check");
+                foreach (var child in check.Query<VisualElement>().ToList()) child.pickingMode = PickingMode.Ignore;
+                row.Add(check);
+            }
 
             var thumbnail = Thumbnails.Load(entry.ThumbnailPath);
             if (thumbnail != null)
@@ -191,7 +307,11 @@ namespace InstantReplay.Suite.UI
             info.AddToClassList("irs-panel__details");
             text.Add(info);
 
-            row.RegisterCallback<ClickEvent>(_ => OpenDetail(entry));
+            row.RegisterCallback<ClickEvent>(_ =>
+            {
+                if (_selectionMode) ToggleChecked(entry);
+                else OpenDetail(entry);
+            });
             return row;
         }
 

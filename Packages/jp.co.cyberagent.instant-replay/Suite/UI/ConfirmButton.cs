@@ -16,7 +16,7 @@ namespace InstantReplay.Suite.UI
         private const long ConfirmWindowMs = 3000;
 
         private readonly Action _action;
-        private readonly string _label;
+        private string _label;
         private IVisualElementScheduledItem _reset;
         private bool _armed;
 
@@ -26,6 +26,17 @@ namespace InstantReplay.Suite.UI
             _action = action;
             text = label;
             clicked += OnClicked;
+        }
+
+        /// <summary>Text shown while the button is not asking for confirmation.</summary>
+        public string Label
+        {
+            get => _label;
+            set
+            {
+                _label = value;
+                if (!_armed) text = value;
+            }
         }
 
         public void Disarm()

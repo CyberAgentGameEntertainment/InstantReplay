@@ -300,3 +300,42 @@
 .irs-trim__thumbnail-row {
     align-items: center;
 }
+
+.irs-library__toolbar {
+    align-items: center;
+    justify-content: flex-end;
+    margin-bottom: 2px;
+}
+
+.irs-panel__row > .irs-library__select {
+    flex-grow: 0;
+    flex-basis: auto;
+}
+
+.irs-library__selection {
+    flex-direction: row;
+    align-items: center;
+    flex-grow: 1;
+}
+
+.irs-panel .irs-library__select-all {
+    flex-direction: row;
+    margin-right: 6px;
+}
+
+.irs-library__delete-checked {
+    flex-grow: 1;
+}
+
+.irs-library__check {
+    margin: 0 6px 0 0;
+    flex-shrink: 0;
+}
+
+.irs-library__row--checked {
+    background-color: rgba(80, 200, 120, 0.22);
+}
+
+.irs-library__row--checked:hover {
+    background-color: rgba(80, 200, 120, 0.3);
+}

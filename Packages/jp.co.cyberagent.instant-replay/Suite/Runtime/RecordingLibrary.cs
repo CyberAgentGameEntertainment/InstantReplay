@@ -151,6 +151,35 @@ namespace InstantReplay.Suite
             return updated;
         }
 
+        /// <summary>
+        ///     Deletes several entries in the same way as <see cref="Delete(RecordingEntry)" />, raising
+        ///     <see cref="Changed" /> once. Every entry is attempted even when some fail.
+        /// </summary>
+        /// <exception cref="AggregateException">One or more entries could not be deleted.</exception>
+        public void Delete(IEnumerable<RecordingEntry> entries)
+        {
+            if (entries == null) throw new ArgumentNullException(nameof(entries));
+
+            List<Exception> errors = null;
+            var deleted = false;
+            foreach (var entry in entries)
+            {
+                if (entry == null) continue;
+                try
+                {
+                    DeleteFiles(entry);
+                    deleted = true;
+                }
+                catch (Exception ex)
+                {
+                    (errors ??= new List<Exception>()).Add(ex);
+                }
+            }
+
+            if (deleted || errors != null) Changed?.Invoke();
+            if (errors != null) throw new AggregateException("Some recordings could not be deleted.", errors);
+        }
+
         private static void DeleteFiles(RecordingEntry entry)
         {
             DeleteIfExists(entry.FilePath);
