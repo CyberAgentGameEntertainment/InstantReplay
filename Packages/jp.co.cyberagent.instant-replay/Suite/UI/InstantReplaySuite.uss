@@ -283,14 +283,83 @@
 .irs-trim__preview {
     width: 100%;
     height: 280px;
-    flex-shrink: 1;
-    min-height: 120px;
+    flex-shrink: 20;
+    min-height: 60px;
     margin: 4px 0;
     background-color: rgb(0, 0, 0);
 }
 
-.irs-trim__slider {
-    margin-top: 6px;
+.irs-timeline {
+    height: 36px;
+    margin: 8px 10px 2px 10px;
+}
+
+.irs-timeline__track {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 15px;
+    height: 6px;
+    border-radius: 3px;
+    background-color: rgba(255, 255, 255, 0.18);
+}
+
+.irs-timeline__ticks {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    bottom: 0;
+}
+
+.irs-timeline__tick {
+    position: absolute;
+    top: 24px;
+    width: 1px;
+    height: 6px;
+    background-color: rgba(255, 255, 255, 0.45);
+}
+
+.irs-timeline__range {
+    position: absolute;
+    top: 15px;
+    height: 6px;
+    background-color: rgb(80, 200, 120);
+}
+
+.irs-timeline__handle {
+    position: absolute;
+    top: 6px;
+    width: 10px;
+    height: 24px;
+    margin-left: -5px;
+    border-radius: 3px;
+    background-color: rgb(240, 240, 240);
+    border-width: 1px;
+    border-color: rgb(80, 200, 120);
+}
+
+.irs-timeline__playhead {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    margin-left: -1px;
+    background-color: rgb(240, 180, 40);
+}
+
+.irs-timeline__knob {
+    position: absolute;
+    top: -4px;
+    left: -6px;
+    width: 14px;
+    height: 14px;
+    border-radius: 7px;
+    background-color: rgb(240, 180, 40);
+}
+
+.irs-timeline:disabled {
+    opacity: 0.5;
 }
 
 .irs-trim__labels {
@@ -338,4 +407,16 @@
 
 .irs-library__row--checked:hover {
     background-color: rgba(80, 200, 120, 0.3);
+}
+
+.irs-trim__controls {
+    flex-shrink: 1;
+}
+
+.irs-modal__content > .irs-panel__title {
+    flex-shrink: 0;
+}
+
+.irs-modal > .irs-modal__content {
+    background-color: rgb(24, 24, 24);
 }

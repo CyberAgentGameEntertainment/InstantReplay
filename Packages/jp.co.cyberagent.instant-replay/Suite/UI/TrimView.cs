@@ -24,7 +24,7 @@ namespace InstantReplay.Suite.UI
         private readonly Button _playButton;
         private readonly PreviewPlayer _preview;
         private readonly Label _rangeLabel;
-        private readonly MinMaxSlider _rangeSlider;
+        private readonly TrimTimeline _timeline;
         private readonly Button _saveButton;
         private readonly Button _setEndButton;
         private readonly Button _setStartButton;
@@ -35,6 +35,7 @@ namespace InstantReplay.Suite.UI
 
         private bool _closed;
         private double _end;
+        private bool _resumeAfterScrub;
         private bool _saving;
         private double _start;
         private byte[] _thumbnailPng;
@@ -48,25 +49,35 @@ namespace InstantReplay.Suite.UI
 
             Root = new VisualElement();
             Root.AddToClassList("irs-modal");
-            var content = new VisualElement();
-            content.AddToClassList("irs-modal__content");
-            content.AddToClassList("irs-panel");
-            Root.Add(content);
+            var panel = new VisualElement();
+            panel.AddToClassList("irs-modal__content");
+            panel.AddToClassList("irs-panel");
+            Root.Add(panel);
 
             var title = new Label("Trim replay");
             title.AddToClassList("irs-panel__title");
-            content.Add(title);
+            panel.Add(title);
 
             _preview = new PreviewPlayer(previewParent);
             _preview.Image.AddToClassList("irs-trim__preview");
             _preview.Image.RegisterCallback<ClickEvent>(_ => TogglePlay());
             _preview.Error += message => _statusLabel.text = $"Preview failed: {message}";
-            if (PreviewPlayer.IsSupported) content.Add(_preview.Image);
+            if (PreviewPlayer.IsSupported) panel.Add(_preview.Image);
 
-            _rangeSlider = new MinMaxSlider(0, (float)draft.DurationSeconds, 0, (float)draft.DurationSeconds);
-            _rangeSlider.AddToClassList("irs-trim__slider");
-            _rangeSlider.RegisterValueChangedCallback(e => OnRangeChanged(e.previousValue, e.newValue));
-            content.Add(_rangeSlider);
+            // On a short screen the preview shrinks first, and the controls scroll once it has reached its minimum.
+            var scroll = new ScrollView(ScrollViewMode.Vertical);
+            scroll.AddToClassList("irs-trim__controls");
+            panel.Add(scroll);
+            var content = scroll.contentContainer;
+
+            _timeline = new TrimTimeline();
+            _timeline.SetDuration(draft.DurationSeconds, draft.KeyFrameTimestamps);
+            _timeline.SetRange(_start, _end);
+            _timeline.StartDragged += time => SetRange(time, _end, true);
+            _timeline.EndDragged += time => SetRange(_start, time, false);
+            _timeline.PlayheadDragged += Scrub;
+            _timeline.PlayheadReleased += EndScrub;
+            content.Add(_timeline);
 
             var labels = new VisualElement();
             labels.AddToClassList("irs-panel__row");
@@ -163,14 +174,32 @@ namespace InstantReplay.Suite.UI
             var time = _preview.Time;
             // Playback loops within the selected range.
             if (_preview.IsPlaying && (time >= _end || time < _start - 0.25)) _preview.Seek(_start);
+            if (_timeline.IsDraggingPlayhead) return;
+            _timeline.SetPlayhead(time);
             _playheadLabel.text = Formatting.PreciseTime(time);
             _playButton.text = _preview.IsPlaying ? "Pause" : "Play";
         }
 
-        private void OnRangeChanged(Vector2 previous, Vector2 value)
+        // Playback pauses while the knob is dragged, so that the frame under the knob stays on screen.
+        private void Scrub(double time)
         {
-            var startMoved = !Mathf.Approximately(previous.x, value.x);
-            SetRange(value.x, value.y, startMoved);
+            if (_preview.IsPlaying)
+            {
+                _resumeAfterScrub = true;
+                _preview.Pause();
+            }
+
+            time = Math.Max(_start, Math.Min(_end, time));
+            _timeline.SetPlayhead(time);
+            _playheadLabel.text = Formatting.PreciseTime(time);
+            _preview.Seek(time);
+        }
+
+        private void EndScrub()
+        {
+            if (!_resumeAfterScrub) return;
+            _resumeAfterScrub = false;
+            _preview.Resume();
         }
 
         // Snaps the start to the key frame where the saved recording will actually start, and keeps the end after it.
@@ -179,9 +208,11 @@ namespace InstantReplay.Suite.UI
             var duration = _draft.DurationSeconds;
             _start = _draft.GetSaveStart(Math.Max(0, Math.Min(start, duration)));
             _end = Math.Min(duration, Math.Max(end, _start + MinimumLengthSeconds));
-            _rangeSlider.SetValueWithoutNotify(new Vector2((float)_start, (float)_end));
+            _timeline.SetRange(_start, _end);
             RefreshLabels();
-            _preview.Seek(seekToStart ? _start : Math.Max(_start, _end - 1));
+            var position = seekToStart ? _start : Math.Max(_start, _end - 1);
+            _timeline.SetPlayhead(position);
+            _preview.Seek(position);
         }
 
         private void RefreshLabels()
@@ -245,7 +276,7 @@ namespace InstantReplay.Suite.UI
 
         private void SetControlsEnabled(bool enabled)
         {
-            _rangeSlider.SetEnabled(enabled);
+            _timeline.SetEnabled(enabled);
             _setStartButton.SetEnabled(enabled);
             _setEndButton.SetEnabled(enabled);
             _thumbnailButton.SetEnabled(enabled);

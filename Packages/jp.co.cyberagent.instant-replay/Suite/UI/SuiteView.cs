@@ -37,7 +37,6 @@ namespace InstantReplay.Suite.UI
         private readonly VisualElement _root;
         private readonly Transform _previewParent;
         private readonly Button _saveButton;
-        private readonly Button _trimButton;
         private readonly Button _unboundedButton;
 
         private bool _busy;
@@ -110,14 +109,12 @@ namespace InstantReplay.Suite.UI
             var actions = new VisualElement();
             actions.AddToClassList("irs-panel__row");
             actions.AddToClassList("irs-panel__section");
+            // Saving a replay always goes through the trim view, where the whole footage is selected initially.
             _saveButton = new Button(SaveReplay) { text = "Save replay" };
-            _trimButton = new Button(TrimReplay) { text = "Trim…" };
-            actions.Add(_saveButton);
-            actions.Add(_trimButton);
-            content.Add(actions);
-
             _unboundedButton = new Button(ToggleUnbounded);
-            content.Add(_unboundedButton);
+            actions.Add(_saveButton);
+            actions.Add(_unboundedButton);
+            content.Add(actions);
 
             _pauseButton = new Button(() => Run(() =>
             {
@@ -204,28 +201,6 @@ namespace InstantReplay.Suite.UI
         }
 
         private async void SaveReplay()
-        {
-            if (_busy) return;
-            _busy = true;
-            _operationError = null;
-            Refresh();
-            try
-            {
-                await _recorder.SaveReplayAsync();
-            }
-            catch (Exception ex)
-            {
-                Debug.LogException(ex);
-                _operationError = ex.Message;
-            }
-            finally
-            {
-                _busy = false;
-                Refresh();
-            }
-        }
-
-        private async void TrimReplay()
         {
             if (_busy || _trim != null) return;
             _busy = true;
@@ -318,8 +293,7 @@ namespace InstantReplay.Suite.UI
 
             var idle = !_busy && state is not (RecorderState.Exporting or RecorderState.RecordingUnbounded);
             _bufferingToggle.SetValueWithoutNotify(_recorder.IsBufferingEnabled);
-            _saveButton.SetEnabled(!_busy && state == RecorderState.Buffering);
-            _trimButton.SetEnabled(!_busy && _trim == null && state == RecorderState.Buffering);
+            _saveButton.SetEnabled(!_busy && _trim == null && state == RecorderState.Buffering);
             _unboundedButton.text = state == RecorderState.RecordingUnbounded ? "Stop recording" : "Start recording";
             _unboundedButton.SetEnabled(!_busy && state != RecorderState.Exporting);
             _pauseButton.text = _recorder.IsPaused ? "Resume" : "Pause";
