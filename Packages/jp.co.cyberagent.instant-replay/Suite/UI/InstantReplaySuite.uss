@@ -1,0 +1,120 @@
+.irs-root {
+    position: absolute;
+    left: 0;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    align-items: flex-end;
+}
+
+.irs-overlay {
+    flex-direction: row;
+    align-items: center;
+    margin: 8px;
+    padding: 4px 10px;
+    border-radius: 12px;
+    background-color: rgba(0, 0, 0, 0.6);
+}
+
+.irs-overlay:hover {
+    background-color: rgba(0, 0, 0, 0.75);
+}
+
+.irs-overlay__dot {
+    width: 10px;
+    height: 10px;
+    margin-right: 6px;
+    border-radius: 5px;
+    background-color: rgb(128, 128, 128);
+}
+
+.irs-overlay__dot--buffering {
+    background-color: rgb(80, 200, 120);
+}
+
+.irs-overlay__dot--recording {
+    background-color: rgb(230, 60, 60);
+}
+
+.irs-overlay__dot--busy {
+    background-color: rgb(240, 180, 40);
+}
+
+.irs-overlay__dot--faulted {
+    background-color: rgb(230, 60, 60);
+    opacity: 0.5;
+}
+
+.irs-overlay__dot--paused {
+    opacity: 0.4;
+}
+
+.irs-overlay__label {
+    color: rgb(240, 240, 240);
+    font-size: 12px;
+    -unity-font-style: bold;
+}
+
+.irs-panel {
+    width: 300px;
+    max-width: 90%;
+    margin: 0 8px 8px 8px;
+    padding: 10px;
+    border-radius: 6px;
+    background-color: rgba(24, 24, 24, 0.92);
+}
+
+.irs-panel--hidden {
+    display: none;
+}
+
+.irs-panel Label {
+    color: rgb(230, 230, 230);
+}
+
+.irs-panel__title {
+    font-size: 14px;
+    -unity-font-style: bold;
+    margin-bottom: 6px;
+}
+
+.irs-panel__section {
+    margin-top: 8px;
+}
+
+.irs-panel__row {
+    flex-direction: row;
+}
+
+.irs-panel__row > Button {
+    flex-grow: 1;
+    flex-basis: 0;
+}
+
+.irs-panel .irs-panel__details {
+    font-size: 11px;
+    white-space: normal;
+    color: rgb(170, 170, 170);
+    margin: 2px 3px 0 3px;
+}
+
+.irs-panel .irs-panel__error {
+    font-size: 11px;
+    white-space: normal;
+    color: rgb(255, 120, 110);
+    margin: 6px 3px 0 3px;
+}
+
+.irs-panel__error--hidden {
+    display: none;
+}
+
+.irs-panel .unity-base-field__label {
+    min-width: 0;
+    margin-right: 8px;
+}
+
+.irs-panel .unity-base-popup-field__input {
+    flex-grow: 1;
+    flex-shrink: 1;
+}
