@@ -181,7 +181,6 @@ namespace InstantReplay.Suite.UI
             private const float DragThreshold = 8;
 
             private readonly Action _tapped;
-            private Focusable _unfocusable;
             private int _pointerId = PointerId.invalidPointerId;
             private bool _stopMouseUp;
             private Vector2 _start;
@@ -211,7 +210,6 @@ namespace InstantReplay.Suite.UI
                 target.UnregisterCallback<PointerLeaveEvent>(OnPointerLeave);
                 target.UnregisterCallback<MouseDownEvent>(OnMouseDown, TrickleDown.TrickleDown);
                 target.UnregisterCallback<MouseUpEvent>(OnMouseUp, TrickleDown.TrickleDown);
-                RestoreFocusable();
             }
 
             private bool IsTracking => _pointerId != PointerId.invalidPointerId;
@@ -223,20 +221,23 @@ namespace InstantReplay.Suite.UI
                 if (evt.pointerType == PointerType.mouse || IsTracking || HasFocusWithin()) return;
 
                 evt.StopImmediatePropagation();
+                IgnoreFocus(evt);
                 if (evt.button != (int)MouseButton.LeftMouse || !target.enabledInHierarchy) return;
 
                 _pointerId = evt.pointerId;
                 _start = evt.position;
+            }
 
-                // The panel moves the focus to the pressed element after the event has been handled, unless the element
-                // cannot take the focus. The element can take it again once the event has been handled.
-                if (evt.target is Focusable { focusable: true } pressed)
-                {
-                    RestoreFocusable();
-                    _unfocusable = pressed;
-                    pressed.focusable = false;
-                    target.schedule.Execute(RestoreFocusable);
-                }
+            // The panel focuses the pressed element after the event has been handled, or the field when the element
+            // cannot take the focus, such as the label of the field.
+            private void IgnoreFocus(PointerDownEvent evt)
+            {
+#if UNITY_2023_2_OR_NEWER
+                target.focusController?.IgnoreEvent(evt);
+#else
+                // Unity 2022.3 changes the focus in the default action of the event.
+                evt.PreventDefault();
+#endif
             }
 
             private void OnPointerMove(PointerMoveEvent evt)
@@ -284,13 +285,6 @@ namespace InstantReplay.Suite.UI
                 // The focus controller reports the field, not the text element in it, as focused.
                 return target.focusController?.focusedElement is VisualElement focused &&
                        (focused == target || target.Contains(focused));
-            }
-
-            private void RestoreFocusable()
-            {
-                if (_unfocusable == null) return;
-                _unfocusable.focusable = true;
-                _unfocusable = null;
             }
 
             private void Cancel()
