@@ -35,17 +35,21 @@ namespace InstantReplay.Suite.UI
         private readonly Button _recorderTabButton;
         private readonly IVisualElementScheduledItem _refresh;
         private readonly VisualElement _root;
+        private readonly Transform _previewParent;
         private readonly Button _saveButton;
+        private readonly Button _trimButton;
         private readonly Button _unboundedButton;
 
         private bool _busy;
         private bool _libraryTabSelected;
         private string _operationError;
+        private TrimView _trim;
 
         public SuiteView(VisualElement documentRoot, StyleSheet styleSheet, InstantReplayRecorder recorder,
             Transform previewParent)
         {
             _recorder = recorder;
+            _previewParent = previewParent;
 
             _root = new VisualElement { pickingMode = PickingMode.Ignore };
             _root.AddToClassList("irs-root");
@@ -107,10 +111,13 @@ namespace InstantReplay.Suite.UI
             actions.AddToClassList("irs-panel__row");
             actions.AddToClassList("irs-panel__section");
             _saveButton = new Button(SaveReplay) { text = "Save replay" };
-            _unboundedButton = new Button(ToggleUnbounded);
+            _trimButton = new Button(TrimReplay) { text = "Trim…" };
             actions.Add(_saveButton);
-            actions.Add(_unboundedButton);
+            actions.Add(_trimButton);
             content.Add(actions);
+
+            _unboundedButton = new Button(ToggleUnbounded);
+            content.Add(_unboundedButton);
 
             _pauseButton = new Button(() => Run(() =>
             {
@@ -161,6 +168,7 @@ namespace InstantReplay.Suite.UI
         public void Dispose()
         {
             _refresh.Pause();
+            _trim?.Dispose();
             _library.Dispose();
             _recorder.StateChanged -= OnRecorderChanged;
             _recorder.ConfigurationChanged -= OnRecorderChanged;
@@ -204,6 +212,35 @@ namespace InstantReplay.Suite.UI
             try
             {
                 await _recorder.SaveReplayAsync();
+            }
+            catch (Exception ex)
+            {
+                Debug.LogException(ex);
+                _operationError = ex.Message;
+            }
+            finally
+            {
+                _busy = false;
+                Refresh();
+            }
+        }
+
+        private async void TrimReplay()
+        {
+            if (_busy || _trim != null) return;
+            _busy = true;
+            _operationError = null;
+            Refresh();
+            try
+            {
+                var draft = await _recorder.CaptureReplayAsync();
+                _trim = new TrimView(_root, draft, _previewParent);
+                _trim.Closed += saved =>
+                {
+                    _trim = null;
+                    if (saved != null) SelectTab(true);
+                    Refresh();
+                };
             }
             catch (Exception ex)
             {
@@ -282,6 +319,7 @@ namespace InstantReplay.Suite.UI
             var idle = !_busy && state is not (RecorderState.Exporting or RecorderState.RecordingUnbounded);
             _bufferingToggle.SetValueWithoutNotify(_recorder.IsBufferingEnabled);
             _saveButton.SetEnabled(!_busy && state == RecorderState.Buffering);
+            _trimButton.SetEnabled(!_busy && _trim == null && state == RecorderState.Buffering);
             _unboundedButton.text = state == RecorderState.RecordingUnbounded ? "Stop recording" : "Start recording";
             _unboundedButton.SetEnabled(!_busy && state != RecorderState.Exporting);
             _pauseButton.text = _recorder.IsPaused ? "Resume" : "Pause";

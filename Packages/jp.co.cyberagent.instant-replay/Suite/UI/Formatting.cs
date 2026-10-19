@@ -18,6 +18,15 @@ namespace InstantReplay.Suite.UI
                 : span.ToString(@"m\:ss", CultureInfo.InvariantCulture);
         }
 
+        /// <summary>Formats seconds with tenths, for positions within a recording.</summary>
+        public static string PreciseTime(double seconds)
+        {
+            if (double.IsNaN(seconds) || double.IsInfinity(seconds) || seconds < 0) seconds = 0;
+            var tenths = (long)Math.Round(seconds * 10);
+            return string.Format(CultureInfo.InvariantCulture, "{0}:{1:00}.{2}", tenths / 600, tenths / 10 % 60,
+                tenths % 10);
+        }
+
         public static string Bytes(long bytes)
         {
             const double kib = 1024, mib = kib * 1024, gib = mib * 1024;

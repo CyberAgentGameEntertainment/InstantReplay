@@ -33,6 +33,8 @@ namespace InstantReplay.Suite.UI
         private readonly VisualElement _shareSection;
         private readonly Label _shareStatus;
         private readonly DropdownField _shareTarget;
+        private readonly List<Texture2D> _thumbnails = new();
+        private readonly Button _thumbnailButton;
 
         private string _resultUrl;
         private string _shareMessage;
@@ -81,6 +83,8 @@ namespace InstantReplay.Suite.UI
             var actions = new VisualElement();
             actions.AddToClassList("irs-panel__row");
             actions.AddToClassList("irs-panel__section");
+            _thumbnailButton = new Button(SetThumbnailFromPreview) { text = "Use frame as thumbnail" };
+            if (PreviewPlayer.IsSupported && PreviewPlayer.CanCaptureFrame) actions.Add(_thumbnailButton);
             _deleteButton = new ConfirmButton("Delete", DeleteSelected);
             actions.Add(_deleteButton);
             _detail.Add(actions);
@@ -116,6 +120,7 @@ namespace InstantReplay.Suite.UI
             _recorder.Library.Changed -= OnLibraryChanged;
             _sharing?.Cancel();
             _preview.Dispose();
+            ReleaseThumbnails();
         }
 
         /// <summary>Called when the tab becomes visible or hidden.</summary>
@@ -144,6 +149,7 @@ namespace InstantReplay.Suite.UI
         private void RefreshList()
         {
             _list.Clear();
+            ReleaseThumbnails();
             IReadOnlyList<RecordingEntry> entries;
             try
             {
@@ -164,13 +170,26 @@ namespace InstantReplay.Suite.UI
             var row = new VisualElement();
             row.AddToClassList("irs-library__row");
 
+            var thumbnail = Thumbnails.Load(entry.ThumbnailPath);
+            if (thumbnail != null)
+            {
+                _thumbnails.Add(thumbnail);
+                var image = new Image { image = thumbnail, scaleMode = ScaleMode.ScaleAndCrop };
+                image.AddToClassList("irs-thumbnail");
+                row.Add(image);
+            }
+
+            var text = new VisualElement();
+            text.AddToClassList("irs-library__row-text");
+            row.Add(text);
+
             var title = new Label($"{entry.Source} · {Formatting.LocalDateTime(entry.CreatedAtUtc)}");
             title.AddToClassList("irs-library__row-title");
-            row.Add(title);
+            text.Add(title);
 
             var info = new Label(DescribeShort(entry));
             info.AddToClassList("irs-panel__details");
-            row.Add(info);
+            text.Add(info);
 
             row.RegisterCallback<ClickEvent>(_ => OpenDetail(entry));
             return row;
@@ -229,6 +248,32 @@ namespace InstantReplay.Suite.UI
             RefreshList();
         }
 
+        private void SetThumbnailFromPreview()
+        {
+            var entry = _selected;
+            if (entry == null) return;
+            try
+            {
+                var png = _preview.CaptureFramePng(320);
+                if (png == null) return;
+                _selected = _recorder.Library.SetThumbnail(entry, png);
+                _detailInfo.text = DescribeLong(_selected) + "\nThumbnail updated.";
+            }
+            catch (Exception ex)
+            {
+                Debug.LogException(ex);
+                _detailInfo.text = DescribeLong(entry) + $"\nThumbnail failed: {ex.Message}";
+            }
+        }
+
+        private void ReleaseThumbnails()
+        {
+            foreach (var texture in _thumbnails)
+                if (texture != null)
+                    UnityEngine.Object.Destroy(texture);
+            _thumbnails.Clear();
+        }
+
         private ShareTarget GetSelectedTarget()
         {
             var index = _shareTarget.index;
@@ -255,12 +300,14 @@ namespace InstantReplay.Suite.UI
                 _shareButton.text = "Cancel";
                 _shareButton.SetEnabled(true);
                 _deleteButton.SetEnabled(false);
+                _thumbnailButton.SetEnabled(false);
                 _shareTarget.SetEnabled(false);
                 return;
             }
 
             _shareButton.text = "Share";
             _deleteButton.SetEnabled(true);
+            _thumbnailButton.SetEnabled(true);
             _shareTarget.SetEnabled(true);
 
             var target = GetSelectedTarget();

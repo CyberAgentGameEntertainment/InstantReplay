@@ -20,6 +20,11 @@
             "name": "com.unity.modules.video",
             "expression": "",
             "define": "INSTANTREPLAY_VIDEO"
+        },
+        {
+            "name": "com.unity.modules.imageconversion",
+            "expression": "",
+            "define": "INSTANTREPLAY_IMAGECONVERSION"
         }
     ],
     "noEngineReferences": false
