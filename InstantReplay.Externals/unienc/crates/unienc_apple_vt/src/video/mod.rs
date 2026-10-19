@@ -16,8 +16,8 @@ use objc2_core_video::{CVPixelBuffer, CVPixelBufferCreateWithBytes, kCVPixelForm
 use objc2_video_toolbox::{
     VTCompressionSession, VTEncodeInfoFlags, VTSessionSetProperty,
     kVTCompressionPropertyKey_AllowFrameReordering, kVTCompressionPropertyKey_AverageBitRate,
-    kVTCompressionPropertyKey_MaxKeyFrameIntervalDuration,
-    kVTCompressionPropertyKey_ColorPrimaries, kVTCompressionPropertyKey_RealTime,
+    kVTCompressionPropertyKey_ColorPrimaries,
+    kVTCompressionPropertyKey_MaxKeyFrameIntervalDuration, kVTCompressionPropertyKey_RealTime,
     kVTCompressionPropertyKey_TransferFunction, kVTCompressionPropertyKey_YCbCrMatrix,
     kVTInvalidSessionErr,
 };
