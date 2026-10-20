@@ -114,7 +114,7 @@ echo "==> running"
 # app_process wants a "parent directory" argument it does not use for anything
 # here, and finds the shim through CLASSPATH.
 set +e
-"${adb[@]}" shell "cd $remote && timeout -s KILL ${UNIENC_TEST_TIMEOUT:-300} env CLASSPATH=$remote/harness.dex ${UNIENC_TEST_THREADS:+UNIENC_TEST_THREADS=$UNIENC_TEST_THREADS} app_process $remote jp.co.cyberagent.unienc.harness.Harness $remote/libunienc_harness_android.so $remote/e2e.mp4; echo EXIT:\$?" \
+"${adb[@]}" shell "cd $remote && timeout -s KILL ${UNIENC_TEST_TIMEOUT:-300} env CLASSPATH=$remote/harness.dex ${UNIENC_TEST_THREADS:+UNIENC_TEST_THREADS=$UNIENC_TEST_THREADS} app_process $remote jp.co.cyberagent.unienc.harness.Harness $remote/libunienc_harness_android.so $remote; echo EXIT:\$?" \
     | tr -d '\r' | tee "$staging/output"
 set -e
 
@@ -126,12 +126,13 @@ if [[ "${status:-1}" == "137" ]]; then
     echo "==> the harness did not finish within ${UNIENC_TEST_TIMEOUT:-300}s and was killed" >&2
 fi
 
-# Keep the muxed file for inspection whether or not the checks passed.
-if "${adb[@]}" shell "test -f $remote/e2e.mp4" 2>/dev/null; then
+# Keep the muxed files for inspection whether or not the checks passed. The
+# harness writes one per case, so whatever it managed to produce is pulled.
+for muxed in $("${adb[@]}" shell "ls $remote/*.mp4 2>/dev/null" | tr -d '\r'); do
     mkdir -p target/android-harness
-    "${adb[@]}" pull "$remote/e2e.mp4" target/android-harness/e2e.mp4 >/dev/null
-    echo "==> pulled target/android-harness/e2e.mp4"
-fi
+    "${adb[@]}" pull "$muxed" "target/android-harness/$(basename "$muxed")" >/dev/null
+    echo "==> pulled target/android-harness/$(basename "$muxed")"
+done
 
 # On failure the device log is the only place a native crash, a missing library
 # or an ART complaint shows up; the harness's own output stops at whatever it

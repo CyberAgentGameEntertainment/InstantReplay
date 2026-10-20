@@ -8,13 +8,18 @@ use objc2_core_foundation::{
     CFBoolean, CFDictionary, CFNumber, CFString, CFType, kCFBooleanFalse, kCFBooleanTrue,
 };
 use objc2_core_media::{
-    CMSampleBuffer, CMTime, kCMSampleAttachmentKey_NotSync, kCMTimeInvalid, kCMVideoCodecType_H264,
+    CMSampleBuffer, CMTime, kCMFormatDescriptionColorPrimaries_ITU_R_709_2,
+    kCMFormatDescriptionTransferFunction_ITU_R_709_2, kCMFormatDescriptionYCbCrMatrix_ITU_R_709_2,
+    kCMSampleAttachmentKey_NotSync, kCMTimeInvalid, kCMVideoCodecType_H264,
 };
 use objc2_core_video::{CVPixelBuffer, CVPixelBufferCreateWithBytes, kCVPixelFormatType_32BGRA};
 use objc2_video_toolbox::{
     VTCompressionSession, VTEncodeInfoFlags, VTSessionSetProperty,
     kVTCompressionPropertyKey_AllowFrameReordering, kVTCompressionPropertyKey_AverageBitRate,
-    kVTCompressionPropertyKey_RealTime, kVTInvalidSessionErr,
+    kVTCompressionPropertyKey_ColorPrimaries,
+    kVTCompressionPropertyKey_MaxKeyFrameIntervalDuration, kVTCompressionPropertyKey_RealTime,
+    kVTCompressionPropertyKey_TransferFunction, kVTCompressionPropertyKey_YCbCrMatrix,
+    kVTInvalidSessionErr,
 };
 use tokio::sync::mpsc;
 use unienc_common::{
@@ -44,6 +49,7 @@ pub struct VideoToolboxEncoderInput {
     width: u32,
     height: u32,
     bitrate: u32,
+    idr_interval_seconds: f32,
 }
 
 struct CompressionSession {
@@ -279,7 +285,12 @@ impl EncoderInput for VideoToolboxEncoderInput {
                 // VTCompressionSession turns invalid when the app enters background on iOS; retry
                 // once with a fresh session, re-passing the same reserved permit.
                 retry += 1;
-                match CompressionSession::new(self.width, self.height, self.bitrate) {
+                match CompressionSession::new(
+                    self.width,
+                    self.height,
+                    self.bitrate,
+                    self.idr_interval_seconds,
+                ) {
                     Ok(session) => {
                         self.session = session;
                         continue;
@@ -335,7 +346,7 @@ impl Drop for VideoToolboxEncoderInput {
 }
 
 impl CompressionSession {
-    fn new(width: u32, height: u32, bitrate: u32) -> Result<Self> {
+    fn new(width: u32, height: u32, bitrate: u32, idr_interval_seconds: f32) -> Result<Self> {
         let mut session: *mut VTCompressionSession = std::ptr::null_mut();
 
         unsafe {
@@ -382,6 +393,44 @@ impl CompressionSession {
             )
         }
         .to_result()?;
+        unsafe {
+            VTSessionSetProperty(
+                &session,
+                kVTCompressionPropertyKey_MaxKeyFrameIntervalDuration,
+                Some(&CFNumber::new_f64(idr_interval_seconds as f64)),
+            )
+        }
+        .to_result()?;
+
+        // Tag the stream as BT.709 limited range. Without these the encoder leaves the color
+        // information unspecified, so the muxed file carries no `colr` box and players have to
+        // guess. The values must match the conversion `VideoFrameBgra32::to_yuv420_planes`
+        // performs on the readback path, and the matrix additionally tells VideoToolbox which
+        // coefficients to use when it converts the BGRA pixel buffers of the blit path itself.
+        unsafe {
+            VTSessionSetProperty(
+                &session,
+                kVTCompressionPropertyKey_ColorPrimaries,
+                Some(kCMFormatDescriptionColorPrimaries_ITU_R_709_2 as &CFType),
+            )
+        }
+        .to_result()?;
+        unsafe {
+            VTSessionSetProperty(
+                &session,
+                kVTCompressionPropertyKey_TransferFunction,
+                Some(kCMFormatDescriptionTransferFunction_ITU_R_709_2 as &CFType),
+            )
+        }
+        .to_result()?;
+        unsafe {
+            VTSessionSetProperty(
+                &session,
+                kVTCompressionPropertyKey_YCbCrMatrix,
+                Some(kCMFormatDescriptionYCbCrMatrix_ITU_R_709_2 as &CFType),
+            )
+        }
+        .to_result()?;
 
         Ok(CompressionSession { inner: session })
     }
@@ -393,14 +442,16 @@ impl VideoToolboxEncoder {
         let tx = Box::new(tx);
 
         let (width, height, bitrate) = (options.width(), options.height(), options.bitrate());
+        let idr_interval_seconds = options.idr_interval_seconds();
 
         Ok(VideoToolboxEncoder {
             input: VideoToolboxEncoderInput {
-                session: CompressionSession::new(width, height, bitrate)?,
+                session: CompressionSession::new(width, height, bitrate, idr_interval_seconds)?,
                 tx,
                 width,
                 height,
                 bitrate,
+                idr_interval_seconds,
             },
             output: VideoToolboxEncoderOutput { rx },
         })
