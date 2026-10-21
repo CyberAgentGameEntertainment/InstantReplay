@@ -167,6 +167,7 @@ Pausing is not a state. It is orthogonal to buffering and unbounded recording, a
 
 The recorder observes the following rules:
 
+- While the application is suspended, as reported by `OnApplicationPause`, the recorder pauses the running session, because the providers keep their clocks running during the suspension and the suspension would otherwise appear as a long period without frames. The recorder observes the suspension through a hidden game object created by `Activate`, so that it also works without the component. The pause caused by the suspension is tracked separately from `Pause`, does not change `IsPaused`, and does not resume a recording that the user has paused.
 - Buffered recording and unbounded recording are mutually exclusive. `StartUnbounded` disposes the buffered session before it starts the unbounded session. When the unbounded recording ends, buffered recording resumes if it is enabled.
 - Encoder options are fixed when a session is created, so `ApplyPreset` disposes the current session and creates a new one. The buffered footage is discarded.
 - Saving or capturing a replay ends the buffered session. Nothing is recorded between the start of the operation and the creation of the next session.

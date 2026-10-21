@@ -293,7 +293,7 @@ var entry = await recording.StopAsync();
 
 #### State and Statistics
 
-`State` returns one of `Idle`, `Buffering`, `Exporting`, `RecordingUnbounded` and `Faulted`, and `StateChanged` is raised when it changes. `IsPaused` is independent of the state. `GetStatistics()` returns the buffered duration, the estimated capacity, the bytes used by the buffer and the elapsed time of an unbounded recording.
+`State` returns one of `Idle`, `Buffering`, `Exporting`, `RecordingUnbounded` and `Faulted`, and `StateChanged` is raised when it changes. `IsPaused` is independent of the state. The recorder also pauses while the application is suspended, so that the suspension does not appear in the footage as a period without frames; this does not change `IsPaused`. `GetStatistics()` returns the buffered duration, the estimated capacity, the bytes used by the buffer and the elapsed time of an unbounded recording.
 
 The recorder can also be controlled with `SetBufferingEnabled`, `Pause`, `Resume` and `ApplyPreset`, which correspond to the controls of the Recorder tab.
 

@@ -291,7 +291,7 @@ var entry = await recording.StopAsync();
 
 #### 状態と統計情報
 
-`State` は `Idle`、`Buffering`、`Exporting`、`RecordingUnbounded`、`Faulted` のいずれかを返し、変化すると `StateChanged` が発生します。`IsPaused` は状態とは独立しています。`GetStatistics()` は、バッファ済みの長さ、推定容量、バッファの使用バイト数、および無制限録画の経過時間を返します。
+`State` は `Idle`、`Buffering`、`Exporting`、`RecordingUnbounded`、`Faulted` のいずれかを返し、変化すると `StateChanged` が発生します。`IsPaused` は状態とは独立しています。アプリケーションがサスペンドされている間も recorder は自動的に一時停止し、サスペンド期間がフレームのない期間として映像に現れないようにします。この一時停止は `IsPaused` には反映されません。`GetStatistics()` は、バッファ済みの長さ、推定容量、バッファの使用バイト数、および無制限録画の経過時間を返します。
 
 Recorder タブのコントロールに対応する `SetBufferingEnabled`、`Pause`、`Resume`、`ApplyPreset` でもレコーダーを操作できます。
 

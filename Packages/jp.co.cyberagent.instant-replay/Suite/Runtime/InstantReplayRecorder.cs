@@ -45,6 +45,8 @@ namespace InstantReplay.Suite
         private RealtimeInstantReplaySession _session;
         private PresetContext _sessionContext;
         private int _sessionGeneration;
+        private bool _suspended;
+        private ApplicationSuspensionObserver _suspensionObserver;
         private UnboundedRecording _unbounded;
         private UnboundedRecordingSession _unboundedSession;
 
@@ -106,7 +108,13 @@ namespace InstantReplay.Suite
         /// </summary>
         public bool IsBufferingEnabled => _bufferingEnabled;
 
+        /// <summary>
+        ///     Whether the recording has been paused by <see cref="Pause" />. Recording is also paused while the
+        ///     application is suspended, which this property does not reflect.
+        /// </summary>
         public bool IsPaused => _paused;
+
+        private bool IsSessionPaused => _paused || _suspended;
 
         /// <summary>The running unbounded recording, or null.</summary>
         public UnboundedRecording CurrentUnboundedRecording => _unbounded;
@@ -131,6 +139,12 @@ namespace InstantReplay.Suite
             if (_disposed) return;
             ThrowIfNotMainThread();
             _disposed = true;
+
+            if (_suspensionObserver != null)
+            {
+                _suspensionObserver.DestroySelf();
+                _suspensionObserver = null;
+            }
 
             StopBuffering();
 
@@ -170,6 +184,11 @@ namespace InstantReplay.Suite
             _bufferingEnabled = _preferences.hasBufferingEnabled
                 ? _preferences.bufferingEnabled
                 : _settings.StartBufferingOnLaunch;
+
+            // Providers keep their clocks running while the application is suspended, so the suspension would appear as
+            // a long period without frames unless recording is paused meanwhile.
+            if (Application.isPlaying)
+                _suspensionObserver = ApplicationSuspensionObserver.Create(OnApplicationSuspensionChanged);
 
             if (_bufferingEnabled) StartBuffering();
             ConfigurationChanged?.Invoke();
@@ -250,6 +269,9 @@ namespace InstantReplay.Suite
         /// <summary>
         ///     Pauses buffering or the unbounded recording. Paused time is excluded from the footage.
         /// </summary>
+        /// <remarks>
+        ///     The recorder also pauses by itself while the application is suspended, independently of this method.
+        /// </remarks>
         public void Pause()
         {
             SetPaused(true);
@@ -394,8 +416,8 @@ namespace InstantReplay.Suite
                 throw;
             }
 
-            if (_paused) _unboundedSession.Pause();
-            _unbounded = new UnboundedRecording(this, path, DateTime.UtcNow, request?.Metadata, _paused);
+            if (IsSessionPaused) _unboundedSession.Pause();
+            _unbounded = new UnboundedRecording(this, path, DateTime.UtcNow, request?.Metadata, IsSessionPaused);
             SetState(RecorderState.RecordingUnbounded);
             return _unbounded;
         }
@@ -502,7 +524,24 @@ namespace InstantReplay.Suite
             ThrowIfNotMainThread();
             ThrowIfDisposed();
             if (_paused == paused) return;
+            var wasSessionPaused = IsSessionPaused;
             _paused = paused;
+            ApplySessionPause(wasSessionPaused);
+            ConfigurationChanged?.Invoke();
+        }
+
+        private void OnApplicationSuspensionChanged(bool suspended)
+        {
+            if (_disposed || _suspended == suspended) return;
+            var wasSessionPaused = IsSessionPaused;
+            _suspended = suspended;
+            ApplySessionPause(wasSessionPaused);
+        }
+
+        private void ApplySessionPause(bool wasSessionPaused)
+        {
+            var paused = IsSessionPaused;
+            if (paused == wasSessionPaused) return;
 
             if (paused)
             {
@@ -516,7 +555,6 @@ namespace InstantReplay.Suite
             }
 
             _unbounded?.SetPaused(paused);
-            ConfigurationChanged?.Invoke();
         }
 
         private void StartBuffering()
@@ -531,7 +569,7 @@ namespace InstantReplay.Suite
                 _session = new RealtimeInstantReplaySession(options, _frameSlot.Get(), false, _audioSlot.Get(), false,
                     ex => Post(() => OnSessionException(generation, ex)));
                 _sessionContext = context;
-                if (_paused) _session.Pause();
+                if (IsSessionPaused) _session.Pause();
             }
             catch (Exception ex)
             {
