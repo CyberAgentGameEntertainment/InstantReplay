@@ -37,3 +37,42 @@
 .unity-base-dropdown__checkmark {
     -unity-background-image-tint-color: rgb(62, 196, 136);
 }
+
+/* Scroll bar of a drop-down menu that does not fit, matching the one in the suite style sheet. */
+
+.unity-base-dropdown__container-outer .unity-scroller--vertical {
+    width: 6px;
+    margin-left: 4px;
+    border-width: 0;
+    background-color: rgba(0, 0, 0, 0);
+}
+
+.unity-base-dropdown__container-outer .unity-scroller__low-button,
+.unity-base-dropdown__container-outer .unity-scroller__high-button {
+    display: none;
+}
+
+.unity-base-dropdown__container-outer .unity-scroller--vertical .unity-base-slider--vertical {
+    top: 0;
+    bottom: 0;
+    margin: 0;
+}
+
+.unity-base-dropdown__container-outer .unity-scroller--vertical .unity-base-slider__tracker {
+    border-width: 0;
+    background-color: rgba(0, 0, 0, 0);
+}
+
+.unity-base-dropdown__container-outer .unity-scroller--vertical .unity-base-slider__dragger {
+    left: 0;
+    right: 0;
+    width: 6px;
+    margin: 0;
+    border-width: 0;
+    border-radius: 3px;
+    background-color: rgb(64, 68, 77);
+}
+
+.unity-base-dropdown__container-outer .unity-scroller--vertical .unity-base-slider__dragger:hover {
+    background-color: rgb(90, 94, 103);
+}
