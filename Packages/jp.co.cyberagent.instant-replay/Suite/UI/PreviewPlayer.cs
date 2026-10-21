@@ -19,8 +19,17 @@ namespace InstantReplay.Suite.UI
     internal sealed class PreviewPlayer : IDisposable
     {
 #if INSTANTREPLAY_VIDEO && !UNITY_WEBGL
+        // A seek that has not completed within this time is treated as completed, in case the player never reports it.
+        private const float SeekTimeoutSeconds = 1;
+
+        // A completed seek within this distance of the last requested position is taken to have reached it.
+        private const double SeekTolerance = 0.1;
+
         private readonly GameObject _gameObject;
         private readonly VideoPlayer _player;
+        private float _lastSeekRealtime;
+        private int _pendingSeeks;
+        private double _seekTarget;
         private RenderTexture _texture;
 
         public PreviewPlayer(Transform parent)
@@ -37,6 +46,7 @@ namespace InstantReplay.Suite.UI
             _player.renderMode = VideoRenderMode.RenderTexture;
             _player.audioOutputMode = VideoAudioOutputMode.Direct;
             _player.prepareCompleted += OnPrepared;
+            _player.seekCompleted += OnSeekCompleted;
             _player.errorReceived += (_, message) => Error?.Invoke(message);
         }
 
@@ -47,13 +57,29 @@ namespace InstantReplay.Suite.UI
         /// <summary>Whether a frame is being shown.</summary>
         public bool HasFrame => _player != null && _player.isPrepared && _texture != null;
 
-        /// <summary>Playback position in seconds.</summary>
-        public double Time => _player != null ? _player.time : 0;
+        /// <summary>
+        ///     Playback position in seconds. While a seek is in progress, this is the requested position, because on some
+        ///     platforms such as iOS and Android the player keeps reporting the previous position until the seek completes.
+        /// </summary>
+        public double Time
+        {
+            get
+            {
+                if (_player == null) return 0;
+                return IsSeeking ? _seekTarget : _player.time;
+            }
+        }
+
+        private bool IsSeeking =>
+            _pendingSeeks > 0 && UnityEngine.Time.realtimeSinceStartup - _lastSeekRealtime < SeekTimeoutSeconds;
 
         public void Seek(double seconds)
         {
             if (_player == null || !_player.isPrepared || !_player.canSetTime) return;
-            _player.time = Math.Max(0, seconds);
+            _seekTarget = Math.Max(0, seconds);
+            _pendingSeeks = IsSeeking ? _pendingSeeks + 1 : 1;
+            _lastSeekRealtime = UnityEngine.Time.realtimeSinceStartup;
+            _player.time = _seekTarget;
         }
 
         public void Pause()
@@ -126,6 +152,7 @@ namespace InstantReplay.Suite.UI
         public void Stop()
         {
             if (_player == null) return;
+            _pendingSeeks = 0;
             _player.Stop();
             _player.url = null;
             _player.targetTexture = null;
@@ -152,6 +179,14 @@ namespace InstantReplay.Suite.UI
             player.targetTexture = _texture;
             Image.image = _texture;
             player.Play();
+        }
+
+        // Some platforms report a single completion for several seeks issued in a row, so reaching the last requested
+        // position completes all of them.
+        private void OnSeekCompleted(VideoPlayer player)
+        {
+            if (Math.Abs(player.time - _seekTarget) < SeekTolerance) _pendingSeeks = 0;
+            else _pendingSeeks = Math.Max(0, _pendingSeeks - 1);
         }
 
         private void ReleaseTexture()

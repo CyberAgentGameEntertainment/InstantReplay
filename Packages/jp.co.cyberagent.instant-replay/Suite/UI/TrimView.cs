@@ -197,7 +197,7 @@ namespace InstantReplay.Suite.UI
             var time = _preview.Time;
             // Playback loops within the selected range.
             if (_preview.IsPlaying && (time >= _end || time < _start - 0.25)) _preview.Seek(_start);
-            if (_timeline.IsDraggingPlayhead) return;
+            if (_timeline.IsDragging) return;
             _timeline.SetPlayhead(time);
             _playheadLabel.text = Formatting.PreciseTime(time);
             _playButton.text = _preview.IsPlaying ? Strings.Current.Pause : Strings.Current.Play;

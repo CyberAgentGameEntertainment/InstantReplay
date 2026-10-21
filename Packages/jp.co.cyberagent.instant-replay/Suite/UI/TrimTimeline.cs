@@ -63,8 +63,11 @@ namespace InstantReplay.Suite.UI
             RegisterCallback<PointerCaptureOutEvent>(_ => EndDrag());
         }
 
-        /// <summary>Whether the user is dragging the knob, during which the owner should not move it.</summary>
-        public bool IsDraggingPlayhead => _dragging == Target.Playhead;
+        /// <summary>
+        ///     Whether the user is dragging the knob or a handle, during which the owner should not move the knob from the
+        ///     playback position.
+        /// </summary>
+        public bool IsDragging => _dragging != Target.None;
 
         public event Action<double> StartDragged;
         public event Action<double> EndDragged;
