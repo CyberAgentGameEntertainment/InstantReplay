@@ -60,20 +60,18 @@ namespace InstantReplay.Suite.UI
 
         /// <summary>
         ///     Playback position in seconds. While a seek is in progress, this is the requested position, because on some
-        ///     platforms such as iOS and Android the player keeps reporting the previous position until the seek completes.
+        ///     platforms such as iOS the player keeps reporting the previous position until the seek completes.
         /// </summary>
         public double Time
         {
             get
             {
                 if (_player == null) return 0;
-                var seeking = IsSeeking;
-                if (UnityEngine.Time.realtimeSinceStartup - _lastSeekRealtime < 2) LogSeek($"read (seeking={seeking})");
-                return seeking ? _seekTarget : _player.time;
+                return IsSeeking ? _seekTarget : _player.time;
             }
         }
 
-        // On Android, the player may report the completion of a seek before it reports the new position, so a seek lasts
+        // On iOS, the player may report the completion of a seek before it reports the new position, so a seek lasts
         // until both the completion and the new position have been reported.
         private bool IsSeeking
         {
@@ -85,12 +83,7 @@ namespace InstantReplay.Suite.UI
                 // While playing, the position may already have advanced past the requested position.
                 var reached = time >= _seekTarget - SeekTolerance &&
                               time <= _seekTarget + SeekTolerance + (_player.isPlaying ? elapsed : 0);
-                if (elapsed >= SeekTimeoutSeconds || (_seekCompleted && reached))
-                {
-                    _seeking = false;
-                    LogSeek($"seek finished (timeout={elapsed >= SeekTimeoutSeconds})");
-                }
-
+                if (elapsed >= SeekTimeoutSeconds || (_seekCompleted && reached)) _seeking = false;
                 return _seeking;
             }
         }
@@ -102,35 +95,17 @@ namespace InstantReplay.Suite.UI
             _seeking = true;
             _seekCompleted = false;
             _lastSeekRealtime = UnityEngine.Time.realtimeSinceStartup;
-            LogSeek("seek requested");
             _player.time = _seekTarget;
-        }
-
-        // TODO: Remove once the seek behavior on Android has been confirmed.
-        private void LogSeek(string message)
-        {
-            Debug.Log(
-                $"[PreviewPlayer] {message}: target={_seekTarget:F3} time={_player.time:F3} frame={_player.frame} " +
-                $"clock={_player.clockTime:F3} playing={_player.isPlaying} " +
-                $"elapsed={UnityEngine.Time.realtimeSinceStartup - _lastSeekRealtime:F3}");
         }
 
         public void Pause()
         {
-            if (_player != null && _player.isPlaying)
-            {
-                LogSeek("pause");
-                _player.Pause();
-            }
+            if (_player != null && _player.isPlaying) _player.Pause();
         }
 
         public void Resume()
         {
-            if (_player != null && _player.isPrepared && !_player.isPlaying)
-            {
-                LogSeek("resume");
-                _player.Play();
-            }
+            if (_player != null && _player.isPrepared && !_player.isPlaying) _player.Play();
         }
 
         public static bool CanCaptureFrame =>
@@ -227,7 +202,6 @@ namespace InstantReplay.Suite.UI
         private void OnSeekCompleted(VideoPlayer player)
         {
             _seekCompleted = true;
-            LogSeek("seek completed");
         }
 
         private void ReleaseTexture()
