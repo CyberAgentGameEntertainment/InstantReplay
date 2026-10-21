@@ -22,13 +22,14 @@ namespace InstantReplay.Suite.UI
         // A seek that has not completed within this time is treated as completed, in case the player never reports it.
         private const float SeekTimeoutSeconds = 1;
 
-        // A completed seek within this distance of the last requested position is taken to have reached it.
+        // A reported position within this distance of the requested position is taken to have reached it.
         private const double SeekTolerance = 0.1;
 
         private readonly GameObject _gameObject;
         private readonly VideoPlayer _player;
         private float _lastSeekRealtime;
-        private int _pendingSeeks;
+        private bool _seekCompleted;
+        private bool _seeking;
         private double _seekTarget;
         private RenderTexture _texture;
 
@@ -66,30 +67,70 @@ namespace InstantReplay.Suite.UI
             get
             {
                 if (_player == null) return 0;
-                return IsSeeking ? _seekTarget : _player.time;
+                var seeking = IsSeeking;
+                if (UnityEngine.Time.realtimeSinceStartup - _lastSeekRealtime < 2) LogSeek($"read (seeking={seeking})");
+                return seeking ? _seekTarget : _player.time;
             }
         }
 
-        private bool IsSeeking =>
-            _pendingSeeks > 0 && UnityEngine.Time.realtimeSinceStartup - _lastSeekRealtime < SeekTimeoutSeconds;
+        // On Android, the player may report the completion of a seek before it reports the new position, so a seek lasts
+        // until both the completion and the new position have been reported.
+        private bool IsSeeking
+        {
+            get
+            {
+                if (!_seeking) return false;
+                var elapsed = UnityEngine.Time.realtimeSinceStartup - _lastSeekRealtime;
+                var time = _player.time;
+                // While playing, the position may already have advanced past the requested position.
+                var reached = time >= _seekTarget - SeekTolerance &&
+                              time <= _seekTarget + SeekTolerance + (_player.isPlaying ? elapsed : 0);
+                if (elapsed >= SeekTimeoutSeconds || (_seekCompleted && reached))
+                {
+                    _seeking = false;
+                    LogSeek($"seek finished (timeout={elapsed >= SeekTimeoutSeconds})");
+                }
+
+                return _seeking;
+            }
+        }
 
         public void Seek(double seconds)
         {
             if (_player == null || !_player.isPrepared || !_player.canSetTime) return;
             _seekTarget = Math.Max(0, seconds);
-            _pendingSeeks = IsSeeking ? _pendingSeeks + 1 : 1;
+            _seeking = true;
+            _seekCompleted = false;
             _lastSeekRealtime = UnityEngine.Time.realtimeSinceStartup;
+            LogSeek("seek requested");
             _player.time = _seekTarget;
+        }
+
+        // TODO: Remove once the seek behavior on Android has been confirmed.
+        private void LogSeek(string message)
+        {
+            Debug.Log(
+                $"[PreviewPlayer] {message}: target={_seekTarget:F3} time={_player.time:F3} frame={_player.frame} " +
+                $"clock={_player.clockTime:F3} playing={_player.isPlaying} " +
+                $"elapsed={UnityEngine.Time.realtimeSinceStartup - _lastSeekRealtime:F3}");
         }
 
         public void Pause()
         {
-            if (_player != null && _player.isPlaying) _player.Pause();
+            if (_player != null && _player.isPlaying)
+            {
+                LogSeek("pause");
+                _player.Pause();
+            }
         }
 
         public void Resume()
         {
-            if (_player != null && _player.isPrepared && !_player.isPlaying) _player.Play();
+            if (_player != null && _player.isPrepared && !_player.isPlaying)
+            {
+                LogSeek("resume");
+                _player.Play();
+            }
         }
 
         public static bool CanCaptureFrame =>
@@ -152,7 +193,7 @@ namespace InstantReplay.Suite.UI
         public void Stop()
         {
             if (_player == null) return;
-            _pendingSeeks = 0;
+            _seeking = false;
             _player.Stop();
             _player.url = null;
             _player.targetTexture = null;
@@ -181,12 +222,12 @@ namespace InstantReplay.Suite.UI
             player.Play();
         }
 
-        // Some platforms report a single completion for several seeks issued in a row, so reaching the last requested
-        // position completes all of them.
+        // A completion may belong to an earlier seek when several are issued in a row, which the check of the reported
+        // position in IsSeeking covers.
         private void OnSeekCompleted(VideoPlayer player)
         {
-            if (Math.Abs(player.time - _seekTarget) < SeekTolerance) _pendingSeeks = 0;
-            else _pendingSeeks = Math.Max(0, _pendingSeeks - 1);
+            _seekCompleted = true;
+            LogSeek("seek completed");
         }
 
         private void ReleaseTexture()
