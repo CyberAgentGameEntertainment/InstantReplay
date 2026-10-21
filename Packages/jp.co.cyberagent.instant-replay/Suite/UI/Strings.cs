@@ -42,6 +42,11 @@ namespace InstantReplay.Suite.UI
             BufferInMemory = "in memory",
             BufferOnDisk = "on disk",
             RecordingFailed = "Recording failed.",
+            OverlayPosition = "Overlay position",
+            TopLeft = "Top left",
+            TopRight = "Top right",
+            BottomLeft = "Bottom left",
+            BottomRight = "Bottom right",
 
             Customize = "Customize",
             Resolution = "Resolution",
@@ -139,6 +144,11 @@ namespace InstantReplay.Suite.UI
             BufferInMemory = "メモリ",
             BufferOnDisk = "ディスク",
             RecordingFailed = "録画に失敗しました。",
+            OverlayPosition = "オーバーレイの位置",
+            TopLeft = "左上",
+            TopRight = "右上",
+            BottomLeft = "左下",
+            BottomRight = "右下",
 
             Customize = "カスタマイズ",
             Resolution = "解像度",
@@ -219,6 +229,8 @@ namespace InstantReplay.Suite.UI
         public string AudioKbps;
         public string BackToRecordings;
         public string BitsPerPixel;
+        public string BottomLeft;
+        public string BottomRight;
         public string Buffer;
         public string BufferInMemory;
         public string BufferMegabytes;
@@ -251,6 +263,7 @@ namespace InstantReplay.Suite.UI
         public string OverlayError;
         public string OverlayOff;
         public string OverlayPausedSuffix;
+        public string OverlayPosition;
         public string OverlayRecording;
         public string OverlaySaving;
         public string Pause;
@@ -293,6 +306,8 @@ namespace InstantReplay.Suite.UI
         public string StopRecording;
         public string ThumbnailFailed;
         public string ThumbnailUpdated;
+        public string TopLeft;
+        public string TopRight;
         public string TrimReplay;
         public string Unfinished;
         public string UnfinishedRecordings;

@@ -28,7 +28,7 @@ namespace InstantReplay.Suite
         [SerializeField]
         private int maxTotalMegabytes;
 
-        [Tooltip("Remember the preset and the buffering toggle chosen by the user across launches.")] [SerializeField]
+        [Tooltip("Remember the preset, the buffering toggle and the overlay position chosen by the user across launches.")] [SerializeField]
         private bool persistUserPreferences = true;
 
         [Tooltip("Destinations offered when the user shares a recording.")] [SerializeField]

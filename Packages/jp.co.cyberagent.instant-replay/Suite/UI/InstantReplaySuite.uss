@@ -35,6 +35,18 @@
     font-size: 13px;
 }
 
+/* The overlay is at the top right unless the modifiers below move it to another corner. */
+
+.irs-root--left {
+    align-items: flex-start;
+}
+
+/* The panel opens above the overlay. */
+
+.irs-root--bottom {
+    flex-direction: column-reverse;
+}
+
 /* ------------------------------------------------------------------
    Overlay
    ------------------------------------------------------------------ */
@@ -132,6 +144,14 @@
 .irs-panel--entering {
     opacity: 0;
     translate: 0 -8px;
+}
+
+.irs-root--bottom > .irs-panel {
+    margin: 8px 8px 0 8px;
+}
+
+.irs-root--bottom > .irs-panel--entering {
+    translate: 0 8px;
 }
 
 .irs-panel Label {

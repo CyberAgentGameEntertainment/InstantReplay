@@ -4,6 +4,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using UnityEngine;
@@ -11,6 +12,15 @@ using UnityEngine.UIElements;
 
 namespace InstantReplay.Suite.UI
 {
+    /// <summary>Corner of the screen where <see cref="InstantReplaySuite" /> places the overlay.</summary>
+    public enum OverlayCorner
+    {
+        TopRight,
+        TopLeft,
+        BottomRight,
+        BottomLeft
+    }
+
     /// <summary>
     ///     Drop-in recorder interface: an always-visible overlay that shows the recording status and opens a panel for
     ///     buffering, saving replays, unbounded recording, and preset selection. Place one in the first scene.
@@ -37,6 +47,10 @@ namespace InstantReplay.Suite.UI
         [SerializeField]
         private bool overlayOpensPanel = true;
 
+        [Tooltip("Corner of the screen where the overlay is placed until the user chooses another one in the panel.")]
+        [SerializeField]
+        private OverlayCorner overlayCorner = OverlayCorner.TopRight;
+
         [Tooltip("Language of the interface. Automatic follows the system language.")] [SerializeField]
         private SuiteLanguage language = SuiteLanguage.Automatic;
 
@@ -47,6 +61,7 @@ namespace InstantReplay.Suite.UI
 #if !UNITY_6000_0_OR_NEWER
         private SystemFontFallback _systemFontFallback;
 #endif
+        private SuitePreferences _preferences;
         private InstantReplayRecorder _recorder;
         private SuiteView _view;
 
@@ -83,6 +98,24 @@ namespace InstantReplay.Suite.UI
             {
                 overlayOpensPanel = value;
                 if (_view != null) _view.OverlayOpensPanel = value;
+            }
+        }
+
+        /// <summary>
+        ///     Corner of the screen where the overlay is placed. The panel opens next to the overlay. The user can choose
+        ///     another corner in the panel, and that choice is restored at the next launch when
+        ///     <see cref="InstantReplaySuiteSettings.PersistUserPreferences" /> is true. Setting it from code does not
+        ///     overwrite the stored choice.
+        /// </summary>
+        public OverlayCorner OverlayCorner
+        {
+            get => overlayCorner;
+            set
+            {
+                if (!Enum.IsDefined(typeof(OverlayCorner), value))
+                    throw new ArgumentOutOfRangeException(nameof(value), value, null);
+                overlayCorner = value;
+                if (_view != null) _view.OverlayCorner = value;
             }
         }
 
@@ -167,9 +200,25 @@ namespace InstantReplay.Suite.UI
             document.hideFlags = HideFlags.DontSave | HideFlags.NotEditable;
             document.panelSettings = _panelSettings;
 
+            // Without a settings asset, the recorder uses default settings, which persist the preferences.
+            _preferences = settings == null || settings.PersistUserPreferences ? SuitePreferences.Load() : null;
+            if (_preferences is { hasOverlayCorner: true }) overlayCorner = _preferences.overlayCorner;
+
             Strings.SetLanguage(language);
             _view = new SuiteView(document.rootVisualElement, styleSheet, Recorder, transform)
-                { IsVisible = showOverlayOnLaunch, OverlayOpensPanel = overlayOpensPanel };
+            {
+                IsVisible = showOverlayOnLaunch, OverlayOpensPanel = overlayOpensPanel, OverlayCorner = overlayCorner
+            };
+            _view.OverlayCornerChanged += OnOverlayCornerChanged;
+        }
+
+        private void OnOverlayCornerChanged(OverlayCorner corner)
+        {
+            overlayCorner = corner;
+            if (_preferences == null) return;
+            _preferences.hasOverlayCorner = true;
+            _preferences.overlayCorner = corner;
+            _preferences.Save();
         }
 
         private void Start()
@@ -216,5 +265,54 @@ namespace InstantReplay.Suite.UI
                     PackagePath + "UI/InstantReplaySuite.uss");
         }
 #endif
+    }
+
+    /// <summary>
+    ///     Choices about the interface made by the user that survive a relaunch. Choices about the recording are kept by
+    ///     the recorder in a separate file.
+    /// </summary>
+    [Serializable]
+    internal sealed class SuitePreferences
+    {
+        private const int CurrentVersion = 1;
+
+        public int version = CurrentVersion;
+        public bool hasOverlayCorner;
+        public OverlayCorner overlayCorner;
+
+        private static string FilePath =>
+            Path.Combine(Application.persistentDataPath, "InstantReplay", "suite-ui-preferences.json");
+
+        public static SuitePreferences Load()
+        {
+            try
+            {
+                var path = FilePath;
+                if (!File.Exists(path)) return new SuitePreferences();
+                var loaded = JsonUtility.FromJson<SuitePreferences>(File.ReadAllText(path));
+                if (loaded is not { version: CurrentVersion }) return new SuitePreferences();
+                if (!Enum.IsDefined(typeof(OverlayCorner), loaded.overlayCorner)) loaded.hasOverlayCorner = false;
+                return loaded;
+            }
+            catch (Exception ex)
+            {
+                Debug.LogException(ex);
+                return new SuitePreferences();
+            }
+        }
+
+        public void Save()
+        {
+            try
+            {
+                var path = FilePath;
+                Directory.CreateDirectory(Path.GetDirectoryName(path));
+                File.WriteAllText(path, JsonUtility.ToJson(this));
+            }
+            catch (Exception ex)
+            {
+                Debug.LogException(ex);
+            }
+        }
     }
 }

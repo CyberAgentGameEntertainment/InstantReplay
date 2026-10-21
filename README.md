@@ -137,7 +137,7 @@ Import the "User Interfaces" sample from the Package Manager.
 
 Open `SampleScene` in the imported sample and enter Play mode. The scene contains a game object with the `InstantReplaySuite` component, which starts buffering the gameplay as soon as the scene starts.
 
-The overlay at the top right of the screen shows the duration of the buffered footage and the estimated capacity of the buffer. Click or tap the overlay to open the panel.
+The overlay at the top right of the screen by default shows the duration of the buffered footage and the estimated capacity of the buffer. Click or tap the overlay to open the panel.
 
 <img width="800" alt="Recorder tab of the Instant Replay Suite" src=".github/images/suite-recorder.png" />
 
@@ -184,6 +184,7 @@ The preview of recordings requires the Video module, and thumbnails require the 
 | Dont Destroy On Load | Whether the game object is kept across scene loads. |
 | Show Overlay On Launch | Whether the overlay is shown at startup. Recording continues while the overlay is hidden. |
 | Overlay Opens Panel | Whether clicking or tapping the overlay opens the panel. When disabled, the overlay only shows the recording status and lets clicks and taps through. |
+| Overlay Corner | Corner of the screen where the overlay is placed until the user chooses another one in the panel. |
 | Language | Language of the user interface. `Automatic` uses Japanese when the system language is Japanese and English otherwise. |
 | Scale | Multiplier applied to the size of the user interface. |
 
@@ -199,7 +200,7 @@ The user interface keeps a constant physical size on every screen. One unit of t
 | Output Directory | Directory where recordings are saved. Relative paths are resolved against `Application.persistentDataPath`. |
 | Max Recordings | Number of recordings to keep. The oldest recordings are deleted beyond it. Zero keeps every recording. |
 | Max Total Megabytes | Total size of the recordings to keep, in MiB. The oldest recordings are deleted beyond it, but the recording just saved is always kept. Zero keeps every recording. |
-| Persist User Preferences | Whether the preset and the buffering toggle chosen by the user are restored at the next launch. |
+| Persist User Preferences | Whether the preset, the buffering toggle and the overlay position chosen by the user are restored at the next launch. |
 | Share Targets | Destinations offered when the user shares a recording. See [Sharing](#sharing). |
 
 Each preset has an identifier, a display name, the resolution (a fixed size, or a ratio of the screen size with an upper bound on the longer side), the frame rate, the video bitrate (a fixed value, or computed from bits per pixel), the audio bitrate, the buffer (in memory or on disk, with its size in MiB) and `ForceReadback`. The panel shows the duration that the buffer of the selected preset is estimated to hold.
@@ -208,7 +209,7 @@ Each preset has an identifier, a display name, the resolution (a fixed size, or 
 
 #### Overlay
 
-The overlay is always shown while it is enabled. It shows the state of the recorder with a colored dot and the buffered duration against the estimated capacity. During an unbounded recording, the dot turns red and blinks, and the overlay shows the elapsed time. Click or tap the overlay to open or close the panel.
+The overlay is always shown while it is enabled. It shows the state of the recorder with a colored dot and the buffered duration against the estimated capacity. During an unbounded recording, the dot turns red and blinks, and the overlay shows the elapsed time. Click or tap the overlay to open or close the panel. The corner of the screen where the overlay is placed can be changed with **Overlay position** in the panel, and the panel opens next to the overlay.
 
 #### Recorder Tab
 
@@ -405,7 +406,7 @@ var entries = await suite.PickRecordingsAsync(allowMultiple: false);
 suite.Recorder.Resume();
 ```
 
-When the application controls the recorder with its own interface, the overlay and the panel need not be used. Disable Show Overlay On Launch to hide the overlay, or disable Overlay Opens Panel to keep the overlay as a status indicator only. The same settings are available from code as `IsOverlayVisible` and `OverlayOpensPanel`. Every operation of the panel is available from `suite.Recorder`.
+When the application controls the recorder with its own interface, the overlay and the panel need not be used. Disable Show Overlay On Launch to hide the overlay, or disable Overlay Opens Panel to keep the overlay as a status indicator only. The same settings are available from code as `IsOverlayVisible` and `OverlayOpensPanel`, and the position of the overlay as `OverlayCorner`. Every operation of the panel is available from `suite.Recorder`.
 
 ```csharp
 var recorder = InstantReplaySuite.Current.Recorder;

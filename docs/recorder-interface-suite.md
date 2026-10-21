@@ -118,7 +118,7 @@ Only one `InstantReplaySuite` can be active at a time, and `InstantReplaySuite.C
 
 `InstantReplaySuite.Recorder` is created on first access. Providers configured on it before the component's `Start` replace the default providers before any of them is created. `Start` calls `InstantReplayRecorder.Activate`, which restores the user's selections and starts buffering when enabled.
 
-The component has the following serialized settings: the settings asset, the sorting order of the panel, whether the game object survives scene loads, whether the overlay is shown at launch, whether tapping the overlay opens the panel, the language, and a scale factor.
+The component has the following serialized settings: the settings asset, the sorting order of the panel, whether the game object survives scene loads, whether the overlay is shown at launch, whether tapping the overlay opens the panel, the corner of the screen where the overlay is placed, the language, and a scale factor.
 
 ### Recorder
 
@@ -238,6 +238,7 @@ Every operation of the panel is available from code, so that an application can 
 
 - `InstantReplaySuite.IsOverlayVisible` hides or shows the overlay. The recorder keeps running while the overlay is hidden.
 - `InstantReplaySuite.OverlayOpensPanel` controls whether tapping the overlay opens the panel. When it is false, the overlay only shows the recording status and taps pass through it.
+- `InstantReplaySuite.OverlayCorner` places the overlay at one of the four corners of the screen. Setting it from code does not overwrite the corner chosen by the user.
 - `InstantReplaySuite.TrimAsync(ReplayDraft, CancellationToken)` shows the trim view for a draft and returns the `ReplaySelection` chosen by the user, or null when the user cancels. Nothing is saved. The draft stays with the caller, which writes the footage with `ReplayDraft.ExportAsync(ReplaySelection, string)` or `ReplayDraft.SaveAsync(ReplaySelection)`.
 - `InstantReplaySuite.PickRecordingsAsync(bool, CancellationToken)` shows the recordings in the library together with the sessions left behind by abnormal terminations, and returns the recordings chosen by the user. Chosen sessions are recovered into the library first.
 
@@ -250,7 +251,7 @@ Both views are shown even while the overlay is hidden. They throw `InvalidOperat
 - The text is shown in Japanese or English. `SuiteLanguage.Automatic` selects Japanese when the system language is Japanese and English otherwise.
 - No font is bundled. Unity 6 falls back to the fonts of the operating system by itself. Unity 2022.3 does not, and the font of the default theme has no Japanese characters, so on Unity 2022.3 the suite creates a dynamic font asset from the first available font among a list of Japanese system fonts (Hiragino on Apple platforms, Noto Sans CJK on Android, Yu Gothic, Meiryo or MS Gothic on Windows) and sets it as the fallback of the panel's text settings.
 - Controls respond to taps on release. A touch that moves far enough to be a drag scrolls the enclosing scroll view instead of activating the control. Text fields take the focus, and open the touch screen keyboard, on the release of a tap. A touch that stops a scrolling panel over a text field does not focus it.
-- The overlay is always visible while enabled. It shows the recorder state, the buffered duration against the estimated capacity, and the elapsed time of an unbounded recording. Tapping the overlay opens the main panel unless `OverlayOpensPanel` is false.
+- The overlay is always visible while enabled. It shows the recorder state, the buffered duration against the estimated capacity, and the elapsed time of an unbounded recording. Tapping the overlay opens the main panel unless `OverlayOpensPanel` is false. The panel opens next to the overlay, below it at the top corners and above it at the bottom corners. The user can move the overlay to another corner with a dropdown in the panel. When `PersistUserPreferences` is true, the choice is stored in `suite-ui-preferences.json` under `Application.persistentDataPath/InstantReplay`, separately from the preferences of the recorder, and restored at the next launch.
 - The panel has two tabs. The recorder tab contains the buffering toggle, the Save replay button, the unbounded recording controls, the preset selection and the preset editor. The recordings tab lists the recordings in the library, newest first, with the recovery interface above the list when recoverable sessions exist.
 - The preset editor allows the user to override individual properties of the active preset. A change applies a modified copy of the active preset through `ApplyPreset(RecordingPreset)`, and `InstantReplayRecorder.IsActivePresetCustomized` reports that the active preset is not one of the presets in the settings asset. A customized preset is stored in the user settings and restored at the next launch in preference to the selected preset identifier.
 - Selecting a recording shows its preview, its metadata, a button that takes the current frame of the preview as the thumbnail, deletion, and sharing with a choice of target and a comment. Deletion requires a second tap within three seconds.

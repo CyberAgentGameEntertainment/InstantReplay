@@ -22,6 +22,10 @@ namespace InstantReplay.Suite.UI
         private const long PulseIntervalMs = 600;
         private const long PanelTransitionMs = 160;
 
+        // Order of the choices in the overlay position dropdown.
+        private static readonly OverlayCorner[] Corners =
+            { OverlayCorner.TopLeft, OverlayCorner.TopRight, OverlayCorner.BottomLeft, OverlayCorner.BottomRight };
+
         private readonly Toggle _bufferingToggle;
         private readonly Label _detailsLabel;
         private readonly Label _errorLabel;
@@ -29,6 +33,7 @@ namespace InstantReplay.Suite.UI
         private readonly VisualElement _libraryTab;
         private readonly Button _libraryTabButton;
         private readonly VisualElement _overlay;
+        private readonly DropdownField _overlayCornerDropdown;
         private readonly VisualElement _overlayDot;
         private readonly Label _overlayLabel;
         private readonly VisualElement _panel;
@@ -49,6 +54,7 @@ namespace InstantReplay.Suite.UI
         private bool _disposed;
         private bool _libraryTabSelected;
         private string _operationError;
+        private OverlayCorner _overlayCorner;
         private RecordingPickerView _picker;
         private TrimView _trim;
 
@@ -149,6 +155,19 @@ namespace InstantReplay.Suite.UI
             presetSection.Add(_presetEditor.Root);
             content.Add(presetSection);
 
+            var text = Strings.Current;
+            _overlayCornerDropdown = new DropdownField(text.OverlayPosition,
+                new List<string> { text.TopLeft, text.TopRight, text.BottomLeft, text.BottomRight }, 0);
+            _overlayCornerDropdown.AddToClassList("irs-panel__section");
+            _overlayCornerDropdown.RegisterValueChangedCallback(_ =>
+            {
+                var index = _overlayCornerDropdown.index;
+                if (index < 0 || Corners[index] == _overlayCorner) return;
+                OverlayCorner = Corners[index];
+                OverlayCornerChanged?.Invoke(_overlayCorner);
+            });
+            content.Add(_overlayCornerDropdown);
+
             _errorLabel = new Label();
             _errorLabel.AddToClassList("irs-panel__error");
             content.Add(_errorLabel);
@@ -161,7 +180,31 @@ namespace InstantReplay.Suite.UI
             _refresh = _root.schedule.Execute(Refresh).Every(RefreshIntervalMs);
             _pulse = _root.schedule.Execute(Pulse).Every(PulseIntervalMs);
             SelectTab(false);
+            OverlayCorner = OverlayCorner.TopRight;
             Refresh();
+        }
+
+        /// <summary>
+        ///     Raised when the user chooses another corner for the overlay in the panel. Not raised when
+        ///     <see cref="OverlayCorner" /> is set from code.
+        /// </summary>
+        public event Action<OverlayCorner> OverlayCornerChanged;
+
+        /// <summary>
+        ///     Corner of the screen where the overlay is placed. The panel opens next to the overlay.
+        /// </summary>
+        public OverlayCorner OverlayCorner
+        {
+            get => _overlayCorner;
+            set
+            {
+                _overlayCorner = value;
+                _root.EnableInClassList("irs-root--left", value is OverlayCorner.TopLeft or OverlayCorner.BottomLeft);
+                _root.EnableInClassList("irs-root--bottom",
+                    value is OverlayCorner.BottomLeft or OverlayCorner.BottomRight);
+                _overlayCornerDropdown.SetValueWithoutNotify(
+                    _overlayCornerDropdown.choices[Array.IndexOf(Corners, value)]);
+            }
         }
 
         /// <summary>
