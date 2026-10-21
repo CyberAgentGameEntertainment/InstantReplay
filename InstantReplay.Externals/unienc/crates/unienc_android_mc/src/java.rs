@@ -1,9 +1,10 @@
+use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
 
 use crate::bindings;
 use crate::error::{AndroidError, Result};
 use jni::{
-    AttachGuard, JNIEnv, JavaVM,
+    JNIEnv, JavaVM,
     objects::{GlobalRef, JObject, JString},
 };
 
@@ -15,10 +16,55 @@ pub fn get_java_vm() -> Result<&'static JavaVM> {
 }
 
 /// Attach current thread to JVM and get JNIEnv
-pub fn attach_current_thread() -> Result<AttachGuard<'static>> {
+///
+/// The thread stays attached until it terminates. A scoped attachment would detach the thread
+/// when its guard is dropped, so a `GlobalRef` dropped after that point (e.g. a field of a
+/// struct whose `Drop` impl attaches the thread) would be deleted on a detached thread, and
+/// every JNI call would pay for an attach and a detach.
+///
+/// Since the thread is no longer detached, the returned guard pushes a local reference frame and
+/// pops it on drop instead, so that local references created in the scope are released.
+pub fn attach_current_thread() -> Result<LocalFrameEnv> {
     let vm = get_java_vm()?;
-    vm.attach_current_thread()
-        .map_err(|e| AndroidError::JvmAttachFailed(format!("{:?}", e)))
+    let env = vm
+        .attach_current_thread_permanently()
+        .map_err(|e| AndroidError::JvmAttachFailed(format!("{:?}", e)))?;
+    env.push_local_frame(LOCAL_FRAME_CAPACITY)?;
+    Ok(LocalFrameEnv { env })
+}
+
+const LOCAL_FRAME_CAPACITY: i32 = 16;
+
+/// JNIEnv of an attached thread with a local reference frame that is popped on drop
+///
+/// Local references created through this env must not outlive it. Use `SafeGlobalRef` to keep a
+/// Java object beyond the scope.
+pub struct LocalFrameEnv {
+    env: JNIEnv<'static>,
+}
+
+impl Deref for LocalFrameEnv {
+    type Target = JNIEnv<'static>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.env
+    }
+}
+
+impl DerefMut for LocalFrameEnv {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.env
+    }
+}
+
+impl Drop for LocalFrameEnv {
+    fn drop(&mut self) {
+        // SAFETY: The frame was pushed in `attach_current_thread`, and the local references
+        // created in it are not used after the guard is dropped.
+        if let Err(e) = unsafe { self.env.pop_local_frame(&JObject::null()) } {
+            log::error!("failed to pop JNI local frame: {:?}", e);
+        }
+    }
 }
 
 /// Thread-safe wrapper for Java GlobalRef
