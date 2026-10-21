@@ -30,7 +30,6 @@ namespace InstantReplay
         private readonly long _maxPendingWriteBytes;
         private readonly Channel<PendingWrite> _pending;
         private readonly bool _retainOnDispose;
-        private readonly string _sessionDirectory;
         private readonly Task _worker;
         private readonly DiskBufferSegmentWriter _writer;
 
@@ -38,10 +37,10 @@ namespace InstantReplay
         private long _droppedFrameCount;
         private long _pendingBytes;
         private Task _quiesceTask;
-        private bool _storageCaptured;
         private double? _statisticsEarliestKeyFrameTimestamp;
         private double? _statisticsLatestVideoTimestamp;
         private long _statisticsTotalBytes;
+        private bool _storageCaptured;
         private bool _warnedAboutDrops;
 
         public DiskEncodedFrameBuffer(in DiskBufferOptions options, in VideoEncoderOptions videoOptions,
@@ -55,16 +54,16 @@ namespace InstantReplay
             _maxDiskUsageBytes = validated.MaxDiskUsageBytes;
 
             var root = validated.ResolveDirectory();
-            _sessionDirectory = Path.Combine(root, CreateSessionId());
-            Directory.CreateDirectory(_sessionDirectory);
-            RegisterLiveSession(_sessionDirectory);
+            SessionDirectory = Path.Combine(root, CreateSessionId());
+            Directory.CreateDirectory(SessionDirectory);
+            RegisterLiveSession(SessionDirectory);
 
-            _writer = new DiskBufferSegmentWriter(_sessionDirectory, validated.MaxDiskUsageBytes,
+            _writer = new DiskBufferSegmentWriter(SessionDirectory, validated.MaxDiskUsageBytes,
                 validated.SegmentDuration, validated.MaxSegmentBytes, validated.SyncMode, ILogger.LogExceptionCore);
 
             var manifest = DiskBufferManifest.Create(videoOptions, audioOptions, Application.platform.ToString(),
                 Application.unityVersion, Application.version);
-            _writer.SetManifestBytes(manifest.Write(Path.Combine(_sessionDirectory,
+            _writer.SetManifestBytes(manifest.Write(Path.Combine(SessionDirectory,
                 DiskBufferFormat.ManifestFileName)));
 
             // Synchronous continuations stay disabled so that file I/O never runs inline on the encoder thread that
@@ -81,7 +80,7 @@ namespace InstantReplay
         /// <summary>
         ///     Directory this session writes to.
         /// </summary>
-        public string SessionDirectory => _sessionDirectory;
+        public string SessionDirectory { get; }
 
         public RecordingBufferStatistics GetStatistics()
         {
@@ -95,6 +94,72 @@ namespace InstantReplay
                 return new RecordingBufferStatistics(bufferedDuration, _statisticsTotalBytes, _maxDiskUsageBytes,
                     true);
             }
+        }
+
+        public bool TryAddVideoFrame(EncodedFrame frame)
+        {
+            return TryEnqueue(DiskBufferTrack.Video, frame);
+        }
+
+        public bool TryAddAudioFrame(EncodedFrame frame)
+        {
+            return TryEnqueue(DiskBufferTrack.Audio, frame);
+        }
+
+        public async ValueTask<EncodedFrameSelection> GetFramesForDurationAsync(double? durationSeconds)
+        {
+            if (_disposed) throw new ObjectDisposedException(nameof(DiskEncodedFrameBuffer));
+
+            // The worker owns the files, so it must have drained and closed them before they can be read back.
+            await QuiesceAsync().ConfigureAwait(false);
+
+            var scan = DiskBufferSegmentReader.Scan(SessionDirectory, ILogger.LogExceptionCore);
+            return DiskBufferSegmentReader.BuildSelection(scan, durationSeconds, ILogger.LogExceptionCore);
+        }
+
+        public async ValueTask<CapturedFrames> CaptureAsync(double? durationSeconds)
+        {
+            if (_disposed) throw new ObjectDisposedException(nameof(DiskEncodedFrameBuffer));
+
+            await QuiesceAsync().ConfigureAwait(false);
+
+            var scan = DiskBufferSegmentReader.Scan(SessionDirectory, ILogger.LogExceptionCore);
+            if (!DiskBufferSegmentReader.TrySelectRecords(scan, durationSeconds, out var video, out var audio,
+                    ILogger.LogExceptionCore))
+                return null;
+
+            // The captured frames own the directory from now on. It stays registered as live, so that recovery does not
+            // offer it while it is in use, and it is deleted when the captured frames are disposed.
+            lock (_lock)
+            {
+                _storageCaptured = true;
+            }
+
+            return new DiskCapturedFrames(scan, video, audio, () =>
+            {
+                DeleteSessionDirectory();
+                UnregisterLiveSession(SessionDirectory);
+            }, ILogger.LogExceptionCore);
+        }
+
+        public void Dispose()
+        {
+            lock (_lock)
+            {
+                if (_disposed) return;
+                _disposed = true;
+            }
+
+            // Dispose is synchronous, so it blocks until the files are closed. The worker never resumes on the calling
+            // thread's synchronization context, so blocking here cannot deadlock it.
+            QuiesceAsync().GetAwaiter().GetResult();
+
+            if (_storageCaptured) return;
+
+            if (!_retainOnDispose) DeleteSessionDirectory();
+
+            // A retained directory becomes recoverable once this session no longer writes to it.
+            UnregisterLiveSession(SessionDirectory);
         }
 
         /// <summary>
@@ -147,72 +212,6 @@ namespace InstantReplay
                 ILogger.LogExceptionCore(ex);
                 return null;
             }
-        }
-
-        public bool TryAddVideoFrame(EncodedFrame frame)
-        {
-            return TryEnqueue(DiskBufferTrack.Video, frame);
-        }
-
-        public bool TryAddAudioFrame(EncodedFrame frame)
-        {
-            return TryEnqueue(DiskBufferTrack.Audio, frame);
-        }
-
-        public async ValueTask<EncodedFrameSelection> GetFramesForDurationAsync(double? durationSeconds)
-        {
-            if (_disposed) throw new ObjectDisposedException(nameof(DiskEncodedFrameBuffer));
-
-            // The worker owns the files, so it must have drained and closed them before they can be read back.
-            await QuiesceAsync().ConfigureAwait(false);
-
-            var scan = DiskBufferSegmentReader.Scan(_sessionDirectory, ILogger.LogExceptionCore);
-            return DiskBufferSegmentReader.BuildSelection(scan, durationSeconds, ILogger.LogExceptionCore);
-        }
-
-        public async ValueTask<CapturedFrames> CaptureAsync(double? durationSeconds)
-        {
-            if (_disposed) throw new ObjectDisposedException(nameof(DiskEncodedFrameBuffer));
-
-            await QuiesceAsync().ConfigureAwait(false);
-
-            var scan = DiskBufferSegmentReader.Scan(_sessionDirectory, ILogger.LogExceptionCore);
-            if (!DiskBufferSegmentReader.TrySelectRecords(scan, durationSeconds, out var video, out var audio,
-                    ILogger.LogExceptionCore))
-                return null;
-
-            // The captured frames own the directory from now on. It stays registered as live, so that recovery does not
-            // offer it while it is in use, and it is deleted when the captured frames are disposed.
-            lock (_lock)
-            {
-                _storageCaptured = true;
-            }
-
-            return new DiskCapturedFrames(scan, video, audio, () =>
-            {
-                DeleteSessionDirectory();
-                UnregisterLiveSession(_sessionDirectory);
-            }, ILogger.LogExceptionCore);
-        }
-
-        public void Dispose()
-        {
-            lock (_lock)
-            {
-                if (_disposed) return;
-                _disposed = true;
-            }
-
-            // Dispose is synchronous, so it blocks until the files are closed. The worker never resumes on the calling
-            // thread's synchronization context, so blocking here cannot deadlock it.
-            QuiesceAsync().GetAwaiter().GetResult();
-
-            if (_storageCaptured) return;
-
-            if (!_retainOnDispose) DeleteSessionDirectory();
-
-            // A retained directory becomes recoverable once this session no longer writes to it.
-            UnregisterLiveSession(_sessionDirectory);
         }
 
         /// <summary>
@@ -361,7 +360,7 @@ namespace InstantReplay
         {
             try
             {
-                if (Directory.Exists(_sessionDirectory)) Directory.Delete(_sessionDirectory, true);
+                if (Directory.Exists(SessionDirectory)) Directory.Delete(SessionDirectory, true);
             }
             catch (Exception ex)
             {

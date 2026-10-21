@@ -24,10 +24,10 @@ namespace InstantReplay.Suite.UI
         private readonly VisualElement _startHandle;
         private readonly VisualElement _ticks;
         private readonly VisualElement _track;
+        private Target _dragging = Target.None;
 
         private double _duration;
         private double _end;
-        private Target _dragging = Target.None;
         private double _playheadTime;
         private double _start;
 
@@ -60,7 +60,7 @@ namespace InstantReplay.Suite.UI
             RegisterCallback<PointerDownEvent>(OnPointerDown);
             RegisterCallback<PointerMoveEvent>(OnPointerMove);
             RegisterCallback<PointerUpEvent>(OnPointerUp);
-            RegisterCallback<PointerCaptureOutEvent>(_ => EndDrag());
+            RegisterCallback<PointerCaptureOutEvent, TrimTimeline>(static (_, @this) => @this.EndDrag(), this);
         }
 
         /// <summary>

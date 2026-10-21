@@ -4,6 +4,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Text;
 using System.Threading;
@@ -26,6 +27,8 @@ namespace InstantReplay.Suite.Sharing.Slack
     {
         private const string ApiBase = "https://slack.com/api/";
 
+        #region Serialized Fields
+
         [Tooltip("Bot token (xoxb-...) with the files:write scope.")] [SerializeField]
         private string token;
 
@@ -34,6 +37,8 @@ namespace InstantReplay.Suite.Sharing.Slack
 
         [Tooltip("Append the metadata of the recordings to the message.")] [SerializeField]
         private bool includeMetadata = true;
+
+        #endregion
 
         /// <summary>Bot token with the <c>files:write</c> scope.</summary>
         public string Token
@@ -91,7 +96,7 @@ namespace InstantReplay.Suite.Sharing.Slack
                     upload.downloadHandler = new DownloadHandlerBuffer();
                     var offset = uploadedBytes;
                     await WebRequests.SendAsync(upload,
-                        p => context?.ReportProgress((float)((offset + p * length) / totalBytes)),
+                        p => context?.ReportProgress((offset + p * length) / totalBytes),
                         cancellationToken);
                 }
 
@@ -110,7 +115,7 @@ namespace InstantReplay.Suite.Sharing.Slack
         {
             var form = new WWWForm();
             form.AddField("filename", fileName);
-            form.AddField("length", length.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            form.AddField("length", length.ToString(CultureInfo.InvariantCulture));
 
             using var request = UnityWebRequest.Post(ApiBase + "files.getUploadURLExternal", form);
             request.SetRequestHeader("Authorization", "Bearer " + token);
@@ -165,43 +170,67 @@ namespace InstantReplay.Suite.Sharing.Slack
         [Serializable]
         private class ApiResponse
         {
+            #region Serialized Fields
+
             public bool ok;
             public string error;
+
+            #endregion
         }
 
         [Serializable]
         private sealed class UploadTicket : ApiResponse
         {
+            #region Serialized Fields
+
             public string upload_url;
             public string file_id;
+
+            #endregion
         }
 
         [Serializable]
         private sealed class CompleteFile
         {
+            #region Serialized Fields
+
             public string id;
             public string title;
+
+            #endregion
         }
 
         [Serializable]
         private sealed class CompletePayload
         {
+            #region Serialized Fields
+
             public CompleteFile[] files;
             public string channel_id;
             public string initial_comment;
+
+            #endregion
         }
 
         [Serializable]
         private sealed class CompleteResponse : ApiResponse
         {
+            #region Serialized Fields
+
             public UploadedFile[] files;
+
+            #endregion
         }
 
         [Serializable]
         private sealed class UploadedFile
         {
+            #region Serialized Fields
+
             public string id;
             public string permalink;
+
+            #endregion
         }
 #pragma warning restore IDE1006
     }

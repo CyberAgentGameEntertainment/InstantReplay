@@ -5,6 +5,7 @@
 using System;
 using UnityEngine;
 using UnityEngine.UIElements;
+using Object = UnityEngine.Object;
 #if INSTANTREPLAY_VIDEO && !UNITY_WEBGL
 using UnityEngine.Video;
 #endif
@@ -83,7 +84,7 @@ namespace InstantReplay.Suite.UI
                 // While playing, the position may already have advanced past the requested position.
                 var reached = time >= _seekTarget - SeekTolerance &&
                               time <= _seekTarget + SeekTolerance + (_player.isPlaying ? elapsed : 0);
-                if (elapsed >= SeekTimeoutSeconds || (_seekCompleted && reached)) _seeking = false;
+                if (elapsed >= SeekTimeoutSeconds || _seekCompleted && reached) _seeking = false;
                 return _seeking;
             }
         }
@@ -144,7 +145,7 @@ namespace InstantReplay.Suite.UI
             {
                 RenderTexture.active = previous;
                 RenderTexture.ReleaseTemporary(scaled);
-                UnityEngine.Object.Destroy(readable);
+                Object.Destroy(readable);
             }
 #else
             return null;
@@ -179,7 +180,7 @@ namespace InstantReplay.Suite.UI
         public void Dispose()
         {
             Stop();
-            if (_gameObject != null) UnityEngine.Object.Destroy(_gameObject);
+            if (_gameObject != null) Object.Destroy(_gameObject);
         }
 
         private void OnPrepared(VideoPlayer player)
@@ -208,7 +209,7 @@ namespace InstantReplay.Suite.UI
         {
             if (_texture == null) return;
             _texture.Release();
-            UnityEngine.Object.Destroy(_texture);
+            Object.Destroy(_texture);
             _texture = null;
         }
 #else

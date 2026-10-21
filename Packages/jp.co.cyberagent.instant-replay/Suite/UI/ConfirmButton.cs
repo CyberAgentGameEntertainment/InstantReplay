@@ -16,9 +16,9 @@ namespace InstantReplay.Suite.UI
         private const long ConfirmWindowMs = 3000;
 
         private readonly Action _action;
+        private bool _armed;
         private string _label;
         private IVisualElementScheduledItem _reset;
-        private bool _armed;
 
         public ConfirmButton(string label, Action action)
         {

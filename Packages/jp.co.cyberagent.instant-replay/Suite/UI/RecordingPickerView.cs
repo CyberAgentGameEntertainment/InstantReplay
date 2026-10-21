@@ -6,6 +6,7 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UIElements;
+using Object = UnityEngine.Object;
 
 namespace InstantReplay.Suite.UI
 {
@@ -30,7 +31,9 @@ namespace InstantReplay.Suite.UI
         private bool _busy;
         private bool _closed;
         private IReadOnlyList<RecordingEntry> _entries = Array.Empty<RecordingEntry>();
-        private IReadOnlyList<DiskEncodedFrameBufferRecovery> _recoveries = Array.Empty<DiskEncodedFrameBufferRecovery>();
+
+        private IReadOnlyList<DiskEncodedFrameBufferRecovery> _recoveries =
+            Array.Empty<DiskEncodedFrameBufferRecovery>();
 
         public RecordingPickerView(VisualElement parent, InstantReplayRecorder recorder, bool allowMultiple)
         {
@@ -82,9 +85,6 @@ namespace InstantReplay.Suite.UI
 
         public VisualElement Root { get; }
 
-        /// <summary>Raised once when the view closes, with the chosen recordings. The list is empty when cancelled.</summary>
-        public event Action<IReadOnlyList<RecordingEntry>> Closed;
-
         public void Dispose()
         {
             if (_closed) return;
@@ -96,6 +96,9 @@ namespace InstantReplay.Suite.UI
             Root.AddToClassList("irs-modal--leaving");
             Root.schedule.Execute(Root.RemoveFromHierarchy).StartingIn(LeaveTransitionMs);
         }
+
+        /// <summary>Raised once when the view closes, with the chosen recordings. The list is empty when cancelled.</summary>
+        public event Action<IReadOnlyList<RecordingEntry>> Closed;
 
         /// <summary>Closes the view as if the user had cancelled.</summary>
         public void Cancel()
@@ -111,7 +114,7 @@ namespace InstantReplay.Suite.UI
             }
             catch (Exception ex)
             {
-                Debug.LogException(ex);
+                ILogger.LogExceptionCore(ex);
                 _entries = Array.Empty<RecordingEntry>();
             }
 
@@ -121,7 +124,7 @@ namespace InstantReplay.Suite.UI
             }
             catch (Exception ex)
             {
-                Debug.LogException(ex);
+                ILogger.LogExceptionCore(ex);
                 _recoveries = Array.Empty<DiskEncodedFrameBufferRecovery>();
             }
 
@@ -136,8 +139,11 @@ namespace InstantReplay.Suite.UI
             foreach (var recovery in _recoveries)
             {
                 var details = Formatting.Bytes(recovery.SizeBytes);
-                if (!recovery.IsCompatible) details += "\n" + Strings.Format(Strings.Current.RecordedBy, recovery.Platform, recovery.ApplicationVersion);
-                var row = RecordingRows.Create(Strings.Format(Strings.Current.Unfinished, Formatting.LocalDateTime(recovery.StartedAtUtc)),
+                if (!recovery.IsCompatible)
+                    details += "\n" + Strings.Format(Strings.Current.RecordedBy, recovery.Platform,
+                        recovery.ApplicationVersion);
+                var row = RecordingRows.Create(
+                    Strings.Format(Strings.Current.Unfinished, Formatting.LocalDateTime(recovery.StartedAtUtc)),
                     details, null, _allowMultiple, _checked.Contains(recovery));
                 row.AddToClassList("irs-picker__row--unfinished");
                 row.OnTap(() => Toggle(recovery));
@@ -156,7 +162,9 @@ namespace InstantReplay.Suite.UI
 
             _emptyLabel.style.display =
                 _entries.Count == 0 && _recoveries.Count == 0 ? DisplayStyle.Flex : DisplayStyle.None;
-            _confirmButton.text = _allowMultiple && _checked.Count > 1 ? Strings.Format(Strings.Current.UseCount, _checked.Count) : Strings.Current.Use;
+            _confirmButton.text = _allowMultiple && _checked.Count > 1
+                ? Strings.Format(Strings.Current.UseCount, _checked.Count)
+                : Strings.Current.Use;
             _confirmButton.SetEnabled(!_busy && _checked.Count > 0);
             _cancelButton.SetEnabled(!_busy);
             _list.SetEnabled(!_busy);
@@ -201,7 +209,7 @@ namespace InstantReplay.Suite.UI
             }
             catch (Exception ex)
             {
-                Debug.LogException(ex);
+                ILogger.LogExceptionCore(ex);
                 if (_closed) return;
                 _busy = false;
                 _checked.Clear();
@@ -217,7 +225,7 @@ namespace InstantReplay.Suite.UI
         {
             foreach (var texture in _thumbnails)
                 if (texture != null)
-                    UnityEngine.Object.Destroy(texture);
+                    Object.Destroy(texture);
             _thumbnails.Clear();
         }
 

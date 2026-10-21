@@ -31,7 +31,7 @@ namespace InstantReplay.Suite.Sharing.Discord
 
                 uploadProgress?.Invoke(request.uploadProgress);
                 // The continuation returns to the main thread through the Unity synchronization context.
-                await Task.Delay(PollIntervalMs);
+                await Task.Delay(PollIntervalMs, cancellationToken);
             }
 
             var body = request.downloadHandler?.text;

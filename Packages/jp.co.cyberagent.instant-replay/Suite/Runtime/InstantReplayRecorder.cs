@@ -33,21 +33,15 @@ namespace InstantReplay.Suite
         private readonly List<double> _faultTimes = new();
         private readonly ProviderSlot<IFrameProvider> _frameSlot;
         private readonly int _mainThreadId;
-        private readonly IReadOnlyList<RecordingPreset> _presets;
-        private readonly InstantReplaySuiteSettings _settings;
 
         private bool _activated;
-        private RecordingPreset _activePreset;
-        private bool _bufferingEnabled;
         private bool _disposed;
-        private bool _paused;
         private RecorderPreferences _preferences;
         private RealtimeInstantReplaySession _session;
         private PresetContext _sessionContext;
         private int _sessionGeneration;
         private bool _suspended;
         private ApplicationSuspensionObserver _suspensionObserver;
-        private UnboundedRecording _unbounded;
         private UnboundedRecordingSession _unboundedSession;
 
         /// <summary>
@@ -59,32 +53,32 @@ namespace InstantReplay.Suite
             _context = SynchronizationContext.Current ??
                        throw new InvalidOperationException("InstantReplayRecorder must be created on the main thread.");
             _mainThreadId = Thread.CurrentThread.ManagedThreadId;
-            _settings = settings != null ? settings : ScriptableObject.CreateInstance<InstantReplaySuiteSettings>();
+            Settings = settings != null ? settings : ScriptableObject.CreateInstance<InstantReplaySuiteSettings>();
 
             var presets = new List<RecordingPreset>();
-            if (_settings.Presets != null)
-                foreach (var preset in _settings.Presets)
+            if (Settings.Presets != null)
+                foreach (var preset in Settings.Presets)
                     if (preset != null)
                         presets.Add(preset);
             if (presets.Count == 0) presets.Add(RecordingPreset.CreateDefault());
-            _presets = presets;
-            _activePreset = _settings.FindPreset(_settings.DefaultPresetId) ?? presets[0];
+            Presets = presets;
+            ActivePreset = Settings.FindPreset(Settings.DefaultPresetId) ?? presets[0];
 
             _frameSlot = new ProviderSlot<IFrameProvider>(static () => new ScreenshotFrameProvider());
             _audioSlot = new ProviderSlot<IAudioSampleProvider>(static () => new UnityAudioSampleProvider());
 
-            Library = new RecordingLibrary(_settings.ResolveOutputDirectory(), _settings.MaxRecordings,
-                (long)_settings.MaxTotalMegabytes * 1024 * 1024);
+            Library = new RecordingLibrary(Settings.ResolveOutputDirectory(), Settings.MaxRecordings,
+                (long)Settings.MaxTotalMegabytes * 1024 * 1024);
 
             var shareTargets = new List<ShareTarget>();
-            if (_settings.ShareTargets != null)
-                foreach (var target in _settings.ShareTargets)
+            if (Settings.ShareTargets != null)
+                foreach (var target in Settings.ShareTargets)
                     if (target != null)
                         shareTargets.Add(target);
             ShareTargets = shareTargets;
         }
 
-        public InstantReplaySuiteSettings Settings => _settings;
+        public InstantReplaySuiteSettings Settings { get; }
 
         public RecorderState State { get; private set; } = RecorderState.Idle;
 
@@ -92,32 +86,32 @@ namespace InstantReplay.Suite
         public Exception LastException { get; private set; }
 
         /// <summary>Presets the user can choose from. Never empty.</summary>
-        public IReadOnlyList<RecordingPreset> Presets => _presets;
+        public IReadOnlyList<RecordingPreset> Presets { get; }
 
-        public RecordingPreset ActivePreset => _activePreset;
+        public RecordingPreset ActivePreset { get; private set; }
 
         /// <summary>
         ///     Whether <see cref="ActivePreset" /> is not one of <see cref="Presets" />, for example because the user has
         ///     customized it. Such a preset is persisted as a whole and restored on the next launch.
         /// </summary>
-        public bool IsActivePresetCustomized => IndexOfPreset(_activePreset) < 0;
+        public bool IsActivePresetCustomized => IndexOfPreset(ActivePreset) < 0;
 
         /// <summary>
         ///     Whether the user wants buffering. Buffering actually runs only while no replay is being saved and no
         ///     unbounded recording is running.
         /// </summary>
-        public bool IsBufferingEnabled => _bufferingEnabled;
+        public bool IsBufferingEnabled { get; private set; }
 
         /// <summary>
         ///     Whether the recording has been paused by <see cref="Pause" />. Recording is also paused while the
         ///     application is suspended, which this property does not reflect.
         /// </summary>
-        public bool IsPaused => _paused;
+        public bool IsPaused { get; private set; }
 
-        private bool IsSessionPaused => _paused || _suspended;
+        private bool IsSessionPaused => IsPaused || _suspended;
 
         /// <summary>The running unbounded recording, or null.</summary>
-        public UnboundedRecording CurrentUnboundedRecording => _unbounded;
+        public UnboundedRecording CurrentUnboundedRecording { get; private set; }
 
         public RecordingLibrary Library { get; }
 
@@ -127,12 +121,6 @@ namespace InstantReplay.Suite
         ///     supply credentials that are not stored in the build.
         /// </summary>
         public IList<ShareTarget> ShareTargets { get; }
-
-        /// <summary>Raised when <see cref="State" /> changes.</summary>
-        public event Action<RecorderState> StateChanged;
-
-        /// <summary>Raised when the preset, the buffering toggle, or the pause state changes.</summary>
-        public event Action ConfigurationChanged;
 
         public void Dispose()
         {
@@ -153,12 +141,12 @@ namespace InstantReplay.Suite
                 var session = _unboundedSession;
                 _unboundedSession = null;
                 DisposeQuietly(session);
-                if (_unbounded != null)
+                if (CurrentUnboundedRecording != null)
                 {
-                    _unbounded.Fail(new ObjectDisposedException(nameof(InstantReplayRecorder)));
+                    CurrentUnboundedRecording.Fail(new ObjectDisposedException(nameof(InstantReplayRecorder)));
                     // The file cannot be finalized synchronously and would not be playable.
-                    Library.Abandon(_unbounded.OutputPath);
-                    _unbounded = null;
+                    Library.Abandon(CurrentUnboundedRecording.OutputPath);
+                    CurrentUnboundedRecording = null;
                 }
             }
 
@@ -166,6 +154,12 @@ namespace InstantReplay.Suite
             _audioSlot.Dispose();
             State = RecorderState.Idle;
         }
+
+        /// <summary>Raised when <see cref="State" /> changes.</summary>
+        public event Action<RecorderState> StateChanged;
+
+        /// <summary>Raised when the preset, the buffering toggle, or the pause state changes.</summary>
+        public event Action ConfigurationChanged;
 
         /// <summary>
         ///     Restores the choices the user made in a previous launch and starts buffering if it is enabled. Calling it
@@ -178,19 +172,19 @@ namespace InstantReplay.Suite
             if (_activated) return;
             _activated = true;
 
-            _preferences = _settings.PersistUserPreferences ? RecorderPreferences.Load() : new RecorderPreferences();
+            _preferences = Settings.PersistUserPreferences ? RecorderPreferences.Load() : new RecorderPreferences();
             var preset = LoadCustomPreset(_preferences.customPreset) ?? FindPreset(_preferences.selectedPresetId);
-            if (preset != null) _activePreset = preset;
-            _bufferingEnabled = _preferences.hasBufferingEnabled
+            if (preset != null) ActivePreset = preset;
+            IsBufferingEnabled = _preferences.hasBufferingEnabled
                 ? _preferences.bufferingEnabled
-                : _settings.StartBufferingOnLaunch;
+                : Settings.StartBufferingOnLaunch;
 
             // Providers keep their clocks running while the application is suspended, so the suspension would appear as
             // a long period without frames unless recording is paused meanwhile.
             if (Application.isPlaying)
                 _suspensionObserver = ApplicationSuspensionObserver.Create(OnApplicationSuspensionChanged);
 
-            if (_bufferingEnabled) StartBuffering();
+            if (IsBufferingEnabled) StartBuffering();
             ConfigurationChanged?.Invoke();
         }
 
@@ -221,7 +215,7 @@ namespace InstantReplay.Suite
             ThrowIfBusy("change the preset");
             EnsureActivated();
 
-            _activePreset = preset;
+            ActivePreset = preset;
             SavePreferences();
             if (_session != null)
             {
@@ -243,9 +237,9 @@ namespace InstantReplay.Suite
             EnsureActivated();
 
             var retry = enabled && State == RecorderState.Faulted;
-            if (_bufferingEnabled == enabled && !retry) return;
+            if (IsBufferingEnabled == enabled && !retry) return;
 
-            _bufferingEnabled = enabled;
+            IsBufferingEnabled = enabled;
             SavePreferences();
 
             if (State is not (RecorderState.Exporting or RecorderState.RecordingUnbounded))
@@ -289,20 +283,20 @@ namespace InstantReplay.Suite
         {
             ThrowIfNotMainThread();
 
-            if (_unbounded != null)
-                return new RecorderStatistics(0, 0, 0, 0, _unbounded.ElapsedSeconds);
+            if (CurrentUnboundedRecording != null)
+                return new RecorderStatistics(0, 0, 0, 0, CurrentUnboundedRecording.ElapsedSeconds);
 
             if (_session == null)
             {
                 var context = PresetContext.FromCurrentEnvironment();
-                return new RecorderStatistics(0, _activePreset.EstimateRecordableDurationSeconds(context), 0,
-                    _activePreset.Buffer.GetCapacityBytes(), 0);
+                return new RecorderStatistics(0, ActivePreset.EstimateRecordableDurationSeconds(context), 0,
+                    ActivePreset.Buffer.GetCapacityBytes(), 0);
             }
 
             var buffer = _session.GetBufferStatistics();
-            var estimate = buffer.BufferedDurationSeconds >= MinimumSecondsForMeasuredCapacity && buffer.UsedBytes > 0
+            var estimate = buffer is { BufferedDurationSeconds: >= MinimumSecondsForMeasuredCapacity, UsedBytes: > 0 }
                 ? buffer.CapacityBytes * buffer.BufferedDurationSeconds / buffer.UsedBytes
-                : _activePreset.EstimateRecordableDurationSeconds(_sessionContext);
+                : ActivePreset.EstimateRecordableDurationSeconds(_sessionContext);
             return new RecorderStatistics(buffer.BufferedDurationSeconds, estimate, buffer.UsedBytes,
                 buffer.CapacityBytes, 0);
         }
@@ -399,7 +393,7 @@ namespace InstantReplay.Suite
             StopBuffering();
 
             var path = Library.CreateOutputPath(RecordingSource.Unbounded);
-            var options = _activePreset.ToEncodingOptions(PresetContext.FromCurrentEnvironment());
+            var options = ActivePreset.ToEncodingOptions(PresetContext.FromCurrentEnvironment());
             options.DiskBuffer = null;
 
             var generation = ++_sessionGeneration;
@@ -417,9 +411,10 @@ namespace InstantReplay.Suite
             }
 
             if (IsSessionPaused) _unboundedSession.Pause();
-            _unbounded = new UnboundedRecording(this, path, DateTime.UtcNow, request?.Metadata, IsSessionPaused);
+            CurrentUnboundedRecording =
+                new UnboundedRecording(this, path, DateTime.UtcNow, request?.Metadata, IsSessionPaused);
             SetState(RecorderState.RecordingUnbounded);
-            return _unbounded;
+            return CurrentUnboundedRecording;
         }
 
         /// <summary>
@@ -488,7 +483,7 @@ namespace InstantReplay.Suite
         internal async Task<RecordingEntry> StopUnboundedAsync(UnboundedRecording recording)
         {
             ThrowIfNotMainThread();
-            if (!ReferenceEquals(recording, _unbounded) || _unboundedSession == null)
+            if (!ReferenceEquals(recording, CurrentUnboundedRecording) || _unboundedSession == null)
                 throw new InvalidOperationException("The recording is no longer running.");
 
             var session = _unboundedSession;
@@ -514,7 +509,7 @@ namespace InstantReplay.Suite
             {
                 DisposeQuietly(session);
                 if (!completed) Library.Abandon(recording.OutputPath);
-                _unbounded = null;
+                CurrentUnboundedRecording = null;
                 if (!_disposed) ResumeAfterRecording();
             }
         }
@@ -523,9 +518,9 @@ namespace InstantReplay.Suite
         {
             ThrowIfNotMainThread();
             ThrowIfDisposed();
-            if (_paused == paused) return;
+            if (IsPaused == paused) return;
             var wasSessionPaused = IsSessionPaused;
-            _paused = paused;
+            IsPaused = paused;
             ApplySessionPause(wasSessionPaused);
             ConfigurationChanged?.Invoke();
         }
@@ -554,7 +549,7 @@ namespace InstantReplay.Suite
                 _unboundedSession?.Resume();
             }
 
-            _unbounded?.SetPaused(paused);
+            CurrentUnboundedRecording?.SetPaused(paused);
         }
 
         private void StartBuffering()
@@ -564,7 +559,7 @@ namespace InstantReplay.Suite
             try
             {
                 var context = PresetContext.FromCurrentEnvironment();
-                var options = _activePreset.ToEncodingOptions(context);
+                var options = ActivePreset.ToEncodingOptions(context);
                 var generation = ++_sessionGeneration;
                 _session = new RealtimeInstantReplaySession(options, _frameSlot.Get(), false, _audioSlot.Get(), false,
                     ex => Post(() => OnSessionException(generation, ex)));
@@ -598,7 +593,7 @@ namespace InstantReplay.Suite
 
         private void ResumeAfterRecording()
         {
-            if (_bufferingEnabled) StartBuffering();
+            if (IsBufferingEnabled) StartBuffering();
             else SetState(RecorderState.Idle);
         }
 
@@ -614,12 +609,12 @@ namespace InstantReplay.Suite
                 _sessionGeneration++;
                 DisposeQuietly(session);
                 LastException = exception;
-                if (_unbounded != null)
+                if (CurrentUnboundedRecording != null)
                 {
-                    _unbounded.Fail(exception);
+                    CurrentUnboundedRecording.Fail(exception);
                     // The file was not finalized and cannot be played.
-                    Library.Abandon(_unbounded.OutputPath);
-                    _unbounded = null;
+                    Library.Abandon(CurrentUnboundedRecording.OutputPath);
+                    CurrentUnboundedRecording = null;
                 }
 
                 ResumeAfterRecording();
@@ -665,8 +660,8 @@ namespace InstantReplay.Suite
 
         private int IndexOfPreset(RecordingPreset preset)
         {
-            for (var i = 0; i < _presets.Count; i++)
-                if (ReferenceEquals(_presets[i], preset))
+            for (var i = 0; i < Presets.Count; i++)
+                if (ReferenceEquals(Presets[i], preset))
                     return i;
             return -1;
         }
@@ -688,7 +683,7 @@ namespace InstantReplay.Suite
         private RecordingPreset FindPreset(string id)
         {
             if (string.IsNullOrEmpty(id)) return null;
-            foreach (var preset in _presets)
+            foreach (var preset in Presets)
                 if (preset.Id == id)
                     return preset;
             return null;
@@ -701,11 +696,11 @@ namespace InstantReplay.Suite
 
         private void SavePreferences()
         {
-            if (_preferences == null || !_settings.PersistUserPreferences) return;
-            _preferences.selectedPresetId = _activePreset.Id;
-            _preferences.customPreset = IsActivePresetCustomized ? JsonUtility.ToJson(_activePreset) : null;
+            if (_preferences == null || !Settings.PersistUserPreferences) return;
+            _preferences.selectedPresetId = ActivePreset.Id;
+            _preferences.customPreset = IsActivePresetCustomized ? JsonUtility.ToJson(ActivePreset) : null;
             _preferences.hasBufferingEnabled = true;
-            _preferences.bufferingEnabled = _bufferingEnabled;
+            _preferences.bufferingEnabled = IsBufferingEnabled;
             _preferences.Save();
         }
 

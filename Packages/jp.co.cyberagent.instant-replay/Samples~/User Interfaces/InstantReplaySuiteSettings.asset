@@ -70,4 +70,7 @@ MonoBehaviour:
   defaultPresetId: standard
   startBufferingOnLaunch: 1
   outputDirectory: InstantReplay/Recordings
+  maxRecordings: 0
+  maxTotalMegabytes: 0
   persistUserPreferences: 1
+  shareTargets: []

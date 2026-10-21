@@ -22,6 +22,8 @@ namespace InstantReplay
         public abstract IReadOnlyList<EncodedFrameDescriptor> Video { get; }
         public abstract IReadOnlyList<EncodedFrameDescriptor> Audio { get; }
 
+        public abstract void Dispose();
+
         /// <summary>
         ///     Creates readers for the video samples in [videoStart, videoEnd) and the audio samples in
         ///     [audioStart, audioEnd), each preceded by the configuration records of its stream and rebased so that the
@@ -29,8 +31,6 @@ namespace InstantReplay
         /// </summary>
         public abstract EncodedFrameSelection CreateSelection(int videoStart, int videoEnd, int audioStart,
             int audioEnd);
-
-        public abstract void Dispose();
 
         /// <summary>
         ///     Returns the seconds from the first video sample to the latest one. The latest one is not always the last
@@ -113,12 +113,12 @@ namespace InstantReplay
     internal sealed class InMemoryCapturedFrames : CapturedFrames
     {
         private readonly EncodedFrame[] _audio;
-        private readonly EncodedFrame[] _audioMetadata;
         private readonly EncodedFrameDescriptor[] _audioDescriptors;
+        private readonly EncodedFrame[] _audioMetadata;
+        private readonly Action<Exception> _onError;
         private readonly EncodedFrame[] _video;
         private readonly EncodedFrameDescriptor[] _videoDescriptors;
         private readonly EncodedFrame[] _videoMetadata;
-        private readonly Action<Exception> _onError;
         private bool _disposed;
 
         /// <param name="video">Video frames as selected for an export: configuration records first, then samples.</param>
@@ -141,8 +141,10 @@ namespace InstantReplay
         {
             if (_disposed) throw new ObjectDisposedException(nameof(InMemoryCapturedFrames));
             return new EncodedFrameSelection(
-                new CopyingReader(_videoMetadata, new ArraySegment<EncodedFrame>(_video, videoStart, videoEnd - videoStart)),
-                new CopyingReader(_audioMetadata, new ArraySegment<EncodedFrame>(_audio, audioStart, audioEnd - audioStart)));
+                new CopyingReader(_videoMetadata,
+                    new ArraySegment<EncodedFrame>(_video, videoStart, videoEnd - videoStart)),
+                new CopyingReader(_audioMetadata,
+                    new ArraySegment<EncodedFrame>(_audio, audioStart, audioEnd - audioStart)));
         }
 
         public override void Dispose()

@@ -14,6 +14,8 @@ namespace InstantReplay.Suite
     [CreateAssetMenu(fileName = "InstantReplaySuiteSettings", menuName = "Instant Replay/Suite Settings")]
     public sealed class InstantReplaySuiteSettings : ScriptableObject
     {
+        #region Serialized Fields
+
         [SerializeField] private List<RecordingPreset> presets = new() { RecordingPreset.CreateDefault() };
         [SerializeField] private string defaultPresetId = "default";
         [SerializeField] private bool startBufferingOnLaunch = true;
@@ -28,11 +30,15 @@ namespace InstantReplay.Suite
         [SerializeField]
         private int maxTotalMegabytes;
 
-        [Tooltip("Remember the preset, the buffering toggle and the overlay position chosen by the user across launches.")] [SerializeField]
+        [Tooltip(
+            "Remember the preset, the buffering toggle and the overlay position chosen by the user across launches.")]
+        [SerializeField]
         private bool persistUserPreferences = true;
 
         [Tooltip("Destinations offered when the user shares a recording.")] [SerializeField]
         private List<ShareTarget> shareTargets = new();
+
+        #endregion
 
         public List<RecordingPreset> Presets => presets;
 

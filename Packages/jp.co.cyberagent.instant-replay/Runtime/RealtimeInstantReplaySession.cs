@@ -75,7 +75,7 @@ namespace InstantReplay
             var audioEncoder = encodingSystem.CreateAudioEncoder();
             var buffer = _buffer = options.DiskBuffer is { } diskBufferOptions
                 ? new DiskEncodedFrameBuffer(diskBufferOptions, options.VideoOptions, options.AudioOptions)
-                : (IEncodedFrameBuffer)new BoundedEncodedFrameBuffer(options.MaxMemoryUsageBytesForCompressedFrames);
+                : new BoundedEncodedFrameBuffer(options.MaxMemoryUsageBytesForCompressedFrames);
 
             // ReSharper disable once ConvertToLocalFunction
             Action<LazyVideoFrameData> onLazyVideoFrameDataDropped = async static dropped =>
@@ -153,21 +153,6 @@ namespace InstantReplay
         public bool IsPaused => _temporalController.IsPaused;
 
         /// <summary>
-        ///     Returns a snapshot of the encoded frame buffer, such as the duration an export would cover. Safe to call
-        ///     from any thread. After an export the buffer has been consumed and the values are no longer meaningful.
-        /// </summary>
-        public RecordingBufferStatistics GetBufferStatistics()
-        {
-            lock (_lock)
-            {
-                if (_disposed)
-                    throw new ObjectDisposedException(nameof(RealtimeInstantReplaySession));
-
-                return _buffer.GetStatistics();
-            }
-        }
-
-        /// <summary>
         ///     Gets the current state of the session.
         /// </summary>
         public SessionState State { get; private set; }
@@ -185,6 +170,21 @@ namespace InstantReplay
                 _audioPipeline.Dispose();
                 _encodingSystem.Dispose();
                 _buffer.Dispose();
+            }
+        }
+
+        /// <summary>
+        ///     Returns a snapshot of the encoded frame buffer, such as the duration an export would cover. Safe to call
+        ///     from any thread. After an export the buffer has been consumed and the values are no longer meaningful.
+        /// </summary>
+        public RecordingBufferStatistics GetBufferStatistics()
+        {
+            lock (_lock)
+            {
+                if (_disposed)
+                    throw new ObjectDisposedException(nameof(RealtimeInstantReplaySession));
+
+                return _buffer.GetStatistics();
             }
         }
 
@@ -279,7 +279,10 @@ namespace InstantReplay
         ///     over any range. Like <see cref="StopAndExportAsync" />, it can be called only once. The returned capture
         ///     remains valid after this session is disposed and must be disposed by the caller.
         /// </summary>
-        /// <param name="seconds">Duration to capture in seconds, counted back from the latest frame. Null captures the whole buffer.</param>
+        /// <param name="seconds">
+        ///     Duration to capture in seconds, counted back from the latest frame. Null captures the whole
+        ///     buffer.
+        /// </param>
         /// <exception cref="InvalidOperationException">The buffer holds no video key frame.</exception>
         public async ValueTask<CapturedReplay> StopAndCaptureAsync(double? seconds = default)
         {

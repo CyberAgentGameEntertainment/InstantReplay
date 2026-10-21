@@ -22,7 +22,8 @@ namespace InstantReplay
         public long UsedBytes { get; }
 
         /// <summary>
-        ///     Upper bound of <see cref="UsedBytes" />: <see cref="RealtimeEncodingOptions.MaxMemoryUsageBytesForCompressedFrames" />
+        ///     Upper bound of <see cref="UsedBytes" />:
+        ///     <see cref="RealtimeEncodingOptions.MaxMemoryUsageBytesForCompressedFrames" />
         ///     for the in-memory buffer, or <see cref="DiskBufferOptions.MaxDiskUsageBytes" /> for the disk buffer.
         /// </summary>
         public long CapacityBytes { get; }

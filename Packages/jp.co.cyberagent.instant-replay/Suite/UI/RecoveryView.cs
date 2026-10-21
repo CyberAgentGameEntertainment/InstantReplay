@@ -4,7 +4,6 @@
 
 using System;
 using System.Collections.Generic;
-using UnityEngine;
 using UnityEngine.UIElements;
 
 namespace InstantReplay.Suite.UI
@@ -58,7 +57,7 @@ namespace InstantReplay.Suite.UI
             }
             catch (Exception ex)
             {
-                Debug.LogException(ex);
+                ILogger.LogExceptionCore(ex);
                 recoveries = Array.Empty<DiskEncodedFrameBufferRecovery>();
             }
 
@@ -76,14 +75,17 @@ namespace InstantReplay.Suite.UI
             row.AddToClassList("irs-recovery__row");
 
             var text = $"{Formatting.LocalDateTime(recovery.StartedAtUtc)} · {Formatting.Bytes(recovery.SizeBytes)}";
-            if (!recovery.IsCompatible) text += "\n" + Strings.Format(Strings.Current.RecordedBy, recovery.Platform, recovery.ApplicationVersion);
+            if (!recovery.IsCompatible)
+                text += "\n" + Strings.Format(Strings.Current.RecordedBy, recovery.Platform,
+                    recovery.ApplicationVersion);
             var label = new Label(text);
             label.AddToClassList("irs-recovery__label");
             row.Add(label);
 
             var buttons = new VisualElement();
             buttons.AddToClassList("irs-panel__row");
-            buttons.Add(new Button(() => Recover(recovery)) { text = Strings.Current.Recover }.WithClass(Controls.Primary));
+            buttons.Add(
+                new Button(() => Recover(recovery)) { text = Strings.Current.Recover }.WithClass(Controls.Primary));
             buttons.Add(new ConfirmButton(Strings.Current.Delete, () => Delete(recovery)));
             row.Add(buttons);
             return row;
@@ -104,7 +106,7 @@ namespace InstantReplay.Suite.UI
             }
             catch (Exception ex)
             {
-                Debug.LogException(ex);
+                ILogger.LogExceptionCore(ex);
                 _status.text = Strings.Format(Strings.Current.RecoveryFailed, ex.Message);
             }
             finally

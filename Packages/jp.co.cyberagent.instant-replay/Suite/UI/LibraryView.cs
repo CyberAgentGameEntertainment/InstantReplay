@@ -9,6 +9,7 @@ using System.Text;
 using System.Threading;
 using UnityEngine;
 using UnityEngine.UIElements;
+using Object = UnityEngine.Object;
 
 namespace InstantReplay.Suite.UI
 {
@@ -39,14 +40,14 @@ namespace InstantReplay.Suite.UI
         private readonly VisualElement _shareSection;
         private readonly Label _shareStatus;
         private readonly DropdownField _shareTarget;
-        private readonly List<Texture2D> _thumbnails = new();
         private readonly Button _thumbnailButton;
+        private readonly List<Texture2D> _thumbnails = new();
+        private IReadOnlyList<RecordingEntry> _entries = Array.Empty<RecordingEntry>();
 
         private string _resultUrl;
-        private string _shareMessage;
         private RecordingEntry _selected;
-        private IReadOnlyList<RecordingEntry> _entries = Array.Empty<RecordingEntry>();
         private bool _selectionMode;
+        private string _shareMessage;
         private CancellationTokenSource _sharing;
         private bool _visible;
 
@@ -103,7 +104,8 @@ namespace InstantReplay.Suite.UI
             _detail.Add(back);
 
             _preview = new PreviewPlayer(previewParent);
-            _preview.Error += message => _detailInfo.text += "\n" + Strings.Format(Strings.Current.PreviewFailed, message);
+            _preview.Error += message =>
+                _detailInfo.text += "\n" + Strings.Format(Strings.Current.PreviewFailed, message);
             _preview.Image.OnTap(_preview.TogglePause);
             if (PreviewPlayer.IsSupported) _detail.Add(_preview.Image);
 
@@ -190,7 +192,7 @@ namespace InstantReplay.Suite.UI
             }
             catch (Exception ex)
             {
-                Debug.LogException(ex);
+                ILogger.LogExceptionCore(ex);
                 entries = Array.Empty<RecordingEntry>();
             }
 
@@ -242,7 +244,8 @@ namespace InstantReplay.Suite.UI
         {
             var count = _checkedPaths.Count;
             _selectAllToggle.SetValueWithoutNotify(count > 0 && count == _entries.Count);
-            _deleteCheckedButton.Label = count > 0 ? Strings.Format(Strings.Current.DeleteCount, count) : Strings.Current.Delete;
+            _deleteCheckedButton.Label =
+                count > 0 ? Strings.Format(Strings.Current.DeleteCount, count) : Strings.Current.Delete;
             _deleteCheckedButton.SetEnabled(count > 0);
             if (count == 0) _deleteCheckedButton.Disarm();
         }
@@ -262,7 +265,7 @@ namespace InstantReplay.Suite.UI
             }
             catch (Exception ex)
             {
-                Debug.LogException(ex);
+                ILogger.LogExceptionCore(ex);
                 SetListStatus(ex.Message);
             }
 
@@ -330,8 +333,9 @@ namespace InstantReplay.Suite.UI
             }
             catch (Exception ex)
             {
-                Debug.LogException(ex);
-                _detailInfo.text = DescribeLong(entry) + "\n" + Strings.Format(Strings.Current.DeletionFailed, ex.Message);
+                ILogger.LogExceptionCore(ex);
+                _detailInfo.text = DescribeLong(entry) + "\n" +
+                                   Strings.Format(Strings.Current.DeletionFailed, ex.Message);
                 return;
             }
 
@@ -352,8 +356,9 @@ namespace InstantReplay.Suite.UI
             }
             catch (Exception ex)
             {
-                Debug.LogException(ex);
-                _detailInfo.text = DescribeLong(entry) + "\n" + Strings.Format(Strings.Current.ThumbnailFailed, ex.Message);
+                ILogger.LogExceptionCore(ex);
+                _detailInfo.text = DescribeLong(entry) + "\n" +
+                                   Strings.Format(Strings.Current.ThumbnailFailed, ex.Message);
             }
         }
 
@@ -361,7 +366,7 @@ namespace InstantReplay.Suite.UI
         {
             foreach (var texture in _thumbnails)
                 if (texture != null)
-                    UnityEngine.Object.Destroy(texture);
+                    Object.Destroy(texture);
             _thumbnails.Clear();
         }
 
@@ -456,7 +461,7 @@ namespace InstantReplay.Suite.UI
             }
             catch (Exception ex)
             {
-                Debug.LogException(ex);
+                ILogger.LogExceptionCore(ex);
                 message = Strings.Format(Strings.Current.SharingFailed, ex.Message);
             }
 
@@ -474,7 +479,8 @@ namespace InstantReplay.Suite.UI
         private static string DescribeLong(RecordingEntry entry)
         {
             var builder = new StringBuilder();
-            builder.Append(Strings.Current.Source(entry.Source)).Append(" · ").AppendLine(Formatting.LocalDateTime(entry.CreatedAtUtc));
+            builder.Append(Strings.Current.Source(entry.Source)).Append(" · ")
+                .AppendLine(Formatting.LocalDateTime(entry.CreatedAtUtc));
             builder.Append(RecordingRows.DescribeShort(entry));
             foreach (var pair in entry.Metadata) builder.Append('\n').Append(pair.Key).Append(": ").Append(pair.Value);
             return builder.ToString();

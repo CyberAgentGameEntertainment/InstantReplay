@@ -15,29 +15,28 @@ namespace InstantReplay.Suite.UI
     /// </summary>
     internal sealed class PresetEditorView
     {
-        private readonly string _screenRelative = Strings.Current.ScreenRelative;
-        private readonly string _fixedSize = Strings.Current.FixedSize;
-        private readonly string _bitsPerPixelMode = Strings.Current.BitsPerPixel;
-        private readonly string _fixedBitrate = Strings.Current.FixedBitrate;
-        private readonly string _inMemory = Strings.Current.Memory;
-        private readonly string _onDisk = Strings.Current.Disk;
-
         private readonly IntegerField _audioBitrateKbps;
         private readonly DropdownField _bitrateMode;
         private readonly FloatField _bitsPerPixel;
-        private readonly DropdownField _bufferMode;
+        private readonly string _bitsPerPixelMode = Strings.Current.BitsPerPixel;
         private readonly IntegerField _bufferMegabytes;
+        private readonly DropdownField _bufferMode;
+        private readonly string _fixedBitrate = Strings.Current.FixedBitrate;
         private readonly FloatField _fixedBitrateMbps;
         private readonly IntegerField _fixedHeight;
+        private readonly string _fixedSize = Strings.Current.FixedSize;
         private readonly IntegerField _fixedWidth;
         private readonly Toggle _forceReadback;
         private readonly IntegerField _frameRate;
+        private readonly string _inMemory = Strings.Current.Memory;
         private readonly IntegerField _maxLongSide;
+        private readonly string _onDisk = Strings.Current.Disk;
         private readonly InstantReplayRecorder _recorder;
         private readonly Button _resetButton;
         private readonly DropdownField _resolutionMode;
         private readonly Action<Action> _run;
         private readonly FloatField _scale;
+        private readonly string _screenRelative = Strings.Current.ScreenRelative;
 
         public PresetEditorView(InstantReplayRecorder recorder, Action<Action> run)
         {
@@ -65,7 +64,8 @@ namespace InstantReplay.Suite.UI
 
             _frameRate = AddInteger(Strings.Current.FrameRate, (p, v) => p.FrameRate = Mathf.Clamp(v, 1, 240));
 
-            _bitrateMode = AddDropdown(Strings.Current.VideoBitrate, new List<string> { _bitsPerPixelMode, _fixedBitrate },
+            _bitrateMode = AddDropdown(Strings.Current.VideoBitrate,
+                new List<string> { _bitsPerPixelMode, _fixedBitrate },
                 (p, v) => p.VideoBitrate = v == _fixedBitrate
                     ? BitrateSpec.Fixed(ResolveBitrate(p))
                     : BitrateSpec.BitsPerPixel(p.VideoBitrate.BitsPerPixelValue > 0
@@ -76,7 +76,8 @@ namespace InstantReplay.Suite.UI
             _fixedBitrateMbps = AddFloat(Strings.Current.Mbps,
                 (p, v) => p.VideoBitrate = BitrateSpec.Fixed((int)Math.Round(Mathf.Clamp(v, 0.05f, 100f) * 1e6)));
 
-            _audioBitrateKbps = AddInteger(Strings.Current.AudioKbps, (p, v) => p.AudioBitrate = Mathf.Clamp(v, 16, 512) * 1000);
+            _audioBitrateKbps = AddInteger(Strings.Current.AudioKbps,
+                (p, v) => p.AudioBitrate = Mathf.Clamp(v, 16, 512) * 1000);
 
             _bufferMode = AddDropdown(Strings.Current.Buffer, new List<string> { _inMemory, _onDisk },
                 (p, v) => p.Buffer = v == _onDisk
@@ -164,7 +165,8 @@ namespace InstantReplay.Suite.UI
                 var basePreset = FindBase(_recorder.ActivePreset);
                 var preset = _recorder.ActivePreset.Clone();
                 modify(preset);
-                if (basePreset != null) preset.DisplayName = Strings.Format(Strings.Current.CustomizedPreset, basePreset.DisplayName);
+                if (basePreset != null)
+                    preset.DisplayName = Strings.Format(Strings.Current.CustomizedPreset, basePreset.DisplayName);
                 _recorder.ApplyPreset(preset);
             });
         }

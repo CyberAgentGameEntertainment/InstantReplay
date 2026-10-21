@@ -40,13 +40,13 @@ namespace InstantReplay.Suite.UI
         private readonly Button _pauseButton;
         private readonly DropdownField _presetDropdown;
         private readonly PresetEditorView _presetEditor;
+        private readonly Transform _previewParent;
+        private readonly IVisualElementScheduledItem _pulse;
         private readonly InstantReplayRecorder _recorder;
         private readonly VisualElement _recorderTab;
         private readonly Button _recorderTabButton;
-        private readonly IVisualElementScheduledItem _pulse;
         private readonly IVisualElementScheduledItem _refresh;
         private readonly VisualElement _root;
-        private readonly Transform _previewParent;
         private readonly Button _saveButton;
         private readonly Button _unboundedButton;
 
@@ -185,12 +185,6 @@ namespace InstantReplay.Suite.UI
         }
 
         /// <summary>
-        ///     Raised when the user chooses another corner for the overlay in the panel. Not raised when
-        ///     <see cref="OverlayCorner" /> is set from code.
-        /// </summary>
-        public event Action<OverlayCorner> OverlayCornerChanged;
-
-        /// <summary>
         ///     Corner of the screen where the overlay is placed. The panel opens next to the overlay.
         /// </summary>
         public OverlayCorner OverlayCorner
@@ -236,6 +230,9 @@ namespace InstantReplay.Suite.UI
 
         private bool HasModal => _trim != null || _picker != null;
 
+        private bool IsPanelOpen => !_panel.ClassListContains("irs-panel--hidden") &&
+                                    !_panel.ClassListContains("irs-panel--entering");
+
         public void Dispose()
         {
             _disposed = true;
@@ -250,8 +247,11 @@ namespace InstantReplay.Suite.UI
             _root.RemoveFromHierarchy();
         }
 
-        private bool IsPanelOpen => !_panel.ClassListContains("irs-panel--hidden") &&
-                                    !_panel.ClassListContains("irs-panel--entering");
+        /// <summary>
+        ///     Raised when the user chooses another corner for the overlay in the panel. Not raised when
+        ///     <see cref="OverlayCorner" /> is set from code.
+        /// </summary>
+        public event Action<OverlayCorner> OverlayCornerChanged;
 
         private void TogglePanel()
         {
@@ -322,7 +322,7 @@ namespace InstantReplay.Suite.UI
             }
             catch (Exception ex)
             {
-                Debug.LogException(ex);
+                ILogger.LogExceptionCore(ex);
                 _operationError = ex.Message;
             }
             finally
@@ -407,7 +407,7 @@ namespace InstantReplay.Suite.UI
             }
             catch (Exception ex)
             {
-                Debug.LogException(ex);
+                ILogger.LogExceptionCore(ex);
                 _operationError = ex.Message;
             }
             finally
@@ -426,7 +426,7 @@ namespace InstantReplay.Suite.UI
             }
             catch (Exception ex)
             {
-                Debug.LogException(ex);
+                ILogger.LogExceptionCore(ex);
                 _operationError = ex.Message;
             }
 
@@ -445,7 +445,7 @@ namespace InstantReplay.Suite.UI
             catch (Exception ex)
             {
                 // The statistics are only for display; a failure here must not stop the overlay.
-                Debug.LogException(ex);
+                ILogger.LogExceptionCore(ex);
                 stats = default;
             }
 
@@ -454,7 +454,9 @@ namespace InstantReplay.Suite.UI
             var idle = !_busy && state is not (RecorderState.Exporting or RecorderState.RecordingUnbounded);
             _bufferingToggle.SetValueWithoutNotify(_recorder.IsBufferingEnabled);
             _saveButton.SetEnabled(!_busy && !HasModal && state == RecorderState.Buffering);
-            _unboundedButton.text = state == RecorderState.RecordingUnbounded ? Strings.Current.StopRecording : Strings.Current.StartRecording;
+            _unboundedButton.text = state == RecorderState.RecordingUnbounded
+                ? Strings.Current.StopRecording
+                : Strings.Current.StartRecording;
             _unboundedButton.EnableInClassList("irs-button--recording", state == RecorderState.RecordingUnbounded);
             _unboundedButton.SetEnabled(!_busy && state != RecorderState.Exporting);
             _pauseButton.text = _recorder.IsPaused ? Strings.Current.Resume : Strings.Current.Pause;
@@ -470,7 +472,9 @@ namespace InstantReplay.Suite.UI
             _presetEditor.Refresh(idle);
 
             var error = _operationError ??
-                        (state == RecorderState.Faulted ? _recorder.LastException?.Message ?? Strings.Current.RecordingFailed : null);
+                        (state == RecorderState.Faulted
+                            ? _recorder.LastException?.Message ?? Strings.Current.RecordingFailed
+                            : null);
             _errorLabel.text = error ?? string.Empty;
             _errorLabel.EnableInClassList("irs-panel__error--hidden", string.IsNullOrEmpty(error));
         }
@@ -490,7 +494,8 @@ namespace InstantReplay.Suite.UI
                 RecorderState.Buffering =>
                     $"{Formatting.Time(stats.BufferedDurationSeconds)} / ~{Formatting.Time(stats.EstimatedCapacitySeconds)}{pausedSuffix}",
                 RecorderState.RecordingUnbounded =>
-                    Strings.Format(text.OverlayRecording, Formatting.Time(stats.UnboundedElapsedSeconds)) + pausedSuffix,
+                    Strings.Format(text.OverlayRecording, Formatting.Time(stats.UnboundedElapsedSeconds)) +
+                    pausedSuffix,
                 RecorderState.Exporting => text.OverlaySaving,
                 RecorderState.Faulted => text.OverlayError,
                 _ => text.OverlayOff
@@ -520,7 +525,9 @@ namespace InstantReplay.Suite.UI
             var options = preset.ToEncodingOptions(context);
             var video = options.VideoOptions;
             var buffer = preset.Buffer;
-            var bufferKind = buffer.Mode == BufferSpec.SpecMode.Disk ? Strings.Current.BufferOnDisk : Strings.Current.BufferInMemory;
+            var bufferKind = buffer.Mode == BufferSpec.SpecMode.Disk
+                ? Strings.Current.BufferOnDisk
+                : Strings.Current.BufferInMemory;
             var estimate = stats.EstimatedCapacitySeconds > 0
                 ? stats.EstimatedCapacitySeconds
                 : preset.EstimateRecordableDurationSeconds(context);

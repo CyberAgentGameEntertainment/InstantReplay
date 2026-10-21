@@ -5,6 +5,7 @@
 using System;
 using System.IO;
 using UnityEngine;
+using Object = UnityEngine.Object;
 
 namespace InstantReplay.Suite.UI
 {
@@ -20,7 +21,7 @@ namespace InstantReplay.Suite.UI
             if (png == null || png.Length == 0) return null;
             var texture = new Texture2D(2, 2) { name = "InstantReplaySuite Thumbnail" };
             if (texture.LoadImage(png, true)) return texture;
-            UnityEngine.Object.Destroy(texture);
+            Object.Destroy(texture);
 #endif
             return null;
         }
@@ -36,7 +37,7 @@ namespace InstantReplay.Suite.UI
             }
             catch (Exception ex)
             {
-                Debug.LogException(ex);
+                ILogger.LogExceptionCore(ex);
             }
 #endif
             return null;

@@ -81,6 +81,8 @@ namespace InstantReplay.Suite.UI
                 activators.Add(new ManipulatorActivationFilter { button = MouseButton.LeftMouse });
             }
 
+            private bool IsTracking => _pointerId != PointerId.invalidPointerId;
+
             protected override void RegisterCallbacksOnTarget()
             {
                 // The trickle-down phase reaches the target before the handlers of the control itself.
@@ -105,8 +107,6 @@ namespace InstantReplay.Suite.UI
                 target.UnregisterCallback<MouseDownEvent>(StopMouseEvent, TrickleDown.TrickleDown);
                 target.UnregisterCallback<MouseUpEvent>(StopMouseEvent, TrickleDown.TrickleDown);
             }
-
-            private bool IsTracking => _pointerId != PointerId.invalidPointerId;
 
             private void OnPointerDown(PointerDownEvent evt)
             {
@@ -182,13 +182,15 @@ namespace InstantReplay.Suite.UI
 
             private readonly Action _tapped;
             private int _pointerId = PointerId.invalidPointerId;
-            private bool _stopMouseUp;
             private Vector2 _start;
+            private bool _stopMouseUp;
 
             public TextFieldTapManipulator(Action tapped)
             {
                 _tapped = tapped;
             }
+
+            private bool IsTracking => _pointerId != PointerId.invalidPointerId;
 
             protected override void RegisterCallbacksOnTarget()
             {
@@ -214,8 +216,6 @@ namespace InstantReplay.Suite.UI
                 target.UnregisterCallback<MouseDownEvent>(OnMouseDown, TrickleDown.TrickleDown);
                 target.UnregisterCallback<MouseUpEvent>(OnMouseUp, TrickleDown.TrickleDown);
             }
-
-            private bool IsTracking => _pointerId != PointerId.invalidPointerId;
 
             private void OnAttachToPanel(AttachToPanelEvent evt)
             {

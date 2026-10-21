@@ -21,8 +21,12 @@ namespace InstantReplay.Suite
     /// </remarks>
     public abstract class ShareTarget : ScriptableObject
     {
+        #region Serialized Fields
+
         [Tooltip("Name shown to the user. The asset name is used when empty.")] [SerializeField]
         private string displayName;
+
+        #endregion
 
         /// <summary>Name shown to the user.</summary>
         public virtual string DisplayName

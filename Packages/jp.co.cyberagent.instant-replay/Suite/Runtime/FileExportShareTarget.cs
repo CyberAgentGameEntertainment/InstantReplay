@@ -18,11 +18,15 @@ namespace InstantReplay.Suite
     {
         private const string DefaultDirectory = "InstantReplay/Exports";
 
+        #region Serialized Fields
+
         [Tooltip("Relative paths are resolved against Application.persistentDataPath.")] [SerializeField]
         private string directory = DefaultDirectory;
 
         [Tooltip("Open the directory after copying. Effective on desktop platforms.")] [SerializeField]
         private bool openDirectory;
+
+        #endregion
 
         /// <summary>
         ///     Destination directory. Relative paths are resolved against <see cref="Application.persistentDataPath" />.

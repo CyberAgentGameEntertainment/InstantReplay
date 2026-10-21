@@ -75,7 +75,8 @@ namespace InstantReplay.Suite
 
     /// <summary>
     ///     Range and thumbnail chosen for a <see cref="ReplayDraft" />, for example by the user in a trim view. Pass it to
-    ///     <see cref="ReplayDraft.SaveAsync(ReplaySelection)" /> or <see cref="ReplayDraft.ExportAsync(ReplaySelection, string)" />.
+    ///     <see cref="ReplayDraft.SaveAsync(ReplaySelection)" /> or
+    ///     <see cref="ReplayDraft.ExportAsync(ReplaySelection, string)" />.
     /// </summary>
     public sealed class ReplaySelection
     {

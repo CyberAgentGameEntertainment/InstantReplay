@@ -29,6 +29,8 @@ namespace InstantReplay.Suite.Sharing.Discord
         private const int MaxAttachments = 10;
         private const int MaxContentLength = 2000;
 
+        #region Serialized Fields
+
         [Tooltip("Webhook URL of the channel (https://discord.com/api/webhooks/...).")] [SerializeField]
         private string webhookUrl;
 
@@ -37,6 +39,8 @@ namespace InstantReplay.Suite.Sharing.Discord
 
         [Tooltip("Append the metadata of the recordings to the message.")] [SerializeField]
         private bool includeMetadata = true;
+
+        #endregion
 
         /// <summary>Webhook URL of the channel.</summary>
         public string WebhookUrl
@@ -129,12 +133,20 @@ namespace InstantReplay.Suite.Sharing.Discord
             return message.Length <= MaxContentLength ? message : message.Substring(0, MaxContentLength - 1) + "…";
         }
 
+        #region Nested type
+
 #pragma warning disable IDE1006
         [Serializable]
         private sealed class Payload
         {
+            #region Serialized Fields
+
             public string content;
+
+            #endregion
         }
 #pragma warning restore IDE1006
+
+        #endregion
     }
 }

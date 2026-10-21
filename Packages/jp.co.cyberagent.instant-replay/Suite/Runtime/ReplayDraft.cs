@@ -30,7 +30,6 @@ namespace InstantReplay.Suite
     {
         private readonly CapturedReplay _capture;
         private readonly RecordingLibrary _library;
-        private bool _disposed;
         private Task<string> _previewTask;
 
         internal ReplayDraft(RecordingLibrary library, CapturedReplay capture, DateTime capturedAtUtc,
@@ -60,12 +59,12 @@ namespace InstantReplay.Suite
         /// <summary>Key-value pairs stored with every recording saved from this draft. May be null.</summary>
         public IReadOnlyDictionary<string, string> Metadata { get; }
 
-        public bool IsDisposed => _disposed;
+        public bool IsDisposed { get; private set; }
 
         public void Dispose()
         {
-            if (_disposed) return;
-            _disposed = true;
+            if (IsDisposed) return;
+            IsDisposed = true;
 
             _capture.Dispose();
 
@@ -177,7 +176,7 @@ namespace InstantReplay.Suite
 
         private void ThrowIfDisposed()
         {
-            if (_disposed) throw new ObjectDisposedException(nameof(ReplayDraft));
+            if (IsDisposed) throw new ObjectDisposedException(nameof(ReplayDraft));
         }
     }
 }

@@ -278,8 +278,8 @@ namespace InstantReplay.Suite
             foreach (var entry in entries)
             {
                 var keep = entry.FilePath == added.FilePath ||
-                           ((_maxRecordings <= 0 || count < _maxRecordings) &&
-                            (_maxTotalBytes <= 0 || total + entry.SizeBytes <= _maxTotalBytes));
+                           (_maxRecordings <= 0 || count < _maxRecordings) &&
+                           (_maxTotalBytes <= 0 || total + entry.SizeBytes <= _maxTotalBytes);
                 if (keep)
                 {
                     count++;
@@ -374,19 +374,27 @@ namespace InstantReplay.Suite
         {
             public const int CurrentVersion = 1;
 
+            #region Serialized Fields
+
             public int version;
             public long createdAtUtcTicks;
             public double durationSeconds;
             public string source;
             public string thumbnail;
             public List<MetadataPair> metadata = new();
+
+            #endregion
         }
 
         [Serializable]
         private sealed class MetadataPair
         {
+            #region Serialized Fields
+
             public string key;
             public string value;
+
+            #endregion
         }
     }
 }

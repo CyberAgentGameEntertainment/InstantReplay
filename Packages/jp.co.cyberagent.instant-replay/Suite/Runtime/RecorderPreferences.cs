@@ -16,6 +16,8 @@ namespace InstantReplay.Suite
     {
         private const int CurrentVersion = 1;
 
+        #region Serialized Fields
+
         public int version = CurrentVersion;
         public string selectedPresetId;
         public bool hasBufferingEnabled;
@@ -26,6 +28,8 @@ namespace InstantReplay.Suite
         ///     the user has customized it. Empty otherwise.
         /// </summary>
         public string customPreset;
+
+        #endregion
 
         private static string FilePath =>
             Path.Combine(Application.persistentDataPath, "InstantReplay", "suite-preferences.json");

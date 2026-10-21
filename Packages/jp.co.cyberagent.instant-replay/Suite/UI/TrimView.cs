@@ -5,6 +5,7 @@
 using System;
 using UnityEngine;
 using UnityEngine.UIElements;
+using Object = UnityEngine.Object;
 
 namespace InstantReplay.Suite.UI
 {
@@ -22,19 +23,19 @@ namespace InstantReplay.Suite.UI
 
         private readonly Button _cancelButton;
         private readonly ReplayDraft _draft;
-        private readonly bool _saveToLibrary;
-        private readonly Label _playheadLabel;
         private readonly Button _playButton;
+        private readonly Label _playheadLabel;
         private readonly PreviewPlayer _preview;
         private readonly Label _rangeLabel;
-        private readonly TrimTimeline _timeline;
         private readonly Button _saveButton;
+        private readonly bool _saveToLibrary;
         private readonly Button _setEndButton;
         private readonly Button _setStartButton;
         private readonly Label _statusLabel;
-        private readonly Image _thumbnailImage;
         private readonly Button _thumbnailButton;
+        private readonly Image _thumbnailImage;
         private readonly IVisualElementScheduledItem _tick;
+        private readonly TrimTimeline _timeline;
 
         private bool _closed;
         private double _end;
@@ -125,8 +126,11 @@ namespace InstantReplay.Suite.UI
             var actions = new VisualElement();
             actions.AddToClassList("irs-panel__row");
             actions.AddToClassList("irs-panel__section");
-            _cancelButton = new Button(Cancel) { text = saveToLibrary ? Strings.Current.Discard : Strings.Current.Cancel };
-            _saveButton = new Button(Confirm) { text = saveToLibrary ? Strings.Current.Save : Strings.Current.Use }.WithClass(Controls.Primary);
+            _cancelButton = new Button(Cancel)
+                { text = saveToLibrary ? Strings.Current.Discard : Strings.Current.Cancel };
+            _saveButton =
+                new Button(Confirm) { text = saveToLibrary ? Strings.Current.Save : Strings.Current.Use }.WithClass(
+                    Controls.Primary);
             actions.Add(_cancelButton);
             actions.Add(_saveButton);
             content.Add(actions);
@@ -144,6 +148,22 @@ namespace InstantReplay.Suite.UI
 
         public VisualElement Root { get; }
 
+        public void Dispose()
+        {
+            if (_closed) return;
+            _closed = true;
+            _tick.Pause();
+            _preview.Dispose();
+            if (_saveToLibrary) _draft.Dispose();
+            if (_thumbnailTexture != null) Object.Destroy(_thumbnailTexture);
+
+            // The view fades out before it is removed. Its controls no longer respond meanwhile.
+            Root.pickingMode = PickingMode.Ignore;
+            Root.SetEnabled(false);
+            Root.AddToClassList("irs-modal--leaving");
+            Root.schedule.Execute(Root.RemoveFromHierarchy).StartingIn(LeaveTransitionMs);
+        }
+
         /// <summary>
         ///     Raised once when the view closes, with the selection and, when the view saves to the library, the saved
         ///     recording. Both are null when the user cancelled.
@@ -154,22 +174,6 @@ namespace InstantReplay.Suite.UI
         public void Cancel()
         {
             Close(null, null);
-        }
-
-        public void Dispose()
-        {
-            if (_closed) return;
-            _closed = true;
-            _tick.Pause();
-            _preview.Dispose();
-            if (_saveToLibrary) _draft.Dispose();
-            if (_thumbnailTexture != null) UnityEngine.Object.Destroy(_thumbnailTexture);
-
-            // The view fades out before it is removed. Its controls no longer respond meanwhile.
-            Root.pickingMode = PickingMode.Ignore;
-            Root.SetEnabled(false);
-            Root.AddToClassList("irs-modal--leaving");
-            Root.schedule.Execute(Root.RemoveFromHierarchy).StartingIn(LeaveTransitionMs);
         }
 
         private async void StartPreview()
@@ -186,7 +190,7 @@ namespace InstantReplay.Suite.UI
             catch (Exception ex)
             {
                 if (_closed) return;
-                Debug.LogException(ex);
+                ILogger.LogExceptionCore(ex);
                 _statusLabel.text = Strings.Format(Strings.Current.PreviewFailed, ex.Message);
             }
         }
@@ -259,14 +263,14 @@ namespace InstantReplay.Suite.UI
             }
             catch (Exception ex)
             {
-                Debug.LogException(ex);
+                ILogger.LogExceptionCore(ex);
                 _statusLabel.text = Strings.Format(Strings.Current.ThumbnailFailed, ex.Message);
                 return;
             }
 
             if (png == null) return;
             _thumbnailPng = png;
-            if (_thumbnailTexture != null) UnityEngine.Object.Destroy(_thumbnailTexture);
+            if (_thumbnailTexture != null) Object.Destroy(_thumbnailTexture);
             _thumbnailTexture = Thumbnails.Decode(png);
             _thumbnailImage.image = _thumbnailTexture;
             _thumbnailImage.style.display = _thumbnailTexture != null ? DisplayStyle.Flex : DisplayStyle.None;
@@ -301,7 +305,7 @@ namespace InstantReplay.Suite.UI
             }
             catch (Exception ex)
             {
-                Debug.LogException(ex);
+                ILogger.LogExceptionCore(ex);
                 if (_closed) return;
                 _statusLabel.text = Strings.Format(Strings.Current.SavingFailed, ex.Message);
                 _saving = false;

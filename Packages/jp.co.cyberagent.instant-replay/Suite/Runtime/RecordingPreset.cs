@@ -15,6 +15,8 @@ namespace InstantReplay.Suite
     [Serializable]
     public sealed class RecordingPreset
     {
+        #region Serialized Fields
+
         [SerializeField] private string id = "default";
         [SerializeField] private string displayName = "Default";
         [SerializeField] private ResolutionSpec resolution = ResolutionSpec.ScreenRelative(1f, 1280);
@@ -23,6 +25,8 @@ namespace InstantReplay.Suite
         [SerializeField] private int audioBitrate = 128000;
         [SerializeField] private BufferSpec buffer = BufferSpec.InMemory(64);
         [SerializeField] private bool forceReadback;
+
+        #endregion
 
         /// <summary>
         ///     Identifier that stays the same across builds. The selected preset is persisted by this value.

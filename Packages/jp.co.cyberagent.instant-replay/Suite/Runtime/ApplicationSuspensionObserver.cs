@@ -16,10 +16,14 @@ namespace InstantReplay.Suite
     {
         private Action<bool> _onChanged;
 
+        #region Event Functions
+
         private void OnApplicationPause(bool pauseStatus)
         {
             _onChanged?.Invoke(pauseStatus);
         }
+
+        #endregion
 
         public static ApplicationSuspensionObserver Create(Action<bool> onChanged)
         {

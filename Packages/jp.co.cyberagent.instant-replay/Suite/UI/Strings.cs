@@ -31,7 +31,7 @@ namespace InstantReplay.Suite.UI
 
             RecorderTab = "Recorder",
             RecordingsTab = "Recordings",
-            ContinuousBuffering = "Continuous buffering",
+            ContinuousBuffering = "Continuous recording",
             SaveReplay = "Save replay",
             StartRecording = "Start recording",
             StopRecording = "Stop recording",
@@ -133,7 +133,7 @@ namespace InstantReplay.Suite.UI
 
             RecorderTab = "レコーダー",
             RecordingsTab = "録画一覧",
-            ContinuousBuffering = "常時バッファリング",
+            ContinuousBuffering = "常時録画",
             SaveReplay = "リプレイを保存",
             StartRecording = "録画開始",
             StopRecording = "録画停止",
@@ -241,8 +241,8 @@ namespace InstantReplay.Suite.UI
         public string Comment;
         public string ConfirmDelete;
         public string ContinuousBuffering;
-        public string CustomizedPreset;
         public string Customize;
+        public string CustomizedPreset;
         public string Delete;
         public string DeleteCount;
         public string DeletionFailed;
@@ -293,8 +293,8 @@ namespace InstantReplay.Suite.UI
         public string SetEnd;
         public string SetStart;
         public string Share;
-        public string SharedTo;
         public string ShareTo;
+        public string SharedTo;
         public string SharingCancelled;
         public string SharingFailed;
         public string SharingProgress;

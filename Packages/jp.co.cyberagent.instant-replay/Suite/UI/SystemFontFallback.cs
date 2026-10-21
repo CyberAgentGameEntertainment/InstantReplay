@@ -8,6 +8,7 @@ using UnityEngine;
 using UnityEngine.TextCore.LowLevel;
 using UnityEngine.TextCore.Text;
 using UnityEngine.UIElements;
+using Object = UnityEngine.Object;
 
 namespace InstantReplay.Suite.UI
 {
@@ -54,12 +55,12 @@ namespace InstantReplay.Suite.UI
                 if (_fontAsset.atlasTextures != null)
                     foreach (var texture in _fontAsset.atlasTextures)
                         if (texture != null)
-                            UnityEngine.Object.Destroy(texture);
-                if (_fontAsset.material != null) UnityEngine.Object.Destroy(_fontAsset.material);
-                UnityEngine.Object.Destroy(_fontAsset);
+                            Object.Destroy(texture);
+                if (_fontAsset.material != null) Object.Destroy(_fontAsset.material);
+                Object.Destroy(_fontAsset);
             }
 
-            if (TextSettings != null) UnityEngine.Object.Destroy(TextSettings);
+            if (TextSettings != null) Object.Destroy(TextSettings);
         }
 
         /// <summary>Returns null when none of the fonts is installed.</summary>
@@ -72,7 +73,7 @@ namespace InstantReplay.Suite.UI
             }
             catch (Exception ex)
             {
-                Debug.LogWarning($"InstantReplaySuite could not list the system fonts: {ex.Message}");
+                ILogger.LogWarningCore($"InstantReplaySuite could not list the system fonts: {ex.Message}");
                 return null;
             }
 

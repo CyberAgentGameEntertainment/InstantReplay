@@ -7,8 +7,12 @@ using System.Collections.Generic;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
+#if UNITY_EDITOR
+using UnityEditor;
+#endif
 using UnityEngine;
 using UnityEngine.UIElements;
+using SystemInfo = UnityEngine.Device.SystemInfo;
 
 namespace InstantReplay.Suite.UI
 {
@@ -36,6 +40,8 @@ namespace InstantReplay.Suite.UI
         private const float DesktopReferenceDpi = 96;
         private const float HandheldReferenceDpi = 160;
 
+        #region Serialized Fields
+
         [SerializeField] private InstantReplaySuiteSettings settings;
         [SerializeField] private ThemeStyleSheet themeStyleSheet;
         [SerializeField] private StyleSheet styleSheet;
@@ -54,15 +60,17 @@ namespace InstantReplay.Suite.UI
         [Tooltip("Language of the interface. Automatic follows the system language.")] [SerializeField]
         private SuiteLanguage language = SuiteLanguage.Automatic;
 
-        [Tooltip("Multiplier applied to the physical size of the interface.")]
-        [SerializeField] [Range(0.5f, 2f)] private float scale = 1f;
+        [Tooltip("Multiplier applied to the physical size of the interface.")] [SerializeField] [Range(0.5f, 2f)]
+        private float scale = 1f;
+
+        #endregion
 
         private PanelSettings _panelSettings;
+        private SuitePreferences _preferences;
+        private InstantReplayRecorder _recorder;
 #if !UNITY_6000_0_OR_NEWER
         private SystemFontFallback _systemFontFallback;
 #endif
-        private SuitePreferences _preferences;
-        private InstantReplayRecorder _recorder;
         private SuiteView _view;
 
         /// <summary>The active instance, or null.</summary>
@@ -119,6 +127,86 @@ namespace InstantReplay.Suite.UI
             }
         }
 
+        #region Event Functions
+
+        private void Awake()
+        {
+#if UNITY_EDITOR
+            AssignDefaultAssets();
+#endif
+            if (Current != null && Current != this)
+            {
+                // A second recorder would create a second set of providers, which some providers do not allow.
+                Debug.LogWarning("Another InstantReplaySuite is already active. This one is destroyed.", this);
+                Destroy(gameObject);
+                return;
+            }
+
+            Current = this;
+            if (dontDestroyOnLoad && transform.parent == null) DontDestroyOnLoad(gameObject);
+
+            if (themeStyleSheet == null)
+                Debug.LogWarning("InstantReplaySuite has no theme style sheet. Controls may not render correctly.",
+                    this);
+
+            _panelSettings = ScriptableObject.CreateInstance<PanelSettings>();
+            _panelSettings.name = "InstantReplaySuite PanelSettings";
+            _panelSettings.hideFlags = HideFlags.DontSave;
+            _panelSettings.themeStyleSheet = themeStyleSheet;
+            _panelSettings.sortingOrder = sortingOrder;
+            _panelSettings.scaleMode = PanelScaleMode.ConstantPhysicalSize;
+            // The Device variant reports the simulated device in the Device Simulator.
+            var referenceDpi = SystemInfo.deviceType == DeviceType.Handheld
+                ? HandheldReferenceDpi
+                : DesktopReferenceDpi;
+            _panelSettings.referenceDpi = referenceDpi / Mathf.Clamp(scale, 0.1f, 10f);
+            // Used when the platform does not report the screen density, in which case one unit is one pixel.
+            _panelSettings.fallbackDpi = _panelSettings.referenceDpi;
+#if !UNITY_6000_0_OR_NEWER
+            _systemFontFallback = SystemFontFallback.Create();
+            if (_systemFontFallback != null) _panelSettings.textSettings = _systemFontFallback.TextSettings;
+#endif
+
+            var document = gameObject.AddComponent<UIDocument>();
+            document.hideFlags = HideFlags.DontSave | HideFlags.NotEditable;
+            document.panelSettings = _panelSettings;
+
+            // Without a settings asset, the recorder uses default settings, which persist the preferences.
+            _preferences = settings == null || settings.PersistUserPreferences ? SuitePreferences.Load() : null;
+            if (_preferences is { hasOverlayCorner: true }) overlayCorner = _preferences.overlayCorner;
+
+            Strings.SetLanguage(language);
+            _view = new SuiteView(document.rootVisualElement, styleSheet, Recorder, transform)
+            {
+                IsVisible = showOverlayOnLaunch, OverlayOpensPanel = overlayOpensPanel, OverlayCorner = overlayCorner
+            };
+            _view.OverlayCornerChanged += OnOverlayCornerChanged;
+        }
+
+        private void Start()
+        {
+            if (Current != this) return;
+            Recorder.Activate();
+        }
+
+        private void OnDestroy()
+        {
+            if (Current != this) return;
+            Current = null;
+
+            _view?.Dispose();
+            _view = null;
+            _recorder?.Dispose();
+            _recorder = null;
+            if (_panelSettings != null) Destroy(_panelSettings);
+#if !UNITY_6000_0_OR_NEWER
+            _systemFontFallback?.Dispose();
+            _systemFontFallback = null;
+#endif
+        }
+
+        #endregion
+
         /// <summary>
         ///     Shows the trim view for a draft and returns the range and the thumbnail chosen by the user, without saving
         ///     anything. Use it to let the user choose the footage to attach to a report, and write the footage with
@@ -160,58 +248,6 @@ namespace InstantReplay.Suite.UI
             return _view;
         }
 
-        private void Awake()
-        {
-#if UNITY_EDITOR
-            AssignDefaultAssets();
-#endif
-            if (Current != null && Current != this)
-            {
-                // A second recorder would create a second set of providers, which some providers do not allow.
-                Debug.LogWarning("Another InstantReplaySuite is already active. This one is destroyed.", this);
-                Destroy(gameObject);
-                return;
-            }
-
-            Current = this;
-            if (dontDestroyOnLoad && transform.parent == null) DontDestroyOnLoad(gameObject);
-
-            if (themeStyleSheet == null)
-                Debug.LogWarning("InstantReplaySuite has no theme style sheet. Controls may not render correctly.",
-                    this);
-
-            _panelSettings = ScriptableObject.CreateInstance<PanelSettings>();
-            _panelSettings.name = "InstantReplaySuite PanelSettings";
-            _panelSettings.hideFlags = HideFlags.DontSave;
-            _panelSettings.themeStyleSheet = themeStyleSheet;
-            _panelSettings.sortingOrder = sortingOrder;
-            _panelSettings.scaleMode = PanelScaleMode.ConstantPhysicalSize;
-            // The Device variant reports the simulated device in the Device Simulator.
-            var referenceDpi = UnityEngine.Device.SystemInfo.deviceType == DeviceType.Handheld ? HandheldReferenceDpi : DesktopReferenceDpi;
-            _panelSettings.referenceDpi = referenceDpi / Mathf.Clamp(scale, 0.1f, 10f);
-            // Used when the platform does not report the screen density, in which case one unit is one pixel.
-            _panelSettings.fallbackDpi = _panelSettings.referenceDpi;
-#if !UNITY_6000_0_OR_NEWER
-            _systemFontFallback = SystemFontFallback.Create();
-            if (_systemFontFallback != null) _panelSettings.textSettings = _systemFontFallback.TextSettings;
-#endif
-
-            var document = gameObject.AddComponent<UIDocument>();
-            document.hideFlags = HideFlags.DontSave | HideFlags.NotEditable;
-            document.panelSettings = _panelSettings;
-
-            // Without a settings asset, the recorder uses default settings, which persist the preferences.
-            _preferences = settings == null || settings.PersistUserPreferences ? SuitePreferences.Load() : null;
-            if (_preferences is { hasOverlayCorner: true }) overlayCorner = _preferences.overlayCorner;
-
-            Strings.SetLanguage(language);
-            _view = new SuiteView(document.rootVisualElement, styleSheet, Recorder, transform)
-            {
-                IsVisible = showOverlayOnLaunch, OverlayOpensPanel = overlayOpensPanel, OverlayCorner = overlayCorner
-            };
-            _view.OverlayCornerChanged += OnOverlayCornerChanged;
-        }
-
         private void OnOverlayCornerChanged(OverlayCorner corner)
         {
             overlayCorner = corner;
@@ -219,28 +255,6 @@ namespace InstantReplay.Suite.UI
             _preferences.hasOverlayCorner = true;
             _preferences.overlayCorner = corner;
             _preferences.Save();
-        }
-
-        private void Start()
-        {
-            if (Current != this) return;
-            Recorder.Activate();
-        }
-
-        private void OnDestroy()
-        {
-            if (Current != this) return;
-            Current = null;
-
-            _view?.Dispose();
-            _view = null;
-            _recorder?.Dispose();
-            _recorder = null;
-            if (_panelSettings != null) Destroy(_panelSettings);
-#if !UNITY_6000_0_OR_NEWER
-            _systemFontFallback?.Dispose();
-            _systemFontFallback = null;
-#endif
         }
 
 #if UNITY_EDITOR
@@ -258,10 +272,10 @@ namespace InstantReplay.Suite.UI
         {
             if (themeStyleSheet == null)
                 themeStyleSheet =
-                    UnityEditor.AssetDatabase.LoadAssetAtPath<ThemeStyleSheet>(
+                    AssetDatabase.LoadAssetAtPath<ThemeStyleSheet>(
                         PackagePath + "UI/InstantReplaySuiteTheme.tss");
             if (styleSheet == null)
-                styleSheet = UnityEditor.AssetDatabase.LoadAssetAtPath<StyleSheet>(
+                styleSheet = AssetDatabase.LoadAssetAtPath<StyleSheet>(
                     PackagePath + "UI/InstantReplaySuite.uss");
         }
 #endif
@@ -276,9 +290,13 @@ namespace InstantReplay.Suite.UI
     {
         private const int CurrentVersion = 1;
 
+        #region Serialized Fields
+
         public int version = CurrentVersion;
         public bool hasOverlayCorner;
         public OverlayCorner overlayCorner;
+
+        #endregion
 
         private static string FilePath =>
             Path.Combine(Application.persistentDataPath, "InstantReplay", "suite-ui-preferences.json");
@@ -296,7 +314,7 @@ namespace InstantReplay.Suite.UI
             }
             catch (Exception ex)
             {
-                Debug.LogException(ex);
+                ILogger.LogExceptionCore(ex);
                 return new SuitePreferences();
             }
         }
@@ -311,7 +329,7 @@ namespace InstantReplay.Suite.UI
             }
             catch (Exception ex)
             {
-                Debug.LogException(ex);
+                ILogger.LogExceptionCore(ex);
             }
         }
     }
