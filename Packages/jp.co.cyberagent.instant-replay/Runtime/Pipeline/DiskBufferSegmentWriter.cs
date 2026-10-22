@@ -49,6 +49,7 @@ namespace InstantReplay
         private long _metadataBytes;
         private FileStream _metadataStream;
         private long _openSegmentBytes;
+        private double? _openSegmentFirstKeyTimestamp;
         private double? _openSegmentFirstTimestamp;
         private int _openSegmentIndex = -1;
         private FileStream _openSegmentStream;
@@ -74,6 +75,25 @@ namespace InstantReplay
         ///     Current size of the session directory as tracked by this writer.
         /// </summary>
         public long TotalBytes => _manifestBytes + _metadataBytes + _totalSegmentBytes;
+
+        /// <summary>
+        ///     Timestamp of the earliest video key frame still retained, or null when none has been written.
+        /// </summary>
+        public double? EarliestKeyFrameTimestamp
+        {
+            get
+            {
+                foreach (var segment in _closedSegments)
+                    if (segment.FirstKeyTimestamp is { } timestamp)
+                        return timestamp;
+                return _openSegmentFirstKeyTimestamp;
+            }
+        }
+
+        /// <summary>
+        ///     Timestamp of the latest video frame written, or null when none has been written.
+        /// </summary>
+        public double? LatestVideoTimestamp { get; private set; }
 
         public void Dispose()
         {
@@ -216,6 +236,15 @@ namespace InstantReplay
             _totalSegmentBytes += required;
             _openSegmentFirstTimestamp ??= frame.Timestamp;
 
+            if (track == DiskBufferTrack.Video)
+            {
+                if (frame.Kind == UniencSampleKind.Key) _openSegmentFirstKeyTimestamp ??= frame.Timestamp;
+
+                // MediaCodec may emit an out-of-order frame with timestamp 0 at the end of the stream.
+                if (LatestVideoTimestamp is not { } latest || frame.Timestamp >= latest)
+                    LatestVideoTimestamp = frame.Timestamp;
+            }
+
             if (_syncMode == DiskBufferSyncMode.EveryRecord)
                 try
                 {
@@ -278,6 +307,7 @@ namespace InstantReplay
             _openSegmentBytes = DiskBufferFormat.FileHeaderSize;
             _totalSegmentBytes += DiskBufferFormat.FileHeaderSize;
             _openSegmentFirstTimestamp = null;
+            _openSegmentFirstKeyTimestamp = null;
             return true;
         }
 
@@ -308,9 +338,10 @@ namespace InstantReplay
             }
 
             _openSegmentStream = null;
-            _closedSegments.Add(new ClosedSegment(path, _openSegmentBytes));
+            _closedSegments.Add(new ClosedSegment(path, _openSegmentBytes, _openSegmentFirstKeyTimestamp));
             _openSegmentBytes = 0;
             _openSegmentFirstTimestamp = null;
+            _openSegmentFirstKeyTimestamp = null;
         }
 
         /// <summary>
@@ -387,11 +418,13 @@ namespace InstantReplay
         {
             public readonly string Path;
             public readonly long SizeBytes;
+            public readonly double? FirstKeyTimestamp;
 
-            public ClosedSegment(string path, long sizeBytes)
+            public ClosedSegment(string path, long sizeBytes, double? firstKeyTimestamp)
             {
                 Path = path;
                 SizeBytes = sizeBytes;
+                FirstKeyTimestamp = firstKeyTimestamp;
             }
         }
     }

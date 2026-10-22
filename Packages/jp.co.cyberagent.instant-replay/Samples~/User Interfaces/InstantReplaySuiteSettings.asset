@@ -1,0 +1,76 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 2f40c58d3e6d04e47a4ab9f26096e94b, type: 3}
+  m_Name: InstantReplaySuiteSettings
+  m_EditorClassIdentifier: 
+  presets:
+  - id: low
+    displayName: Low
+    resolution:
+      mode: 1
+      width: 0
+      height: 0
+      scale: 0.5
+      maxLongSide: 960
+    frameRate: 30
+    videoBitrate:
+      mode: 1
+      bitsPerSecond: 0
+      bitsPerPixel: 0.08
+    audioBitrate: 96000
+    buffer:
+      mode: 0
+      maxMegabytes: 32
+    forceReadback: 0
+  - id: standard
+    displayName: Standard
+    resolution:
+      mode: 1
+      width: 0
+      height: 0
+      scale: 1
+      maxLongSide: 1280
+    frameRate: 30
+    videoBitrate:
+      mode: 1
+      bitsPerSecond: 0
+      bitsPerPixel: 0.1
+    audioBitrate: 128000
+    buffer:
+      mode: 0
+      maxMegabytes: 64
+    forceReadback: 0
+  - id: long-disk
+    displayName: Long (disk)
+    resolution:
+      mode: 1
+      width: 0
+      height: 0
+      scale: 1
+      maxLongSide: 1280
+    frameRate: 30
+    videoBitrate:
+      mode: 1
+      bitsPerSecond: 0
+      bitsPerPixel: 0.1
+    audioBitrate: 128000
+    buffer:
+      mode: 1
+      maxMegabytes: 512
+    forceReadback: 0
+  defaultPresetId: standard
+  startBufferingOnLaunch: 1
+  outputDirectory: InstantReplay/Recordings
+  maxRecordings: 0
+  maxTotalMegabytes: 0
+  persistUserPreferences: 1
+  shareTargets: []

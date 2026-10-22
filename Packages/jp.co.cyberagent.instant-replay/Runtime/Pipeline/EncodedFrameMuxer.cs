@@ -16,6 +16,23 @@ namespace InstantReplay
     internal static class EncodedFrameMuxer
     {
         /// <summary>
+        ///     Value to pass to <c>ConfigureAwait</c> when awaiting <see cref="MuxAsync" />, and any other task that may
+        ///     complete on the main thread in the course of an export.
+        /// </summary>
+        /// <remarks>
+        ///     A continuation that does not resume on the captured context is queued to the thread pool whenever the task
+        ///     completes on a thread with a non-default <see cref="System.Threading.SynchronizationContext" />, such as the
+        ///     main thread of Unity. Web has no threads, so the thread pool never runs it and the export never finishes.
+        ///     On Web, the continuation therefore resumes on the captured context, which is the main thread.
+        /// </remarks>
+        public const bool ContinueOnCapturedContext =
+#if UNITY_WEBGL && !UNITY_EDITOR
+            true;
+#else
+            false;
+#endif
+
+        /// <summary>
         ///     Muxes the frames of the given readers, which are typically the two streams of an
         ///     <see cref="EncodedFrameSelection" />. A null reader is treated as an empty stream. Every frame read is
         ///     disposed, whether or not it was accepted by the muxer. After a failure, no further frame is read from that
@@ -80,7 +97,7 @@ namespace InstantReplay
             var whenAll = Task.WhenAll(MuxVideoAsync().AsTask(), MuxAudioAsync().AsTask());
             try
             {
-                await whenAll.ConfigureAwait(false);
+                await whenAll.ConfigureAwait(ContinueOnCapturedContext);
             }
             catch (Exception) when (whenAll.Exception is { InnerExceptions: { Count: > 1 } } aggregate)
             {

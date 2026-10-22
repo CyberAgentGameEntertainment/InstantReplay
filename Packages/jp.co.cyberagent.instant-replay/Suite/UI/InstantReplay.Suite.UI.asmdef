@@ -1,0 +1,31 @@
+{
+    "name": "InstantReplay.Suite.UI",
+    "rootNamespace": "InstantReplay.Suite.UI",
+    "references": [
+        "GUID:25c8672757ac24477a1d557ebceaba3f",
+        "GUID:1050604f2d3a84fcabcc4e9b9ff6745b",
+        "GUID:cbc5f87df9298458d9b3f2ed13ca9ba4"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [
+        "!EXCLUDE_INSTANTREPLAY"
+    ],
+    "versionDefines": [
+        {
+            "name": "com.unity.modules.video",
+            "expression": "",
+            "define": "INSTANTREPLAY_VIDEO"
+        },
+        {
+            "name": "com.unity.modules.imageconversion",
+            "expression": "",
+            "define": "INSTANTREPLAY_IMAGECONVERSION"
+        }
+    ],
+    "noEngineReferences": false
+}

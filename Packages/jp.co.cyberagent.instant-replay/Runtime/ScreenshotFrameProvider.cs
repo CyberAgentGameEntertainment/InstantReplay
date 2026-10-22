@@ -21,7 +21,7 @@ namespace InstantReplay
         public ScreenshotFrameProvider()
         {
 #if UNITY_WEBGL
-            Debug.LogWarning(
+            ILogger.LogWarningCore(
                 "ScreenshotFrameProvider may not work correctly on WebGL platform. Consider using other IFrameProvider instead (e.g. RendererFeatureFrameProvider).");
 #endif
             
@@ -43,7 +43,7 @@ namespace InstantReplay
                     }
                     catch (Exception ex)
                     {
-                        Debug.LogException(ex);
+                        ILogger.LogExceptionCore(ex);
                     }
                 } while (true);
             }

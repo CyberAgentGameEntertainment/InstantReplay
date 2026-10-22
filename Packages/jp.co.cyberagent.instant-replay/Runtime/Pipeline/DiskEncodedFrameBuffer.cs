@@ -3,6 +3,7 @@
 // --------------------------------------------------------------
 
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Threading;
@@ -21,13 +22,14 @@ namespace InstantReplay
     /// </summary>
     internal sealed class DiskEncodedFrameBuffer : IEncodedFrameBuffer
     {
+        private static readonly HashSet<string> LiveSessionDirectories = new(StringComparer.Ordinal);
         private static int _sessionCounter;
 
         private readonly object _lock = new();
+        private readonly long _maxDiskUsageBytes;
         private readonly long _maxPendingWriteBytes;
         private readonly Channel<PendingWrite> _pending;
         private readonly bool _retainOnDispose;
-        private readonly string _sessionDirectory;
         private readonly Task _worker;
         private readonly DiskBufferSegmentWriter _writer;
 
@@ -35,6 +37,10 @@ namespace InstantReplay
         private long _droppedFrameCount;
         private long _pendingBytes;
         private Task _quiesceTask;
+        private double? _statisticsEarliestKeyFrameTimestamp;
+        private double? _statisticsLatestVideoTimestamp;
+        private long _statisticsTotalBytes;
+        private bool _storageCaptured;
         private bool _warnedAboutDrops;
 
         public DiskEncodedFrameBuffer(in DiskBufferOptions options, in VideoEncoderOptions videoOptions,
@@ -45,17 +51,19 @@ namespace InstantReplay
 
             _retainOnDispose = validated.RetainOnDispose;
             _maxPendingWriteBytes = validated.MaxPendingWriteBytes;
+            _maxDiskUsageBytes = validated.MaxDiskUsageBytes;
 
             var root = validated.ResolveDirectory();
-            _sessionDirectory = Path.Combine(root, CreateSessionId());
-            Directory.CreateDirectory(_sessionDirectory);
+            SessionDirectory = Path.Combine(root, CreateSessionId());
+            Directory.CreateDirectory(SessionDirectory);
+            RegisterLiveSession(SessionDirectory);
 
-            _writer = new DiskBufferSegmentWriter(_sessionDirectory, validated.MaxDiskUsageBytes,
+            _writer = new DiskBufferSegmentWriter(SessionDirectory, validated.MaxDiskUsageBytes,
                 validated.SegmentDuration, validated.MaxSegmentBytes, validated.SyncMode, ILogger.LogExceptionCore);
 
             var manifest = DiskBufferManifest.Create(videoOptions, audioOptions, Application.platform.ToString(),
                 Application.unityVersion, Application.version);
-            _writer.SetManifestBytes(manifest.Write(Path.Combine(_sessionDirectory,
+            _writer.SetManifestBytes(manifest.Write(Path.Combine(SessionDirectory,
                 DiskBufferFormat.ManifestFileName)));
 
             // Synchronous continuations stay disabled so that file I/O never runs inline on the encoder thread that
@@ -72,7 +80,21 @@ namespace InstantReplay
         /// <summary>
         ///     Directory this session writes to.
         /// </summary>
-        public string SessionDirectory => _sessionDirectory;
+        public string SessionDirectory { get; }
+
+        public RecordingBufferStatistics GetStatistics()
+        {
+            lock (_lock)
+            {
+                var bufferedDuration =
+                    _statisticsEarliestKeyFrameTimestamp is { } earliest &&
+                    _statisticsLatestVideoTimestamp is { } latest
+                        ? Math.Max(0, latest - earliest)
+                        : 0;
+                return new RecordingBufferStatistics(bufferedDuration, _statisticsTotalBytes, _maxDiskUsageBytes,
+                    true);
+            }
+        }
 
         public bool TryAddVideoFrame(EncodedFrame frame)
         {
@@ -91,8 +113,33 @@ namespace InstantReplay
             // The worker owns the files, so it must have drained and closed them before they can be read back.
             await QuiesceAsync().ConfigureAwait(false);
 
-            var scan = DiskBufferSegmentReader.Scan(_sessionDirectory, ILogger.LogExceptionCore);
+            var scan = DiskBufferSegmentReader.Scan(SessionDirectory, ILogger.LogExceptionCore);
             return DiskBufferSegmentReader.BuildSelection(scan, durationSeconds, ILogger.LogExceptionCore);
+        }
+
+        public async ValueTask<CapturedFrames> CaptureAsync(double? durationSeconds)
+        {
+            if (_disposed) throw new ObjectDisposedException(nameof(DiskEncodedFrameBuffer));
+
+            await QuiesceAsync().ConfigureAwait(false);
+
+            var scan = DiskBufferSegmentReader.Scan(SessionDirectory, ILogger.LogExceptionCore);
+            if (!DiskBufferSegmentReader.TrySelectRecords(scan, durationSeconds, out var video, out var audio,
+                    ILogger.LogExceptionCore))
+                return null;
+
+            // The captured frames own the directory from now on. It stays registered as live, so that recovery does not
+            // offer it while it is in use, and it is deleted when the captured frames are disposed.
+            lock (_lock)
+            {
+                _storageCaptured = true;
+            }
+
+            return new DiskCapturedFrames(scan, video, audio, () =>
+            {
+                DeleteSessionDirectory();
+                UnregisterLiveSession(SessionDirectory);
+            }, ILogger.LogExceptionCore);
         }
 
         public void Dispose()
@@ -107,7 +154,64 @@ namespace InstantReplay
             // thread's synchronization context, so blocking here cannot deadlock it.
             QuiesceAsync().GetAwaiter().GetResult();
 
+            if (_storageCaptured) return;
+
             if (!_retainOnDispose) DeleteSessionDirectory();
+
+            // A retained directory becomes recoverable once this session no longer writes to it.
+            UnregisterLiveSession(SessionDirectory);
+        }
+
+        /// <summary>
+        ///     Whether the given directory belongs to a session that is still open in this process. Such a directory is
+        ///     being written to and must not be treated as recoverable.
+        /// </summary>
+        internal static bool IsLiveSession(string sessionDirectory)
+        {
+            var key = NormalizeDirectory(sessionDirectory);
+            if (key == null) return false;
+
+            lock (LiveSessionDirectories)
+            {
+                return LiveSessionDirectories.Contains(key);
+            }
+        }
+
+        private static void RegisterLiveSession(string sessionDirectory)
+        {
+            var key = NormalizeDirectory(sessionDirectory);
+            if (key == null) return;
+
+            lock (LiveSessionDirectories)
+            {
+                LiveSessionDirectories.Add(key);
+            }
+        }
+
+        private static void UnregisterLiveSession(string sessionDirectory)
+        {
+            var key = NormalizeDirectory(sessionDirectory);
+            if (key == null) return;
+
+            lock (LiveSessionDirectories)
+            {
+                LiveSessionDirectories.Remove(key);
+            }
+        }
+
+        private static string NormalizeDirectory(string directory)
+        {
+            if (string.IsNullOrEmpty(directory)) return null;
+
+            try
+            {
+                return Path.GetFullPath(directory).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            }
+            catch (Exception ex)
+            {
+                ILogger.LogExceptionCore(ex);
+                return null;
+            }
         }
 
         /// <summary>
@@ -116,6 +220,7 @@ namespace InstantReplay
         /// </summary>
         public void CleanupStorage()
         {
+            if (_storageCaptured) return;
             DeleteSessionDirectory();
         }
 
@@ -171,6 +276,14 @@ namespace InstantReplay
                     catch (Exception ex)
                     {
                         ILogger.LogExceptionCore(ex);
+                    }
+
+                    // The writer is not synchronized, so its state is published for GetStatistics here, on the worker.
+                    lock (_lock)
+                    {
+                        _statisticsTotalBytes = _writer.TotalBytes;
+                        _statisticsEarliestKeyFrameTimestamp = _writer.EarliestKeyFrameTimestamp;
+                        _statisticsLatestVideoTimestamp = _writer.LatestVideoTimestamp;
                     }
                 }
 
@@ -247,7 +360,7 @@ namespace InstantReplay
         {
             try
             {
-                if (Directory.Exists(_sessionDirectory)) Directory.Delete(_sessionDirectory, true);
+                if (Directory.Exists(SessionDirectory)) Directory.Delete(SessionDirectory, true);
             }
             catch (Exception ex)
             {

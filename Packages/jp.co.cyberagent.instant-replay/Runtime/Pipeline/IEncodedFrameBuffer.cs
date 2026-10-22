@@ -31,6 +31,17 @@ namespace InstantReplay
         ///     it, together with every frame read from it.
         /// </summary>
         ValueTask<EncodedFrameSelection> GetFramesForDurationAsync(double? durationSeconds);
+
+        /// <summary>
+        ///     Returns a snapshot of the buffer. Safe to call from any thread while frames are being added.
+        /// </summary>
+        RecordingBufferStatistics GetStatistics();
+
+        /// <summary>
+        ///     Takes the frames for the duration out of the buffer so that they can be muxed repeatedly. Returns null when
+        ///     nothing is muxable. Like <see cref="GetFramesForDurationAsync" />, it may be called only once.
+        /// </summary>
+        ValueTask<CapturedFrames> CaptureAsync(double? durationSeconds);
     }
 
     /// <summary>

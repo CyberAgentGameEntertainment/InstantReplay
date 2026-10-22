@@ -30,6 +30,24 @@ Instant Replay は Unity で直近のゲームプレイ動画をいつでも保�
       * [方法2: 手動でのインストール](#方法2-手動でのインストール)
     * [パッケージのインストール](#パッケージのインストール)
   * [クイックスタート](#クイックスタート)
+  * [Instant Replay Suite](#instant-replay-suite)
+    * [セットアップ](#セットアップ)
+    * [Web での利用](#web-での利用)
+    * [UI の操作](#ui-の操作)
+      * [オーバーレイ](#オーバーレイ)
+      * [Recorder タブ](#recorder-タブ)
+      * [トリムビュー](#トリムビュー)
+      * [Recordings タブ](#recordings-タブ)
+      * [未完了の録画の復旧](#未完了の録画の復旧)
+    * [コードから Suite を使用する](#コードから-suite-を使用する)
+      * [リプレイの保存](#リプレイの保存)
+      * [無制限録画の開始](#無制限録画の開始)
+      * [状態と統計情報](#状態と統計情報)
+      * [映像・音声ソースの指定](#映像音声ソースの指定)
+      * [録画ライブラリ](#録画ライブラリ)
+      * [共有](#共有)
+      * [独自の画面から Suite のビューを表示する](#独自の画面から-suite-のビューを表示する)
+      * [UI を使用せずにレコーダーを使用する](#ui-を使用せずにレコーダーを使用する)
   * [詳細な使い方](#詳細な使い方)
     * [設定](#設定)
     * [ポーズと再開](#ポーズと再開)
@@ -116,21 +134,324 @@ Package Manager から "User Interfaces" サンプルをインポートしてく
 
 <img width="913" alt="Image" src="https://github.com/user-attachments/assets/970ad1e3-a5cf-410c-a2cb-70e0004e88e2" />
 
-シーンに `InstantReplay Recorder.prefab` を配置します。この Prefab には `RecorderInterface` と `PersistentRecorder` コンポーネントが付いており、有効な間は自動的にゲームプレイを録画します。
+インポートしたサンプルの `SampleScene` を開き、Play モードに入ります。このシーンには `InstantReplaySuite` コンポーネントを持つゲームオブジェクトが含まれており、シーンの開始と同時にゲームプレイのバッファリングを開始します。
 
-<img width="585" alt="Image" src="https://github.com/user-attachments/assets/0724b264-f92b-4a68-b6dc-85b9aae9c05b" />
+画面右上 (デフォルト) のオーバーレイには、バッファ済みの映像の長さと、バッファに収まる長さの推定値が表示されます。オーバーレイをクリックまたはタップするとパネルが開きます。
 
-その後、`RecorderInterface.StopAndExport()` を呼び出すことで録画を停止してビデオを保存できます。例えば、シーン内のボタンをクリックすることでこのメソッドを呼び出すことができます。
+<img width="800" alt="Instant Replay Suite の Recorder タブ" src=".github/images/suite-recorder.png" />
 
-<img width="585" alt="Image" src="https://github.com/user-attachments/assets/0674da6c-e7e8-4988-8890-01baa11f4322" />
+**Save replay** を押すと、バッファ済みの映像全体を選択した状態でトリムビューが開きます。**Save** を押すとそのまま保存されます。範囲を選択してから保存する方法は [トリムビュー](#トリムビュー) を参照してください。
 
-録画したビデオが画面に表示されます。
+<img width="800" alt="Instant Replay Suite のトリムビュー" src=".github/images/suite-trim.png" />
 
-![image](https://github.com/user-attachments/assets/f147e50d-a3e8-4dda-bfa3-22c1240f2904)
+保存した録画は **Recordings** タブに表示され、再生、共有、削除を行えます。
+
+<img width="800" alt="Instant Replay Suite の Recordings タブ" src=".github/images/suite-recordings.png" />
+
+自身のプロジェクトで Suite を使用する方法は [Instant Replay Suite](#instant-replay-suite) を、Suite を使用せずにコードから録画する方法は [詳細な使い方](#詳細な使い方) を参照してください。
+
+## Instant Replay Suite
+
+Instant Replay Suite は、パッケージに含まれるランタイムコンポーネントと UI のセットです。録画 API の上に多くのプロジェクトが実装する機能、すなわち常時バッファリング、リプレイの保存とトリミング、無制限録画、実行時にユーザーが変更できる録画設定、保存した録画のライブラリ、共有、および異常終了時に残った映像の復旧を提供します。
+
+Suite は以下のアセンブリで構成されます。
+
+| アセンブリ | 内容 |
+|---|---|
+| `InstantReplay.Suite` | レコーダー (`InstantReplayRecorder`)、プリセット、設定アセット、録画ライブラリ、共有の抽象化、ファイル書き出しの共有先。UI フレームワークに依存しません。 |
+| `InstantReplay.Suite.UI` | `InstantReplaySuite` コンポーネントと UI Toolkit による UI。 |
+| `InstantReplay.Suite.Sharing.Slack` | Slack の共有先。UnityWebRequest モジュールが有効な場合のみコンパイルされます。 |
+| `InstantReplay.Suite.Sharing.Discord` | Discord の共有先。UnityWebRequest モジュールが有効な場合のみコンパイルされます。 |
+
+録画のプレビューには Video モジュール、サムネイルには Image Conversion モジュールが必要です。これらのモジュールが無効な場合、対応するコントロールは表示されません。WebGL では `VideoPlayer` がローカルファイルを開けないため、プレビューは利用できません。
+
+> [!NOTE]
+> Suite はデフォルトで `ScreenshotFrameProvider` により画面全体を録画するため、オーバーレイとパネルも録画に映ります。これらを除外するには、[映像・音声ソースの指定](#映像音声ソースの指定) の方法でカメラを対象とするフレームプロバイダーを指定してください。
+
+### セットアップ
+
+1. 最初のシーンのゲームオブジェクトに `InstantReplaySuite` コンポーネントを追加します (**Add Component > Instant Replay > Instant Replay Suite**)。同時に有効にできるインスタンスは 1 つだけで、2 つ目のインスタンスは自身を破棄します。
+2. **Create > Instant Replay > Suite Settings** から設定アセットを作成し、**Settings** フィールドに割り当てます。設定アセットがない場合は、デフォルトのプリセット 1 つが使用されます。
+
+<img width="520" alt="InstantReplaySuite コンポーネントのインスペクター" src=".github/images/suite-component.png" />
+
+| フィールド | 説明 |
+|---|---|
+| Settings | `InstantReplaySuiteSettings` アセット。 |
+| Theme Style Sheet, Style Sheet | UI のスタイルシート。エディター上でパッケージから自動的に割り当てられます。 |
+| Sorting Order | UI を表示するパネルの描画順。 |
+| Dont Destroy On Load | シーンの読み込みをまたいでゲームオブジェクトを保持するかどうか。 |
+| Show Overlay On Launch | 起動時にオーバーレイを表示するかどうか。オーバーレイを非表示にしている間も録画は継続します。 |
+| Overlay Opens Panel | オーバーレイのクリックまたはタップでパネルを開くかどうか。無効にすると、オーバーレイは録画の状態を表示するだけになり、クリックやタップを背後に通します。 |
+| Overlay Corner | ユーザーがパネルで変更するまでオーバーレイを配置する画面の隅。 |
+| Language | UI の言語。`Automatic` では、システム言語が日本語の場合は日本語、それ以外の場合は英語で表示します。 |
+| Fallback Font | テーマのフォントに含まれない文字 (日本語など) の表示に使用するフォント。Web で日本語を表示するには必須です。[Web での利用](#web-での利用) を参照してください。 |
+| Scale | UI の大きさに掛ける倍率。 |
+
+UI はどの画面でも一定の物理サイズで表示されます。スタイルシートの 1 単位は、デスクトッププラットフォームでは 1/96 インチ、携帯端末では 1/160 インチに相当します。
+
+<img width="520" alt="InstantReplaySuiteSettings アセットのインスペクター" src=".github/images/suite-settings.png" />
+
+| フィールド | 説明 |
+|---|---|
+| Presets | ユーザーが選択できる録画設定。後述します。 |
+| Default Preset Id | ユーザーがプリセットを選択するまで使用するプリセットの ID。 |
+| Start Buffering On Launch | ユーザーが変更していない場合に、起動時にバッファリングを開始するかどうか。 |
+| Output Directory | 録画の保存先ディレクトリ。相対パスは `Application.persistentDataPath` を基準に解決されます。 |
+| Max Recordings | 保持する録画の数。これを超えると古い録画から削除されます。0 の場合はすべて保持します。 |
+| Max Total Megabytes | 保持する録画の合計サイズ (MiB)。これを超えると古い録画から削除されますが、保存した直後の録画は常に保持されます。0 の場合はすべて保持します。 |
+| Persist User Preferences | ユーザーが選択したプリセット、バッファリングの有効・無効、およびオーバーレイの位置を次回起動時に復元するかどうか。 |
+| Share Targets | 録画の共有時に表示する共有先。[共有](#共有) を参照してください。 |
+
+各プリセットは、ID、表示名、解像度 (固定サイズ、または長辺の上限付きの画面サイズに対する比率)、フレームレート、映像のビットレート (固定値、または 1 ピクセルあたりのビット数からの算出)、音声のビットレート、バッファ (メモリまたはディスク、およびそのサイズ (MiB))、`ForceReadback` を持ちます。パネルには、選択中のプリセットのバッファに収まる長さの推定値が表示されます。
+
+### Web での利用
+
+Web (WebGL / WebGPU) では、他のプラットフォームと比べて次の制約があります。
+
+- 録画はブラウザのダウンロードとして保存され、`Application.persistentDataPath` には残りません。そのため Recordings タブは表示されず、`InstantReplaySuite.PickRecordingsAsync` は `NotSupportedException` をスローします。
+- 映像をプレビューできないため、トリムビューは利用できません。**Save replay** はバッファ内の映像全体を保存します。`InstantReplaySuite.TrimAsync` は `NotSupportedException` をスローします。
+- ディスクバッファは利用できません。ディスクバッファを指定したプリセットは、同じサイズのメモリバッファで録画します。パネルにはバッファの種類の選択肢が表示されません。
+- システムのフォントを利用できないため、日本語を表示するには日本語の文字を含むフォントを **Fallback Font** に割り当てる必要があります。割り当てていない場合、**Language** が `Automatic` であれば、システム言語にかかわらず英語で表示します。
+
+フォントは次の手順で割り当てます。
+
+1. 日本語の文字を含むフォントファイル (例: [Noto Sans JP](https://fonts.google.com/noto/specimen/Noto+Sans+JP)) をプロジェクトにインポートします。
+2. フォントのインポート設定で **Include Font Data** が有効であることを確認します (既定で有効です)。
+3. `InstantReplaySuite` コンポーネントの **Fallback Font** にフォントを割り当てます。
+
+フォントファイルはビルドに含まれ、実行時に動的なフォントアセットが作成されます。日本語のフォントはファイルサイズが大きいため、ビルドサイズを抑えるには、UI に表示される文字に絞ったサブセットフォントの使用を検討してください。**Fallback Font** は Web 以外のプラットフォームでも使用され、システムのフォントより優先されます。
+
+### UI の操作
+
+#### オーバーレイ
+
+オーバーレイは有効な間は常に表示されます。色付きのドットでレコーダーの状態を示し、バッファ済みの長さと推定容量を表示します。無制限録画中はドットが赤く点滅し、経過時間を表示します。オーバーレイをクリックまたはタップするとパネルが開閉します。オーバーレイを配置する画面の隅はパネルの **オーバーレイの位置** で変更でき、パネルはオーバーレイの隣に開きます。
+
+#### Recorder タブ
+
+- **Continuous buffering** でバッファリングを有効または無効にします。
+- **Save replay** はバッファ済みの映像を取り出して [トリムビュー](#トリムビュー) を開きます。バッファリングは直ちに再開されるため、トリムビューを開いている間も映像はバッファされ続けます。
+- **Start recording** は無制限録画を開始し、**Stop recording** を押すまでファイルに直接書き込みます。無制限録画中はバッファリングが中断され、終了後に再開されます。
+- **Pause** はバッファリングまたは無制限録画を一時停止し、**Resume** で再開します。
+- **Preset** でプリセットを選択します。プリセットを変更すると、バッファ済みの映像は破棄されます。
+- **Customize** では、選択中のプリセットの個々の設定を変更できます。変更したプリセットには "(custom)" が付き、**Reset to preset** で変更を破棄できます。
+
+<img width="800" alt="Recorder タブの Customize" src=".github/images/suite-customize.png" />
+
+#### トリムビュー
+
+トリムビューは、取り出した映像を選択範囲内でループ再生します。
+
+- タイムラインの両端のハンドルをドラッグして範囲を選択します。開始位置は、保存される録画が実際に始まるキーフレームに吸着します。タイムラインの下の目盛りはキーフレームの位置を示します。
+- ノブをドラッグするか、タイムラインの他の場所をクリックすると、再生位置が移動します。**Set start** と **Set end** は、再生位置を範囲の開始または終了に設定します。
+- **Use frame as thumbnail** は、表示中のフレームを録画のサムネイルにします。
+- **Save** は選択範囲をライブラリに保存し、**Discard** は保存せずにビューを閉じます。
+
+#### Recordings タブ
+
+Recordings タブには、保存した録画が新しい順に表示されます。録画を選択すると、プレビューと詳細が表示されます。
+
+<img width="800" alt="録画の詳細" src=".github/images/suite-detail.png" />
+
+- **Use frame as thumbnail** は、プレビューに表示中のフレームでサムネイルを置き換えます。
+- **Delete** は録画を削除します。確認のため、3 秒以内にもう一度押す必要があります。
+- **Share to** で共有先を選択し、**Comment** にメッセージを入力して、**Share** で共有します。この項目は共有先が 1 つ以上設定されている場合に表示されます。
+- **Select** を押すと選択モードになり、複数の録画を選択してまとめて削除できます。
+
+#### 未完了の録画の復旧
+
+ディスクバッファを使用するプリセットで録画中にアプリケーションが異常終了すると、ディスクにバッファされた映像が残ります。次回起動時、Recordings タブの **Unfinished recordings** にその映像が表示されます。**Recover** でライブラリに保存し、**Delete** で破棄します。
+
+### コードから Suite を使用する
+
+ゲームのコードからは、`InstantReplaySuite.Recorder` で取得できる `InstantReplayRecorder` を通じて Suite を操作できます。`InstantReplaySuite.Current` は有効なインスタンスを返します。`InstantReplayRecorder` のメンバーはすべてメインスレッドから呼び出す必要があり、イベントもメインスレッドで発生します。
+
+#### リプレイの保存
+
+`SaveReplayAsync` は、ユーザーの操作を介さずにバッファ済みの映像をライブラリに保存します。
+
+```csharp
+using System.Collections.Generic;
+using InstantReplay.Suite;
+using InstantReplay.Suite.UI;
+using UnityEngine;
+
+var recorder = InstantReplaySuite.Current.Recorder;
+if (recorder.State == RecorderState.Buffering)
+{
+    var entry = await recorder.SaveReplayAsync(new ReplaySaveRequest
+    {
+        DurationSeconds = 30, // null の場合はバッファ全体を保存
+        Metadata = new Dictionary<string, string> { ["scene"] = "Stage1" }
+    });
+    Debug.Log($"Saved {entry.FilePath}");
+}
+```
+
+`CaptureReplayAsync` は、バッファ済みの映像を保存せずに取り出し、`ReplayDraft` を返します。`ReplayDraft` からは任意の範囲を何度でも保存できます。`ReplayDraft` は呼び出し側が所有し、破棄する必要があります。
+
+```csharp
+using var draft = await recorder.CaptureReplayAsync();
+
+// 最後の 10 秒を保存する。開始位置は指定した時刻以前のキーフレームに移動する。
+var start = draft.GetSaveStart(Math.Max(0, draft.DurationSeconds - 10));
+var entry = await draft.SaveAsync(start);
+```
+
+#### 無制限録画の開始
+
+```csharp
+var recording = recorder.StartUnbounded();
+
+// 〜 ゲームプレイ 〜
+
+var entry = await recording.StopAsync();
+```
+
+#### 状態と統計情報
+
+`State` は `Idle`、`Buffering`、`Exporting`、`RecordingUnbounded`、`Faulted` のいずれかを返し、変化すると `StateChanged` が発生します。`IsPaused` は状態とは独立しています。アプリケーションがサスペンドされている間も recorder は自動的に一時停止し、サスペンド期間がフレームのない期間として映像に現れないようにします。この一時停止は `IsPaused` には反映されません。`GetStatistics()` は、バッファ済みの長さ、推定容量、バッファの使用バイト数、および無制限録画の経過時間を返します。
+
+Recorder タブのコントロールに対応する `SetBufferingEnabled`、`Pause`、`Resume`、`ApplyPreset` でもレコーダーを操作できます。
+
+#### 映像・音声ソースの指定
+
+Suite はデフォルトで `ScreenshotFrameProvider` と `UnityAudioSampleProvider` を使用します。他のプロバイダーを使用するには、`InstantReplaySuite` コンポーネントの `Start` より前、たとえば自身のコンポーネントの `Awake` で指定します。
+
+```csharp
+using InstantReplay;
+using InstantReplay.Suite.UI;
+using InstantReplay.UniversalRP;
+using UnityEngine;
+
+public class SuiteSetup : MonoBehaviour
+{
+    [SerializeField] private InstantReplaySuite suite;
+    [SerializeField] private Camera gameCamera;
+
+    private void Awake()
+    {
+        // ゲームのカメラのみを録画し、オーバーレイとパネルが録画に映らないようにする。
+        suite.Recorder.SetFrameProviderFactory(() => new RendererFeatureFrameProvider(gameCamera));
+    }
+}
+```
+
+レコーダーは各プロバイダーのインスタンスを最大 1 つだけ保持し、作成するすべてのセッションに同じインスタンスを渡します。そのため、ファクトリーはインスタンスが存在しない場合にのみ呼び出されます。`SetFrameProvider` と `SetAudioSampleProvider` は、アプリケーションが作成したインスタンスを受け取ります。`takeOwnership` が false の場合、レコーダーはそのインスタンスを破棄しません。カメラが破棄されるなどしてプロバイダーが動作できなくなった場合は、`InvalidateFrameProvider` または `InvalidateAudioSampleProvider` を呼び出してください。
+
+#### 録画ライブラリ
+
+`recorder.Library` は保存した録画を管理します。`GetEntries()` は録画を新しい順に `RecordingEntry` として返します。`RecordingEntry` は、ファイルパス、作成日時、長さ、サイズ、録画の種類 (`Replay`、`Unbounded`、`Recovered`)、メタデータ、サムネイルのパスを持ちます。`Delete` で録画を削除でき、一覧が変化すると `Changed` が発生します。`ImportRecoveredAsync` は、`DiskEncodedFrameBufferRecovery.FindRecoverable()` が返す映像をライブラリに保存します。
+
+#### 共有
+
+共有先は `ShareTarget` を継承したアセットで、設定アセットの **Share Targets** に登録します。パッケージは以下の共有先を提供しており、いずれも **Create > Instant Replay > Share Targets** から作成できます。
+
+| 共有先 | 説明 |
+|---|---|
+| File Export | 録画をディレクトリにコピーします。相対パスは `Application.persistentDataPath` を基準に解決されます。デスクトッププラットフォームでは、コピー後にディレクトリを開くことができます。 |
+| Slack | `files:write` スコープを持つ Bot トークンを使用して、録画をチャンネルにアップロードします。 |
+| Discord | Webhook を通じて録画をチャンネルに投稿します。サーバーのアップロード上限を設定できます (デフォルトは 10 MiB)。 |
+
+> [!WARNING]
+> アセットに設定したトークンと Webhook URL はビルドに含まれます。Slack と Discord の共有先は、開発用および QA 用のビルドでの使用を想定しています。認証情報は、実行時にコードから `SlackShareTarget.Token` と `DiscordShareTarget.WebhookUrl` で設定することもできます。
+
+共有先は `recorder.ShareTargets` から実行時に追加することもできます。他の共有先に対応するには、`ShareTarget` を継承したクラスを作成します。
+
+```csharp
+using System.Threading;
+using System.Threading.Tasks;
+using InstantReplay.Suite;
+using UnityEngine;
+
+[CreateAssetMenu(menuName = "My Game/Bug Tracker Share Target")]
+public class BugTrackerShareTarget : ShareTarget
+{
+    public override bool CanShare(ShareRequest request, out string reason)
+    {
+        reason = null;
+        return true;
+    }
+
+    public override async ValueTask<ShareResult> ShareAsync(ShareRequest request, ShareContext context,
+        CancellationToken cancellationToken)
+    {
+        foreach (var entry in request.Entries)
+        {
+            // entry.FilePath を request.Comment と entry.Metadata とともにアップロードし、
+            // context.ReportProgress(0..1) で進捗を報告する。
+        }
+
+        // 失敗は例外を投げて報告する。例外のメッセージはユーザーに表示される。
+        return new ShareResult("Reported.", url: "https://example.com/issues/123");
+    }
+}
+```
+
+#### 独自の画面から Suite のビューを表示する
+
+トリムビューと録画の一覧は、デバッグメニュー内のバグレポート画面など、アプリケーションが作成した画面から表示できます。これらのビューはオーバーレイを非表示にしている間も表示され、何も保存・共有せずにユーザーが選択した内容を返します。
+
+- `TrimAsync(draft)` は `ReplayDraft` のトリムビューを表示し、選択された範囲とサムネイルを持つ `ReplaySelection` を返します。ユーザーがキャンセルした場合は null を返します。`ReplayDraft` は呼び出し側が所有したままです。`draft.ExportAsync(selection)` は選択範囲をライブラリ外のファイルに書き出し、`draft.SaveAsync(selection)` はライブラリに保存します。
+- `PickRecordingsAsync()` は、ライブラリの録画と異常終了で残った映像を一覧表示し、ユーザーが選択した録画を返します。異常終了で残った映像が選択された場合は、先にライブラリへ復旧します。`allowMultiple: false` を指定すると、1 つだけ選択できます。
+
+これらのビューは同時に 1 つだけ開くことができます。どちらのメソッドも、渡した `CancellationToken` がキャンセルされるとビューを閉じます。
+
+```csharp
+using InstantReplay.Suite.UI;
+
+var suite = InstantReplaySuite.Current;
+
+// デバッグメニューを開いたとき。メニュー自体が録画されないようにする。一時停止中も映像は取り出せる。
+suite.Recorder.Pause();
+
+// バグレポート画面
+using var draft = await suite.Recorder.CaptureReplayAsync();
+var selection = await suite.TrimAsync(draft);
+if (selection != null)
+{
+    var videoPath = await draft.ExportAsync(selection); // 一時キャッシュディレクトリ内のファイル
+    var thumbnailPng = selection.ThumbnailPng; // ユーザーが選択しなかった場合は null
+    // 映像とサムネイルを、ユーザー ID やログなどとともにレポートに添付する。
+}
+
+// または、保存済みの録画をユーザーに選択させる。
+var entries = await suite.PickRecordingsAsync(allowMultiple: false);
+
+// デバッグメニューを閉じたとき
+suite.Recorder.Resume();
+```
+
+アプリケーションが独自の UI でレコーダーを制御する場合、オーバーレイとパネルを使用する必要はありません。Show Overlay On Launch を無効にするとオーバーレイを非表示にでき、Overlay Opens Panel を無効にするとオーバーレイを状態表示としてのみ使用できます。これらの設定は、コードからも `IsOverlayVisible` と `OverlayOpensPanel` として変更できます。オーバーレイの位置は `OverlayCorner` として変更できます。パネルの操作はすべて `suite.Recorder` から行えます。
+
+```csharp
+var recorder = InstantReplaySuite.Current.Recorder;
+
+recorder.SetBufferingEnabled(true); // 「常時バッファリング」スイッチ
+
+var recording = recorder.StartUnbounded(); // 「録画開始」
+var entry = await recording.StopAsync(); // 「録画停止」。録画はライブラリに追加される
+```
+
+#### UI を使用せずにレコーダーを使用する
+
+独自の UI を作成するプロジェクトは、`InstantReplay.Suite` アセンブリの `InstantReplayRecorder` を直接使用できます。
+
+```csharp
+using InstantReplay.Suite;
+
+var recorder = new InstantReplayRecorder(settings); // null の場合は組み込みのデフォルトを使用
+recorder.Activate(); // ユーザーの選択を復元し、有効な場合はバッファリングを開始
+
+// 〜 ゲームプレイ 〜
+
+recorder.Dispose();
+```
 
 ## 詳細な使い方
 
-録画を行うには `RealtimeInstantReplaySession` を使用します。
+Suite を使用せずにコードから録画を行うには、`RealtimeInstantReplaySession` を使用します。
 
 ```csharp
 using InstantReplay;

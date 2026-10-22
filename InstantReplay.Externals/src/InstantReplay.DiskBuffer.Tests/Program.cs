@@ -34,6 +34,11 @@ namespace InstantReplay.DiskBufferTests
             Run("selection streams payloads while it is read", SelectionStreamsPayloads);
             Run("corrupt first key frame yields an empty selection", CorruptFirstKeyFrameYieldsEmptySelection);
             Run("in-memory reader ends on dispose", ArrayReaderReleasesUnreadFrames);
+            Run("retained duration follows eviction", RetainedDurationFollowsEviction);
+            Run("captured range starts at a key frame", CapturedRangeStartsAtKeyFrame);
+            Run("in-memory capture can be read repeatedly", InMemoryCaptureCanBeReadRepeatedly);
+            Run("capture duration ignores a trailing frame at time zero", DurationIgnoresTrailingFrameAtTimeZero);
+            Run("disk capture reads ranges and releases its directory", DiskCaptureReadsRanges);
             RunEndToEnd();
 
             Console.WriteLine(_failures == 0
@@ -193,6 +198,47 @@ namespace InstantReplay.DiskBufferTests
             var scan = DiskBufferSegmentReader.Scan(directory);
             AssertTrue(scan.VideoSamples.Count > 0, "records remain after eviction");
             AssertTrue(scan.VideoMetadata.Count == 1, "metadata survives eviction");
+        }
+
+        private static void RetainedDurationFollowsEviction(string directory)
+        {
+            const long max = 256 * 1024;
+            const int payloadSize = 8 * 1024;
+
+            using var writer = new DiskBufferSegmentWriter(directory, max, 0.5, 64 * 1024,
+                DiskBufferSyncMode.OperatingSystem);
+            writer.SetManifestBytes(0);
+
+            AssertEqual<double?>(null, writer.EarliestKeyFrameTimestamp, "no key frame before the first write");
+            AssertEqual<double?>(null, writer.LatestVideoTimestamp, "no video frame before the first write");
+
+            // An audio record and a non-key video frame ahead of the first key frame do not start the retained range.
+            Write(writer, DiskBufferTrack.Audio, UniencSampleKind.Interpolated, 0.0, Payload(64, 0x01));
+            Write(writer, DiskBufferTrack.Video, UniencSampleKind.Interpolated, 0.0, Payload(64, 0x02));
+            AssertEqual<double?>(null, writer.EarliestKeyFrameTimestamp, "a non-key frame is not a key frame");
+
+            for (var i = 1; i <= 200; i++)
+                Write(writer, DiskBufferTrack.Video, i % 4 == 0 ? UniencSampleKind.Key
+                    : UniencSampleKind.Interpolated, i * 0.05, Payload(payloadSize, (byte)i));
+
+            AssertEqual<double?>(10.0, writer.LatestVideoTimestamp, "latest video timestamp");
+
+            var scan = DiskBufferSegmentReader.Scan(directory);
+            double? earliestOnDisk = null;
+            foreach (var record in scan.VideoSamples)
+                if (record.Kind == UniencSampleKind.Key)
+                {
+                    earliestOnDisk = record.Timestamp;
+                    break;
+                }
+
+            AssertTrue(earliestOnDisk is > 0.2, $"eviction removed the earliest key frames ({earliestOnDisk})");
+            AssertEqual(earliestOnDisk, writer.EarliestKeyFrameTimestamp,
+                "earliest retained key frame matches the files on disk");
+
+            // An out-of-order frame with timestamp 0, as MediaCodec emits at the end of a stream, is ignored.
+            Write(writer, DiskBufferTrack.Video, UniencSampleKind.Interpolated, 0.0, Payload(64, 0x03));
+            AssertEqual<double?>(10.0, writer.LatestVideoTimestamp, "an out-of-order frame keeps the latest timestamp");
         }
 
         private static void MetadataSurvivesEviction(string directory)
@@ -430,6 +476,161 @@ namespace InstantReplay.DiskBufferTests
             reader.Dispose();
             AssertTrue(!reader.TryReadNext(out _), "nothing is read after disposal");
             reader.Dispose();
+        }
+
+        private static void CapturedRangeStartsAtKeyFrame(string directory)
+        {
+            _ = directory;
+
+            // Video every 0.1 s with key frames every 0.5 s; audio every 0.25 s.
+            using var captured = CreateInMemoryCapture(out _, out _);
+
+            captured.ResolveRange(0.55, 0.85, out var videoStart, out var videoEnd, out var audioStart,
+                out var audioEnd);
+            AssertEqual(5, videoStart, "video starts at the key frame before the requested start");
+            AssertEqual(9, videoEnd, "video ends before the first frame at or after the end");
+            AssertEqual(2, audioStart, "audio starts with the video");
+            AssertEqual(4, audioEnd, "audio runs to the end of the video");
+
+            captured.ResolveRange(0, null, out videoStart, out videoEnd, out audioStart, out audioEnd);
+            AssertEqual(0, videoStart, "whole capture starts at the first frame");
+            AssertEqual(10, videoEnd, "whole capture ends at the last frame");
+            AssertEqual(0, audioStart, "whole capture starts at the first audio frame");
+            AssertEqual(4, audioEnd, "whole capture includes every audio frame");
+
+            var threw = false;
+            try
+            {
+                captured.ResolveRange(0.55, 0.5, out _, out _, out _, out _);
+            }
+            catch (ArgumentException)
+            {
+                threw = true;
+            }
+
+            AssertTrue(threw, "a range that ends at its key frame is rejected");
+        }
+
+        private static void DurationIgnoresTrailingFrameAtTimeZero(string directory)
+        {
+            _ = directory;
+
+            using (var captured = CreateInMemoryCapture(out _, out _))
+                AssertTrue(Math.Abs(captured.GetDurationSeconds() - 0.9) < 1e-9, "duration runs to the last frame");
+
+            // MediaCodec (Android) may end the stream with a frame at time zero, which sorts before the first sample.
+            var video = new List<EncodedFrame>
+                { EncodedFrame.CreateWithCopy(Payload(7, 0xAA), 0, UniencSampleKind.Metadata) };
+            for (var i = 0; i < 10; i++)
+                video.Add(EncodedFrame.CreateWithCopy(Payload(100 + i, (byte)i), 10 + i * 0.1,
+                    i % 5 == 0 ? UniencSampleKind.Key : UniencSampleKind.Interpolated));
+            video.Add(EncodedFrame.CreateWithCopy(Payload(16, 0xBB), 0, UniencSampleKind.Interpolated));
+
+            using var trailing = new InMemoryCapturedFrames(video.ToArray(), Array.Empty<EncodedFrame>());
+            AssertTrue(Math.Abs(trailing.GetDurationSeconds() - 0.9) < 1e-9,
+                "duration runs to the latest frame, not the trailing one");
+
+            trailing.ResolveRange(0.55, 0.85, out var videoStart, out var videoEnd, out _, out _);
+            AssertEqual(5, videoStart, "range starts at the key frame before the requested start");
+            AssertEqual(9, videoEnd, "range ends before the first frame at or after the end");
+        }
+
+        private static void InMemoryCaptureCanBeReadRepeatedly(string directory)
+        {
+            _ = directory;
+
+            using var captured = CreateInMemoryCapture(out var videoPayloads, out _);
+
+            for (var pass = 0; pass < 2; pass++)
+            {
+                using var selection = captured.CreateSelection(5, 9, 2, 4);
+                var video = ReadAll(selection.VideoFrames);
+                AssertEqual(5, video.Length, $"pass {pass}: configuration record and four samples");
+                AssertEqual(UniencSampleKind.Metadata, video[0].Kind, $"pass {pass}: configuration record first");
+                AssertEqual(UniencSampleKind.Key, video[1].Kind, $"pass {pass}: samples start at a key frame");
+                AssertTrue(Math.Abs(video[1].Timestamp) < 1e-9, $"pass {pass}: samples are rebased");
+                AssertTrue(Math.Abs(video[4].Timestamp - 0.3) < 1e-9, $"pass {pass}: spacing is kept");
+                AssertTrue(video[2].Data.SequenceEqual(videoPayloads[6]), $"pass {pass}: payload is intact");
+
+                var audio = ReadAll(selection.AudioFrames);
+                AssertEqual(2, audio.Length, $"pass {pass}: audio sample count");
+                AssertTrue(Math.Abs(audio[0].Timestamp) < 1e-9, $"pass {pass}: audio is rebased");
+
+                // The muxer releases every frame it receives, so the reader must hand out copies.
+                foreach (var frame in video) frame.Dispose();
+                foreach (var frame in audio) frame.Dispose();
+            }
+        }
+
+        private static void DiskCaptureReadsRanges(string directory)
+        {
+            var videoPayloads = new List<byte[]>();
+            using (var writer = CreateWriter(directory))
+            {
+                writer.SetManifestBytes(0);
+                Write(writer, DiskBufferTrack.Video, UniencSampleKind.Metadata, 0.0, Payload(7, 0xAA));
+                for (var i = 0; i < 10; i++)
+                {
+                    var payload = Payload(100 + i, (byte)i);
+                    videoPayloads.Add(payload);
+                    Write(writer, DiskBufferTrack.Video,
+                        i % 5 == 0 ? UniencSampleKind.Key : UniencSampleKind.Interpolated, 10 + i * 0.1, payload);
+                }
+
+                for (var i = 0; i < 4; i++)
+                    Write(writer, DiskBufferTrack.Audio, UniencSampleKind.Key, 10 + i * 0.25, Payload(32, (byte)i));
+            }
+
+            var scan = DiskBufferSegmentReader.Scan(directory);
+            AssertTrue(DiskBufferSegmentReader.TrySelectRecords(scan, null, out var videoRecords,
+                out var audioRecords), "records are selected");
+
+            var released = 0;
+            var captured = new DiskCapturedFrames(scan, videoRecords, audioRecords, () => released++);
+            AssertTrue(Math.Abs(captured.Video[0].Timestamp) < 1e-9, "descriptors are rebased");
+
+            captured.ResolveRange(0.6, null, out var videoStart, out var videoEnd, out var audioStart,
+                out var audioEnd);
+            for (var pass = 0; pass < 2; pass++)
+            {
+                using var selection = captured.CreateSelection(videoStart, videoEnd, audioStart, audioEnd);
+                var video = ReadAll(selection.VideoFrames);
+                AssertEqual(6, video.Length, $"pass {pass}: configuration record and five samples");
+                AssertTrue(video[1].Data.SequenceEqual(videoPayloads[5]), $"pass {pass}: starts at the key frame");
+                AssertTrue(Math.Abs(video[1].Timestamp) < 1e-9, $"pass {pass}: samples are rebased");
+                foreach (var frame in video) frame.Dispose();
+            }
+
+            captured.Dispose();
+            captured.Dispose();
+            AssertEqual(1, released, "the directory is released once");
+        }
+
+        private static InMemoryCapturedFrames CreateInMemoryCapture(out List<byte[]> videoPayloads,
+            out List<byte[]> audioPayloads)
+        {
+            videoPayloads = new List<byte[]>();
+            audioPayloads = new List<byte[]>();
+
+            var video = new List<EncodedFrame>
+                { EncodedFrame.CreateWithCopy(Payload(7, 0xAA), 0, UniencSampleKind.Metadata) };
+            for (var i = 0; i < 10; i++)
+            {
+                var payload = Payload(100 + i, (byte)i);
+                videoPayloads.Add(payload);
+                video.Add(EncodedFrame.CreateWithCopy(payload, i * 0.1,
+                    i % 5 == 0 ? UniencSampleKind.Key : UniencSampleKind.Interpolated));
+            }
+
+            var audio = new List<EncodedFrame>();
+            for (var i = 0; i < 4; i++)
+            {
+                var payload = Payload(32, (byte)(i + 100));
+                audioPayloads.Add(payload);
+                audio.Add(EncodedFrame.CreateWithCopy(payload, i * 0.25, UniencSampleKind.Key));
+            }
+
+            return new InMemoryCapturedFrames(video.ToArray(), audio.ToArray());
         }
 
         private static void RunEndToEnd()

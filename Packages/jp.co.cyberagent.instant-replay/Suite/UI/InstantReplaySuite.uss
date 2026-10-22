@@ -1,0 +1,870 @@
+/* ------------------------------------------------------------------
+   Tokens
+
+   Colors inside the panel are opaque, because translucent colors blend
+   differently in projects that use the linear color space.
+   ------------------------------------------------------------------ */
+
+.irs-root {
+    --irs-panel-background: rgb(22, 24, 29);
+    --irs-surface: rgb(37, 40, 47);
+    --irs-surface-hover: rgb(46, 49, 57);
+    --irs-surface-active: rgb(58, 62, 71);
+    --irs-border: rgb(42, 45, 52);
+    --irs-border-strong: rgb(60, 64, 74);
+    --irs-text: rgb(236, 238, 242);
+    --irs-text-dim: rgb(150, 156, 168);
+    --irs-accent: rgb(62, 196, 136);
+    --irs-accent-hover: rgb(82, 214, 154);
+    --irs-accent-active: rgb(48, 170, 116);
+    --irs-accent-soft: rgb(29, 55, 46);
+    --irs-danger: rgb(234, 84, 80);
+    --irs-danger-hover: rgb(244, 104, 100);
+    --irs-danger-soft: rgb(56, 33, 37);
+    --irs-warning: rgb(242, 182, 64);
+    --irs-radius: 8px;
+    --irs-radius-small: 6px;
+
+    position: absolute;
+    left: 0;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    align-items: flex-end;
+    color: var(--irs-text);
+    font-size: 13px;
+}
+
+/* The overlay is at the top right unless the modifiers below move it to another corner. */
+
+.irs-root--left {
+    align-items: flex-start;
+}
+
+/* The panel opens above the overlay. */
+
+.irs-root--bottom {
+    flex-direction: column-reverse;
+}
+
+/* ------------------------------------------------------------------
+   Overlay
+   ------------------------------------------------------------------ */
+
+/* The overlay keeps its height when the panel below it fills the screen. */
+
+.irs-overlay {
+    flex-shrink: 0;
+    flex-direction: row;
+    align-items: center;
+    margin: 8px;
+    padding: 5px 12px 5px 10px;
+    border-radius: 14px;
+    border-width: 1px;
+    border-color: var(--irs-border);
+    background-color: rgba(16, 18, 22, 0.72);
+    transition-property: background-color, scale;
+    transition-duration: 0.15s;
+}
+
+.irs-overlay:hover {
+    background-color: rgba(16, 18, 22, 0.88);
+}
+
+.irs-overlay:active,
+.irs-overlay.irs-pressed {
+    scale: 0.96 0.96;
+}
+
+.irs-overlay__dot {
+    width: 9px;
+    height: 9px;
+    margin-right: 7px;
+    border-radius: 5px;
+    background-color: rgb(110, 116, 128);
+    transition-property: background-color, opacity;
+    transition-duration: 0.45s;
+    transition-timing-function: ease-in-out;
+}
+
+.irs-overlay__dot--buffering {
+    background-color: var(--irs-accent);
+}
+
+.irs-overlay__dot--recording {
+    background-color: var(--irs-danger);
+}
+
+.irs-overlay__dot--busy {
+    background-color: var(--irs-warning);
+}
+
+.irs-overlay__dot--faulted {
+    background-color: var(--irs-danger);
+    opacity: 0.5;
+}
+
+.irs-overlay__dot--paused {
+    opacity: 0.4;
+}
+
+.irs-overlay__dot--dim {
+    opacity: 0.25;
+}
+
+.irs-overlay__label {
+    color: var(--irs-text);
+    font-size: 12px;
+    -unity-font-style: bold;
+}
+
+/* ------------------------------------------------------------------
+   Panel
+   ------------------------------------------------------------------ */
+
+.irs-panel {
+    width: 320px;
+    max-width: 90%;
+    max-height: 90%;
+    margin: 0 8px 8px 8px;
+    padding: 12px;
+    border-radius: 12px;
+    border-width: 1px;
+    border-color: var(--irs-border);
+    background-color: var(--irs-panel-background);
+    transition-property: opacity, translate;
+    transition-duration: 0.16s;
+    transition-timing-function: ease-out;
+}
+
+.irs-panel--hidden {
+    display: none;
+}
+
+.irs-panel--entering {
+    opacity: 0;
+    translate: 0 -8px;
+}
+
+.irs-root--bottom > .irs-panel {
+    margin: 8px 8px 0 8px;
+}
+
+.irs-root--bottom > .irs-panel--entering {
+    translate: 0 8px;
+}
+
+.irs-panel Label {
+    color: var(--irs-text);
+}
+
+.irs-panel__title {
+    font-size: 14px;
+    -unity-font-style: bold;
+    margin: 0 2px 8px 2px;
+}
+
+.irs-panel__section {
+    margin-top: 10px;
+}
+
+.irs-panel__row {
+    flex-direction: row;
+}
+
+.irs-panel__row > Button {
+    flex-grow: 1;
+    flex-basis: 0;
+}
+
+.irs-panel .irs-panel__details {
+    font-size: 11px;
+    white-space: normal;
+    color: var(--irs-text-dim);
+    margin: 2px 3px 0 3px;
+}
+
+.irs-panel .irs-panel__error {
+    font-size: 11px;
+    white-space: normal;
+    color: var(--irs-danger-hover);
+    margin: 6px 3px 0 3px;
+}
+
+.irs-panel__error--hidden {
+    display: none;
+}
+
+.irs-panel__scroll {
+    flex-shrink: 1;
+}
+
+/* ------------------------------------------------------------------
+   Buttons
+   ------------------------------------------------------------------ */
+
+.irs-root .unity-button {
+    min-height: 30px;
+    margin: 3px;
+    padding: 4px 10px;
+    border-radius: var(--irs-radius);
+    border-width: 1px;
+    border-color: var(--irs-border);
+    background-color: var(--irs-surface);
+    color: var(--irs-text);
+    font-size: 12px;
+    -unity-text-align: middle-center;
+    transition-property: background-color, border-color, color, scale, opacity;
+    transition-duration: 0.12s;
+    transition-timing-function: ease-out;
+}
+
+.irs-root .unity-button:hover:enabled {
+    background-color: var(--irs-surface-hover);
+    border-color: var(--irs-border-strong);
+}
+
+.irs-root .unity-button:active:enabled,
+.irs-root .unity-button.irs-pressed:enabled {
+    background-color: var(--irs-surface-active);
+    scale: 0.97 0.97;
+}
+
+.irs-root .unity-button:disabled {
+    opacity: 0.4;
+}
+
+.irs-root .irs-button--primary {
+    border-color: var(--irs-accent);
+    background-color: var(--irs-accent);
+    color: rgb(12, 28, 20);
+    -unity-font-style: bold;
+}
+
+.irs-root .irs-button--primary:hover:enabled {
+    border-color: var(--irs-accent-hover);
+    background-color: var(--irs-accent-hover);
+}
+
+.irs-root .irs-button--primary:active:enabled,
+.irs-root .irs-button--primary.irs-pressed:enabled {
+    background-color: var(--irs-accent-active);
+}
+
+.irs-root .irs-button--danger {
+    border-color: rgb(107, 48, 50);
+    background-color: var(--irs-danger-soft);
+    color: var(--irs-danger-hover);
+}
+
+.irs-root .irs-button--danger:hover:enabled {
+    border-color: var(--irs-danger);
+    background-color: rgb(73, 38, 41);
+}
+
+.irs-root .irs-button--armed,
+.irs-root .irs-button--armed:hover:enabled,
+.irs-root .irs-button--recording,
+.irs-root .irs-button--recording:hover:enabled {
+    border-color: var(--irs-danger);
+    background-color: var(--irs-danger);
+    color: rgb(255, 255, 255);
+    -unity-font-style: bold;
+}
+
+.irs-root .irs-button--ghost {
+    border-color: rgba(0, 0, 0, 0);
+    background-color: rgba(0, 0, 0, 0);
+    color: var(--irs-text-dim);
+}
+
+.irs-root .irs-button--ghost:hover:enabled {
+    border-color: rgba(0, 0, 0, 0);
+    background-color: var(--irs-surface);
+    color: var(--irs-text);
+}
+
+/* ------------------------------------------------------------------
+   Tabs
+   ------------------------------------------------------------------ */
+
+.irs-tabs {
+    flex-direction: row;
+    margin-bottom: 8px;
+    padding: 3px;
+    border-radius: var(--irs-radius);
+    background-color: rgb(15, 17, 20);
+}
+
+.irs-root .irs-tab {
+    flex-grow: 1;
+    flex-basis: 0;
+    margin: 0;
+    padding: 5px 0;
+    border-radius: var(--irs-radius-small);
+    border-width: 0;
+    background-color: rgba(0, 0, 0, 0);
+    color: var(--irs-text-dim);
+}
+
+.irs-root .irs-tab:hover:enabled {
+    border-color: rgba(0, 0, 0, 0);
+    background-color: var(--irs-surface);
+    color: var(--irs-text);
+}
+
+.irs-root .irs-tab--selected,
+.irs-root .irs-tab--selected:hover:enabled {
+    background-color: var(--irs-surface-active);
+    color: var(--irs-text);
+    -unity-font-style: bold;
+}
+
+/* ------------------------------------------------------------------
+   Fields
+   ------------------------------------------------------------------ */
+
+.irs-root .unity-base-field {
+    margin: 3px;
+    align-items: center;
+}
+
+.irs-root .unity-base-field__label {
+    min-width: 0;
+    margin-right: 8px;
+    padding: 0;
+    color: var(--irs-text);
+}
+
+.irs-root .unity-base-text-field__input,
+.irs-root .unity-base-popup-field__input {
+    flex-grow: 1;
+    flex-shrink: 1;
+    min-height: 28px;
+    margin: 0;
+    padding: 2px 8px;
+    border-radius: var(--irs-radius-small);
+    border-width: 1px;
+    border-color: var(--irs-border);
+    background-color: rgb(15, 17, 20);
+    color: var(--irs-text);
+    transition-property: border-color, background-color;
+    transition-duration: 0.12s;
+}
+
+.irs-root .unity-base-text-field__input:hover,
+.irs-root .unity-base-popup-field__input:hover {
+    border-color: var(--irs-border-strong);
+}
+
+.irs-root .unity-base-text-field:focus .unity-base-text-field__input,
+.irs-root .unity-base-text-field__input:focus {
+    border-color: var(--irs-accent);
+}
+
+.irs-root .unity-base-popup-field__text {
+    color: var(--irs-text);
+}
+
+.irs-root .unity-base-popup-field__arrow {
+    -unity-background-image-tint-color: var(--irs-text-dim);
+}
+
+.irs-root .unity-text-element--inner-input-field-component,
+.irs-root .unity-text-input {
+    color: var(--irs-text);
+}
+
+/* Check box */
+
+.irs-root .unity-toggle__input {
+    flex-grow: 0;
+    flex-shrink: 0;
+    flex-basis: auto;
+}
+
+.irs-root .unity-toggle__checkmark {
+    flex-shrink: 0;
+    width: 18px;
+    height: 18px;
+    border-radius: 5px;
+    border-width: 1px;
+    border-color: var(--irs-border-strong);
+    background-color: rgb(15, 17, 20);
+    -unity-background-image-tint-color: rgba(0, 0, 0, 0);
+    transition-property: background-color, border-color, -unity-background-image-tint-color;
+    transition-duration: 0.12s;
+}
+
+.irs-root .unity-toggle__input:hover .unity-toggle__checkmark {
+    border-color: var(--irs-accent);
+}
+
+.irs-root .unity-toggle__input:checked .unity-toggle__checkmark {
+    border-color: var(--irs-accent);
+    background-color: var(--irs-accent);
+    -unity-background-image-tint-color: rgb(12, 28, 20);
+}
+
+/* Switch: a toggle with a knob added in code. */
+
+.irs-root .irs-switch {
+    justify-content: space-between;
+}
+
+.irs-root .irs-switch .unity-toggle__checkmark {
+    width: 36px;
+    height: 20px;
+    padding: 2px;
+    border-radius: 10px;
+    background-image: none;
+    background-color: rgb(56, 59, 66);
+    border-color: rgba(0, 0, 0, 0);
+}
+
+.irs-root .irs-switch .unity-toggle__input:checked .unity-toggle__checkmark {
+    background-color: var(--irs-accent);
+}
+
+.irs-switch__knob {
+    width: 14px;
+    height: 14px;
+    border-radius: 7px;
+    background-color: rgb(255, 255, 255);
+    transition-property: translate;
+    transition-duration: 0.16s;
+    transition-timing-function: ease-out;
+}
+
+.irs-root .irs-switch .unity-toggle__input:checked .irs-switch__knob {
+    translate: 16px 0;
+}
+
+/* Foldout */
+
+.irs-root .unity-foldout__toggle {
+    margin: 3px 0;
+}
+
+.irs-root .unity-foldout__input {
+    flex-grow: 1;
+    flex-shrink: 1;
+    flex-basis: 0;
+    padding: 4px 2px;
+    border-radius: var(--irs-radius-small);
+}
+
+.irs-root .unity-foldout__input:hover {
+    background-color: var(--irs-surface);
+}
+
+.irs-root .unity-foldout__checkmark,
+.irs-root .unity-foldout__input:hover .unity-foldout__checkmark,
+.irs-root .unity-foldout__input:checked .unity-foldout__checkmark {
+    width: 14px;
+    height: 14px;
+    border-width: 0;
+    background-color: rgba(0, 0, 0, 0);
+    -unity-background-image-tint-color: var(--irs-text-dim);
+}
+
+.irs-root .unity-foldout__text {
+    color: var(--irs-text);
+    -unity-font-style: bold;
+}
+
+.irs-root .unity-foldout__content {
+    margin-left: 4px;
+}
+
+/* Scroll bar */
+
+.irs-root .unity-scroller--vertical {
+    width: 6px;
+    margin-left: 4px;
+    border-width: 0;
+    background-color: rgba(0, 0, 0, 0);
+}
+
+.irs-root .unity-scroller__low-button,
+.irs-root .unity-scroller__high-button {
+    display: none;
+}
+
+.irs-root .unity-scroller--vertical .unity-base-slider--vertical {
+    top: 0;
+    bottom: 0;
+    margin: 0;
+}
+
+.irs-root .unity-scroller--vertical .unity-base-slider__tracker {
+    border-width: 0;
+    background-color: rgba(0, 0, 0, 0);
+}
+
+.irs-root .unity-scroller--vertical .unity-base-slider__dragger {
+    left: 0;
+    right: 0;
+    width: 6px;
+    margin: 0;
+    border-width: 0;
+    border-radius: 3px;
+    background-color: rgb(64, 68, 77);
+}
+
+.irs-root .unity-scroller--vertical .unity-base-slider__dragger:hover {
+    background-color: rgb(90, 94, 103);
+}
+
+/* ------------------------------------------------------------------
+   Recorder tab
+   ------------------------------------------------------------------ */
+
+.irs-preset-editor {
+    margin-top: 6px;
+}
+
+.irs-preset-editor .unity-base-field {
+    flex-direction: column;
+    align-items: stretch;
+    margin-top: 6px;
+}
+
+.irs-preset-editor .unity-base-field__label {
+    min-width: 0;
+    margin-bottom: 3px;
+    font-size: 11px;
+    color: var(--irs-text-dim);
+}
+
+.irs-preset-editor .unity-toggle,
+.irs-preset-editor .irs-switch {
+    flex-direction: row;
+    align-items: center;
+}
+
+.irs-preset-editor .irs-switch .unity-base-field__label {
+    margin-bottom: 0;
+    font-size: 12px;
+    color: var(--irs-text);
+}
+
+/* ------------------------------------------------------------------
+   Recordings tab
+   ------------------------------------------------------------------ */
+
+.irs-library__toolbar {
+    align-items: center;
+    justify-content: flex-end;
+    margin-bottom: 2px;
+}
+
+.irs-panel__row > .irs-library__select {
+    flex-grow: 0;
+    flex-basis: auto;
+}
+
+.irs-library__selection {
+    flex-direction: row;
+    align-items: center;
+    flex-grow: 1;
+}
+
+.irs-panel .irs-library__select-all {
+    flex-direction: row;
+    margin-right: 6px;
+}
+
+.irs-library__delete-checked {
+    flex-grow: 1;
+}
+
+.irs-library__row {
+    flex-direction: row;
+    align-items: center;
+    padding: 8px;
+    margin: 3px 0;
+    border-radius: var(--irs-radius);
+    border-width: 1px;
+    border-color: rgba(0, 0, 0, 0);
+    background-color: var(--irs-surface);
+    transition-property: background-color, border-color, scale;
+    transition-duration: 0.12s;
+}
+
+.irs-library__row:hover {
+    background-color: var(--irs-surface-hover);
+}
+
+.irs-library__row:active,
+.irs-library__row.irs-pressed {
+    scale: 0.99 0.99;
+}
+
+.irs-library__row--checked,
+.irs-library__row--checked:hover {
+    border-color: var(--irs-accent);
+    background-color: var(--irs-accent-soft);
+}
+
+.irs-library__row-text {
+    flex-grow: 1;
+    flex-shrink: 1;
+}
+
+.irs-panel .irs-library__row-title {
+    margin: 0 3px;
+    padding: 0;
+    font-size: 12px;
+    -unity-font-style: bold;
+}
+
+.irs-library__row .irs-panel__details {
+    padding: 0;
+}
+
+.irs-root .irs-library__check {
+    margin: 0 8px 0 0;
+    flex-shrink: 0;
+}
+
+.irs-thumbnail {
+    width: 64px;
+    height: 36px;
+    margin-right: 10px;
+    flex-shrink: 0;
+    border-radius: 4px;
+    background-color: rgb(0, 0, 0);
+}
+
+.irs-library__back {
+    align-self: flex-start;
+}
+
+.irs-preview {
+    width: 100%;
+    height: 160px;
+    margin: 6px 0;
+    border-radius: var(--irs-radius);
+    background-color: rgb(0, 0, 0);
+}
+
+.irs-root .irs-library__comment {
+    flex-direction: column;
+    align-items: stretch;
+}
+
+.irs-root .irs-library__comment .unity-base-field__label {
+    margin-bottom: 3px;
+    font-size: 11px;
+    color: var(--irs-text-dim);
+}
+
+.irs-root .irs-library__comment .unity-base-text-field__input {
+    min-height: 44px;
+    padding: 4px 8px;
+    -unity-text-align: upper-left;
+    white-space: normal;
+}
+
+.irs-recovery {
+    padding: 10px;
+    margin-bottom: 8px;
+    border-radius: var(--irs-radius);
+    border-width: 1px;
+    border-color: rgb(132, 103, 47);
+    background-color: rgb(40, 37, 32);
+}
+
+.irs-panel .irs-recovery__title {
+    -unity-font-style: bold;
+    color: var(--irs-warning);
+}
+
+.irs-recovery__row {
+    margin-top: 8px;
+}
+
+.irs-panel .irs-recovery__label {
+    font-size: 11px;
+    white-space: normal;
+}
+
+/* ------------------------------------------------------------------
+   Trim view
+   ------------------------------------------------------------------ */
+
+.irs-modal {
+    position: absolute;
+    left: 0;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    align-items: center;
+    justify-content: center;
+    background-color: rgba(0, 0, 0, 0.55);
+    transition-property: opacity;
+    transition-duration: 0.18s;
+    transition-timing-function: ease-out;
+}
+
+.irs-modal > .irs-modal__content {
+    width: 560px;
+    max-width: 95%;
+    max-height: 95%;
+    margin: 0;
+    background-color: rgb(22, 24, 29);
+    transition-property: scale, opacity;
+    transition-duration: 0.18s;
+    transition-timing-function: ease-out;
+}
+
+.irs-modal--entering,
+.irs-modal--leaving {
+    opacity: 0;
+}
+
+.irs-modal--entering > .irs-modal__content,
+.irs-modal--leaving > .irs-modal__content {
+    scale: 0.96 0.96;
+}
+
+.irs-modal__content > .irs-panel__title {
+    flex-shrink: 0;
+}
+
+.irs-trim__preview {
+    width: 100%;
+    height: 280px;
+    flex-shrink: 20;
+    min-height: 60px;
+    margin: 4px 0;
+    border-radius: var(--irs-radius);
+    background-color: rgb(0, 0, 0);
+}
+
+.irs-trim__controls {
+    flex-shrink: 1;
+}
+
+.irs-trim__labels {
+    justify-content: space-between;
+}
+
+.irs-panel .irs-trim__playhead {
+    color: var(--irs-warning);
+}
+
+.irs-trim__thumbnail-row {
+    align-items: center;
+}
+
+.irs-timeline {
+    height: 36px;
+    margin: 8px 10px 2px 10px;
+}
+
+.irs-timeline__track {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 15px;
+    height: 6px;
+    border-radius: 3px;
+    background-color: rgb(52, 55, 62);
+}
+
+.irs-timeline__ticks {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    bottom: 0;
+}
+
+.irs-timeline__tick {
+    position: absolute;
+    top: 25px;
+    width: 1px;
+    height: 5px;
+    background-color: rgb(104, 105, 108);
+}
+
+.irs-timeline__range {
+    position: absolute;
+    top: 15px;
+    height: 6px;
+    background-color: var(--irs-accent);
+}
+
+.irs-timeline__handle {
+    position: absolute;
+    top: 6px;
+    width: 10px;
+    height: 24px;
+    margin-left: -5px;
+    border-radius: 4px;
+    border-width: 2px;
+    border-color: var(--irs-accent);
+    background-color: rgb(245, 247, 250);
+    transition-property: scale;
+    transition-duration: 0.1s;
+}
+
+.irs-timeline:hover .irs-timeline__handle {
+    scale: 1.1 1.1;
+}
+
+.irs-timeline__playhead {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    margin-left: -1px;
+    background-color: var(--irs-warning);
+}
+
+.irs-timeline__knob {
+    position: absolute;
+    top: -4px;
+    left: -6px;
+    width: 14px;
+    height: 14px;
+    border-radius: 7px;
+    background-color: var(--irs-warning);
+    transition-property: scale;
+    transition-duration: 0.1s;
+}
+
+.irs-timeline:hover .irs-timeline__knob {
+    scale: 1.15 1.15;
+}
+
+.irs-timeline:disabled {
+    opacity: 0.5;
+}
+
+/* ------------------------------------------------------------------
+   Recording picker
+   ------------------------------------------------------------------ */
+
+.irs-root--chrome-hidden > .irs-overlay,
+.irs-root--chrome-hidden > .irs-panel {
+    display: none;
+}
+
+.irs-modal > .irs-picker {
+    width: 400px;
+}
+
+.irs-picker__list {
+    flex-shrink: 1;
+}
+
+.irs-picker__actions {
+    flex-shrink: 0;
+}
+
+.irs-panel .irs-picker__row--unfinished .irs-library__row-title {
+    color: var(--irs-warning);
+}
