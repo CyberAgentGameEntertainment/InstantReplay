@@ -1,3 +1,27 @@
+## [1.7.0] - 2026/10/22
+
+### Added
+
+- Added the Instant Replay Suite, a ready-made recorder and user interface. Adding the `InstantReplaySuite` component to a scene provides an overlay and a panel for continuous buffering, saving replays, unbounded recording, trimming a replay and choosing its thumbnail before saving, recording presets that persist across launches, a library of saved recordings with preview, and sharing to a folder, a Slack channel, a Discord webhook, or a custom destination. Every operation is also available from code, so applications can drive the recorder from their own screens. See the "Instant Replay Suite" section of the README. Preview is not available on WebGL, and some controls are omitted when the Video or Image Conversion modules are disabled.
+- Added the opt-in disk buffer for `RealtimeInstantReplaySession` (`RealtimeEncodingOptions.DiskBuffer`). Encoded frames are written to segment files instead of being held in memory, which lowers memory usage and allows long recordings to be exported without loading them into memory. Disk usage is bounded by `MaxDiskUsageBytes`.
+- Added crash recovery for the disk buffer. After an abnormal termination, `DiskEncodedFrameBufferRecovery.FindRecoverable` finds the footage left on disk, which can then be exported.
+- Added `RealtimeInstantReplaySession.StopAndCaptureAsync`, which takes the buffered footage out of the session as a `CapturedReplay`. A captured replay can be exported over any range any number of times and remains valid after the session is disposed.
+- Added `RealtimeInstantReplaySession.GetBufferStatistics`, which returns the duration, the bytes used, and the capacity of the buffer.
+- Added `VideoEncoderOptions.IdrIntervalSeconds` to configure the interval between key frames. When unset, the interval remains one second on all platforms.
+
+### Changed
+
+- Encoded videos are now tagged as BT.709 limited range on all platforms, and the color conversion now uses BT.709. Previously, videos carried no color information and some platforms converted with BT.601, which caused color shifts in players. Colors in recordings made with this version differ from those made with earlier versions.
+- On WebGL, frames are now converted to I420 in WebAssembly before encoding instead of by the browser, which adds a per-frame cost on the main thread.
+- The User Interfaces sample now demonstrates the Instant Replay Suite. The previous recorder prefab and its scripts (`PersistentRecorder`, `RecorderInterface`, and `VideoPlayerView`) have been removed from the sample.
+
+### Fixed
+
+- Fixed MP4 files written on iOS and macOS marking every frame as a key frame (a missing `stss` box).
+- Fixed chroma data being corrupted for frames with an odd width when converted on the CPU.
+- Fixed the warning "Dropping a GlobalRef in a detached thread" being logged for every frame while recording on Android.
+- Fixed the duration of a buffered replay being zero on Android when the encoder ended the stream with a frame at time zero.
+
 ## [1.6.12] - 2026/10/13
 
 ### Fixed
