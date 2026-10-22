@@ -200,7 +200,7 @@ namespace InstantReplay
             using var muxer = encodingSystem.CreateMuxer(outputPath);
 
             await EncodedFrameMuxer.MuxAsync(muxer, selection.VideoFrames, selection.AudioFrames)
-                .ConfigureAwait(false);
+                .ConfigureAwait(EncodedFrameMuxer.ContinueOnCapturedContext);
 
             return outputPath;
         }

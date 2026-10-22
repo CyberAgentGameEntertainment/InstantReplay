@@ -257,7 +257,7 @@ namespace InstantReplay
                 {
                     // Mux the segment
                     await EncodedFrameMuxer.MuxAsync(muxer, selection.VideoFrames, selection.AudioFrames)
-                        .ConfigureAwait(false);
+                        .ConfigureAwait(EncodedFrameMuxer.ContinueOnCapturedContext);
                 }
 
                 State = SessionState.Completed;
