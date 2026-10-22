@@ -292,6 +292,23 @@ namespace InstantReplay.Suite
         public int MaxMegabytes => maxMegabytes;
 
         /// <summary>
+        ///     Whether the disk buffer is available on the running platform. It is not available on Web, which has
+        ///     neither a persistent file system by default nor threads.
+        /// </summary>
+        public static bool IsDiskSupported =>
+#if UNITY_WEBGL && !UNITY_EDITOR
+            false;
+#else
+            true;
+#endif
+
+        /// <summary>
+        ///     Where the frames are actually kept on the running platform. A disk buffer falls back to memory where
+        ///     <see cref="IsDiskSupported" /> is false.
+        /// </summary>
+        public SpecMode EffectiveMode => mode == SpecMode.Disk && !IsDiskSupported ? SpecMode.InMemory : mode;
+
+        /// <summary>
         ///     Keeps up to <paramref name="maxMegabytes" /> MiB of encoded frames in memory.
         /// </summary>
         public static BufferSpec InMemory(int maxMegabytes)
@@ -314,13 +331,13 @@ namespace InstantReplay.Suite
         public long GetCapacityBytes()
         {
             var bytes = Math.Max(1, maxMegabytes) * BytesPerMegabyte;
-            return mode == SpecMode.Disk ? Math.Max(DiskBufferOptions.MinimumDiskUsageBytes, bytes) : bytes;
+            return EffectiveMode == SpecMode.Disk ? Math.Max(DiskBufferOptions.MinimumDiskUsageBytes, bytes) : bytes;
         }
 
         internal void Apply(ref RealtimeEncodingOptions options)
         {
             var capacity = GetCapacityBytes();
-            if (mode == SpecMode.Disk)
+            if (EffectiveMode == SpecMode.Disk)
             {
                 var disk = DiskBufferOptions.Default;
                 disk.MaxDiskUsageBytes = capacity;

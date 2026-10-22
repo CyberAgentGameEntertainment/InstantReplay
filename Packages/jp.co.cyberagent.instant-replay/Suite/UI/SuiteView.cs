@@ -58,6 +58,18 @@ namespace InstantReplay.Suite.UI
         private RecordingPickerView _picker;
         private TrimView _trim;
 
+        /// <summary>
+        ///     Whether the suite runs on Web. There, the muxer hands each written file to the browser as a download
+        ///     instead of leaving it at the output path, and the preview cannot open local files, so the library and the
+        ///     trim view are unavailable and a replay is saved as a whole.
+        /// </summary>
+        public static bool IsWeb =>
+#if UNITY_WEBGL && !UNITY_EDITOR
+            true;
+#else
+            false;
+#endif
+
         public SuiteView(VisualElement documentRoot, StyleSheet styleSheet, InstantReplayRecorder recorder,
             Transform previewParent)
         {
@@ -106,8 +118,17 @@ namespace InstantReplay.Suite.UI
             content.Add(header);
 
             _libraryTab = new VisualElement();
-            _library = new LibraryView(recorder, previewParent);
-            _libraryTab.Add(_library.Root);
+            if (IsWeb)
+            {
+                // The recorder tab is the only one left, so the tabs are not shown.
+                header.style.display = DisplayStyle.None;
+            }
+            else
+            {
+                _library = new LibraryView(recorder, previewParent);
+                _libraryTab.Add(_library.Root);
+            }
+
             content.Add(_libraryTab);
 
             _recorderTab = new VisualElement();
@@ -210,7 +231,7 @@ namespace InstantReplay.Suite.UI
             set
             {
                 _root.EnableInClassList("irs-root--chrome-hidden", !value);
-                _library.SetVisible(value && IsPanelOpen && _libraryTabSelected);
+                _library?.SetVisible(value && IsPanelOpen && _libraryTabSelected);
             }
         }
 
@@ -241,7 +262,7 @@ namespace InstantReplay.Suite.UI
             // Cancelling completes the tasks of views opened from code.
             _trim?.Cancel();
             _picker?.Cancel();
-            _library.Dispose();
+            _library?.Dispose();
             _recorder.StateChanged -= OnRecorderChanged;
             _recorder.ConfigurationChanged -= OnRecorderChanged;
             _root.RemoveFromHierarchy();
@@ -272,7 +293,7 @@ namespace InstantReplay.Suite.UI
                 _panel.schedule.Execute(() => _panel.RemoveFromClassList("irs-panel--entering")).StartingIn(16);
             }
 
-            _library.SetVisible(IsVisible && IsPanelOpen && _libraryTabSelected);
+            _library?.SetVisible(IsVisible && IsPanelOpen && _libraryTabSelected);
         }
 
         // The dot blinks while an unbounded recording runs.
@@ -290,7 +311,7 @@ namespace InstantReplay.Suite.UI
             _libraryTabButton.EnableInClassList("irs-tab--selected", library);
             _recorderTab.style.display = library ? DisplayStyle.None : DisplayStyle.Flex;
             _libraryTab.style.display = library ? DisplayStyle.Flex : DisplayStyle.None;
-            _library.SetVisible(IsVisible && IsPanelOpen && library);
+            _library?.SetVisible(IsVisible && IsPanelOpen && library);
         }
 
         private void OnRecorderChanged(RecorderState _)
@@ -311,6 +332,12 @@ namespace InstantReplay.Suite.UI
             Refresh();
             try
             {
+                if (IsWeb)
+                {
+                    await _recorder.SaveReplayAsync();
+                    return;
+                }
+
                 var draft = await _recorder.CaptureReplayAsync();
                 _trim = new TrimView(_root, draft, _previewParent, true);
                 _trim.Closed += (_, saved) =>
@@ -336,6 +363,7 @@ namespace InstantReplay.Suite.UI
         {
             if (draft == null) throw new ArgumentNullException(nameof(draft));
             if (draft.IsDisposed) throw new ObjectDisposedException(nameof(ReplayDraft));
+            if (IsWeb) throw new NotSupportedException("The trim view is not available on Web.");
             ThrowIfModalOpen();
             cancellationToken.ThrowIfCancellationRequested();
 
@@ -361,6 +389,7 @@ namespace InstantReplay.Suite.UI
         public Task<IReadOnlyList<RecordingEntry>> PickRecordingsAsync(bool allowMultiple,
             CancellationToken cancellationToken)
         {
+            if (IsWeb) throw new NotSupportedException("The recording library is not available on Web.");
             ThrowIfModalOpen();
             cancellationToken.ThrowIfCancellationRequested();
 
@@ -525,7 +554,7 @@ namespace InstantReplay.Suite.UI
             var options = preset.ToEncodingOptions(context);
             var video = options.VideoOptions;
             var buffer = preset.Buffer;
-            var bufferKind = buffer.Mode == BufferSpec.SpecMode.Disk
+            var bufferKind = buffer.EffectiveMode == BufferSpec.SpecMode.Disk
                 ? Strings.Current.BufferOnDisk
                 : Strings.Current.BufferInMemory;
             var estimate = stats.EstimatedCapacitySeconds > 0

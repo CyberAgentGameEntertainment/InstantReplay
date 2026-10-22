@@ -250,6 +250,12 @@ namespace InstantReplay.Suite
         {
             _pendingPaths.Remove(filePath);
 
+            // On Web, the muxer hands the file to the browser as a download and leaves nothing at the path. There is
+            // then nothing to keep in the library, and the entry only describes what was written.
+            if (!File.Exists(filePath))
+                return new RecordingEntry(Path.GetFileNameWithoutExtension(filePath), filePath, createdAtUtc,
+                    durationSeconds, 0, source, CopyMetadata(metadata), null);
+
             try
             {
                 var thumbnailName = thumbnailPng is { Length: > 0 } ? WriteThumbnail(filePath, thumbnailPng) : null;
@@ -264,6 +270,16 @@ namespace InstantReplay.Suite
             ApplyRetention(entry);
             Changed?.Invoke();
             return entry;
+        }
+
+        private static Dictionary<string, string> CopyMetadata(IReadOnlyDictionary<string, string> metadata)
+        {
+            var copy = new Dictionary<string, string>();
+            if (metadata != null)
+                foreach (var pair in metadata)
+                    if (!string.IsNullOrEmpty(pair.Key))
+                        copy[pair.Key] = pair.Value;
+            return copy;
         }
 
         // Deletes the oldest recordings beyond the configured count or total size. The recording just added is kept even

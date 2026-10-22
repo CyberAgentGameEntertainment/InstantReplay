@@ -60,6 +60,11 @@ namespace InstantReplay.Suite.UI
         [Tooltip("Language of the interface. Automatic follows the system language.")] [SerializeField]
         private SuiteLanguage language = SuiteLanguage.Automatic;
 
+        [Tooltip("Font used for the characters that the font of the theme lacks, such as Japanese. Required to show " +
+                 "Japanese on Web, where the fonts of the system are not available.")]
+        [SerializeField]
+        private Font fallbackFont;
+
         [Tooltip("Multiplier applied to the physical size of the interface.")] [SerializeField] [Range(0.5f, 2f)]
         private float scale = 1f;
 
@@ -68,9 +73,7 @@ namespace InstantReplay.Suite.UI
         private PanelSettings _panelSettings;
         private SuitePreferences _preferences;
         private InstantReplayRecorder _recorder;
-#if !UNITY_6000_0_OR_NEWER
-        private SystemFontFallback _systemFontFallback;
-#endif
+        private FallbackFonts _fallbackFonts;
         private SuiteView _view;
 
         /// <summary>The active instance, or null.</summary>
@@ -162,10 +165,8 @@ namespace InstantReplay.Suite.UI
             _panelSettings.referenceDpi = referenceDpi / Mathf.Clamp(scale, 0.1f, 10f);
             // Used when the platform does not report the screen density, in which case one unit is one pixel.
             _panelSettings.fallbackDpi = _panelSettings.referenceDpi;
-#if !UNITY_6000_0_OR_NEWER
-            _systemFontFallback = SystemFontFallback.Create();
-            if (_systemFontFallback != null) _panelSettings.textSettings = _systemFontFallback.TextSettings;
-#endif
+            _fallbackFonts = FallbackFonts.Create(fallbackFont);
+            if (_fallbackFonts != null) _panelSettings.textSettings = _fallbackFonts.TextSettings;
 
             var document = gameObject.AddComponent<UIDocument>();
             document.hideFlags = HideFlags.DontSave | HideFlags.NotEditable;
@@ -175,7 +176,10 @@ namespace InstantReplay.Suite.UI
             _preferences = settings == null || settings.PersistUserPreferences ? SuitePreferences.Load() : null;
             if (_preferences is { hasOverlayCorner: true }) overlayCorner = _preferences.overlayCorner;
 
-            Strings.SetLanguage(language);
+            // Without a font for Japanese, Japanese text would be shown as missing characters on Web.
+            Strings.SetLanguage(language == SuiteLanguage.Automatic && SuiteView.IsWeb && fallbackFont == null
+                ? SuiteLanguage.English
+                : language);
             _view = new SuiteView(document.rootVisualElement, styleSheet, Recorder, transform)
             {
                 IsVisible = showOverlayOnLaunch, OverlayOpensPanel = overlayOpensPanel, OverlayCorner = overlayCorner
@@ -199,10 +203,8 @@ namespace InstantReplay.Suite.UI
             _recorder?.Dispose();
             _recorder = null;
             if (_panelSettings != null) Destroy(_panelSettings);
-#if !UNITY_6000_0_OR_NEWER
-            _systemFontFallback?.Dispose();
-            _systemFontFallback = null;
-#endif
+            _fallbackFonts?.Dispose();
+            _fallbackFonts = null;
         }
 
         #endregion
@@ -219,6 +221,7 @@ namespace InstantReplay.Suite.UI
         /// </remarks>
         /// <returns>The selection, or null when the user cancelled.</returns>
         /// <exception cref="InvalidOperationException">Another view of the suite is open.</exception>
+        /// <exception cref="NotSupportedException">Running on Web, where the footage cannot be previewed.</exception>
         /// <exception cref="OperationCanceledException">The token was cancelled; the view is closed.</exception>
         public Task<ReplaySelection> TrimAsync(ReplayDraft draft, CancellationToken cancellationToken = default)
         {
@@ -235,6 +238,7 @@ namespace InstantReplay.Suite.UI
         /// <param name="cancellationToken">Closes the view when cancelled.</param>
         /// <returns>The chosen recordings, newest first after any recovered ones. Empty when the user cancelled.</returns>
         /// <exception cref="InvalidOperationException">Another view of the suite is open.</exception>
+        /// <exception cref="NotSupportedException">Running on Web, where recordings are not kept in the library.</exception>
         /// <exception cref="OperationCanceledException">The token was cancelled; the view is closed.</exception>
         public Task<IReadOnlyList<RecordingEntry>> PickRecordingsAsync(bool allowMultiple = true,
             CancellationToken cancellationToken = default)

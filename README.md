@@ -32,6 +32,7 @@ When a bug occurs, you can export the recent gameplay leading up to the bug as a
   * [Quick Start](#quick-start)
   * [Instant Replay Suite](#instant-replay-suite)
     * [Setup](#setup)
+    * [Using the Suite on Web](#using-the-suite-on-web)
     * [Using the User Interface](#using-the-user-interface)
       * [Overlay](#overlay)
       * [Recorder Tab](#recorder-tab)
@@ -186,6 +187,7 @@ The preview of recordings requires the Video module, and thumbnails require the 
 | Overlay Opens Panel | Whether clicking or tapping the overlay opens the panel. When disabled, the overlay only shows the recording status and lets clicks and taps through. |
 | Overlay Corner | Corner of the screen where the overlay is placed until the user chooses another one in the panel. |
 | Language | Language of the user interface. `Automatic` uses Japanese when the system language is Japanese and English otherwise. |
+| Fallback Font | Font used for the characters that the font of the theme lacks, such as Japanese. Required to show Japanese on Web. See [Using the Suite on Web](#using-the-suite-on-web). |
 | Scale | Multiplier applied to the size of the user interface. |
 
 The user interface keeps a constant physical size on every screen. One unit of the style sheet corresponds to 1/96 inch on desktop platforms and to 1/160 inch on handheld devices.
@@ -204,6 +206,23 @@ The user interface keeps a constant physical size on every screen. One unit of t
 | Share Targets | Destinations offered when the user shares a recording. See [Sharing](#sharing). |
 
 Each preset has an identifier, a display name, the resolution (a fixed size, or a ratio of the screen size with an upper bound on the longer side), the frame rate, the video bitrate (a fixed value, or computed from bits per pixel), the audio bitrate, the buffer (in memory or on disk, with its size in MiB) and `ForceReadback`. The panel shows the duration that the buffer of the selected preset is estimated to hold.
+
+### Using the Suite on Web
+
+On Web (WebGL / WebGPU), the suite has the following limitations compared with the other platforms.
+
+- Recordings are saved as browser downloads and do not remain in `Application.persistentDataPath`. The Recordings tab is therefore not shown, and `InstantReplaySuite.PickRecordingsAsync` throws `NotSupportedException`.
+- The footage cannot be previewed, so the trim view is not available. **Save replay** saves the whole buffered footage. `InstantReplaySuite.TrimAsync` throws `NotSupportedException`.
+- The disk buffer is not available. A preset with a disk buffer records with a memory buffer of the same size, and the panel does not offer the choice of the buffer kind.
+- The fonts of the system are not available, so a font that contains Japanese characters must be assigned to **Fallback Font** to show Japanese. Without it, the user interface is shown in English regardless of the system language when **Language** is `Automatic`.
+
+To assign a font:
+
+1. Import a font file that contains Japanese characters, such as [Noto Sans JP](https://fonts.google.com/noto/specimen/Noto+Sans+JP), into the project.
+2. Make sure that **Include Font Data** is enabled in the import settings of the font. It is enabled by default.
+3. Assign the font to **Fallback Font** of the `InstantReplaySuite` component.
+
+The font file is included in the build, and a dynamic font asset is created from it at runtime. Japanese fonts are large, so consider a subset font that contains only the characters shown in the user interface to keep the build small. **Fallback Font** is also used on the other platforms, where it takes precedence over the fonts of the system.
 
 ### Using the User Interface
 

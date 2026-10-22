@@ -87,6 +87,8 @@ namespace InstantReplay.Suite.UI
                 (p, v) => p.Buffer = p.Buffer.Mode == BufferSpec.SpecMode.Disk
                     ? BufferSpec.Disk(Math.Max(1, v))
                     : BufferSpec.InMemory(Math.Max(1, v)));
+            // Where the disk buffer is unavailable, a disk preset buffers in memory, so there is nothing to choose.
+            SetVisible(_bufferMode, BufferSpec.IsDiskSupported);
 
             _forceReadback = new Toggle(Strings.Current.ForceReadback).AsSwitch();
             _forceReadback.RegisterValueChangedCallback(e => Apply(p => p.ForceReadback = e.newValue));
