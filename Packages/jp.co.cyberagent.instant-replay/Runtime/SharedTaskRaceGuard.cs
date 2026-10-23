@@ -72,6 +72,9 @@ namespace InstantReplay
                 }
                 else
                 {
+                    // Record the generation this arming belongs to; the drain claims via a CAS from this
+                    // exact value, so it can never claim a later generation of a recycled source.
+                    source.armVersion = selfVersion;
                     source.next = _head;
                     if (_head != null) _head.prev = source;
                     _head = source;
@@ -82,7 +85,7 @@ namespace InstantReplay
 
             // Shared task completed in the tiny window before we could enlist: complete from it right away.
             if (!armed)
-                source.TryCompleteFromSharedTask(_sharedTask);
+                source.TryCompleteFromSharedTask(_sharedTask, selfVersion);
 
             var awaiter = operation.ConfigureAwait(false).GetAwaiter();
             var action =
@@ -91,23 +94,33 @@ namespace InstantReplay
                 {
                     var (guard, source, selfVersion, awaiter) = ctx;
 
-                    guard.Unlink(source);
-
+                    Exception exception = null;
                     try
                     {
                         // Always observe the operation result, even if the shared task already won — this
                         // releases the operation's pooled state-machine box back to its pool.
                         awaiter.GetResult();
-                        if (Interlocked.CompareExchange(ref source.SelfVersion, selfVersion + 1, selfVersion) !=
-                            selfVersion) return;
-                        source.core.SetResult(false);
                     }
                     catch (Exception ex)
                     {
-                        if (Interlocked.CompareExchange(ref source.SelfVersion, selfVersion + 1, selfVersion) !=
-                            selfVersion) return;
-                        source.core.SetException(ex);
+                        exception = ex;
                     }
+
+                    // Claim this generation before touching the list. If the shared task side already won,
+                    // the source may have been handed back to the pool, re-rented and re-armed by another
+                    // guard; unlinking it here would rip it out of that guard's list (without its _gate)
+                    // and its shared-task drain would then never complete it. Losing the claim also means
+                    // there is nothing left to unlink: the winner either drained the list (inList is
+                    // false) or never linked this source at all.
+                    if (Interlocked.CompareExchange(ref source.SelfVersion, selfVersion + 1, selfVersion) !=
+                        selfVersion) return;
+
+                    // We won the claim, so nobody has completed this source yet: it cannot have been
+                    // recycled and still belongs to this guard's generation, making Unlink safe.
+                    guard.Unlink(source);
+
+                    if (exception == null) source.core.SetResult(false);
+                    else source.core.SetException(exception);
                 }, (this, source, selfVersion, awaiter));
 
             awaiter.UnsafeOnCompleted(action.Wrapper);
@@ -117,26 +130,47 @@ namespace InstantReplay
 
         private void OnSharedTaskCompleted()
         {
-            Source head;
+            Source claimed;
             lock (_gate)
             {
                 _sharedTaskDrained = true;
-                head = _head;
+                claimed = null;
+                var s = _head;
                 _head = null;
-                // Mark every node as no longer in the list so a concurrent Unlink becomes a no-op. The
-                // Next links are left intact here so we can walk the snapshot after releasing the lock.
-                for (var s = head; s != null; s = s.next)
+                while (s != null)
+                {
+                    var next = s.next;
+                    // Mark the node as no longer in the list so a concurrent Unlink becomes a no-op.
                     s.inList = false;
+                    s.prev = null;
+                    s.next = null;
+
+                    // Claim the node's current generation via its arm-time version. The only competing
+                    // claim is the operation continuation's CAS from the same baseline, so exactly one
+                    // side wins; if it already won it will complete the source itself (its Unlink has to
+                    // wait for _gate, so it cannot complete — let alone recycle — the source while we
+                    // hold the lock). A recycled source can never be claimed here because its
+                    // SelfVersion has moved past armVersion for good.
+                    if (Interlocked.CompareExchange(ref s.SelfVersion, s.armVersion + 1, s.armVersion) ==
+                        s.armVersion)
+                    {
+                        // We own the node now; reuse its link to chain the claimed nodes.
+                        s.next = claimed;
+                        claimed = s;
+                    }
+
+                    s = next;
+                }
             }
 
-            for (var s = head; s != null;)
+            // Complete outside the lock: SetResult may run the consumer's continuation inline.
+            for (var s = claimed; s != null;)
             {
                 // Capture next and detach before completing: completing may hand this source back to the
                 // pool and have it re-rented elsewhere.
                 var next = s.next;
-                s.prev = null;
                 s.next = null;
-                s.TryCompleteFromSharedTask(_sharedTask);
+                s.CompleteFromSharedTask(_sharedTask);
                 s = next;
             }
         }
@@ -172,6 +206,10 @@ namespace InstantReplay
 
         private sealed class Source : IValueTaskSource
         {
+            // The value SelfVersion had when this source was armed; written under the owning guard's
+            // _gate while linking and read under the same lock by the drain, which uses it as the CAS
+            // baseline for its claim.
+            public int armVersion;
             public ManualResetValueTaskSourceCore<bool> core;
             public bool inList;
             public Source next;
@@ -206,12 +244,17 @@ namespace InstantReplay
                 core.OnCompleted(continuation, state, token, flags);
             }
 
-            public void TryCompleteFromSharedTask(Task sharedTask)
+            public void TryCompleteFromSharedTask(Task sharedTask, int selfVersion)
             {
-                var selfVersion = SelfVersion;
                 if (Interlocked.CompareExchange(ref SelfVersion, selfVersion + 1, selfVersion) != selfVersion)
                     return;
 
+                CompleteFromSharedTask(sharedTask);
+            }
+
+            // Only call after winning the generation claim (the SelfVersion CAS) for this source.
+            public void CompleteFromSharedTask(Task sharedTask)
+            {
                 if (sharedTask.IsFaulted)
                 {
                     var aggregate = sharedTask.Exception;
