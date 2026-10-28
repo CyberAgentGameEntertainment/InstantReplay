@@ -277,6 +277,7 @@ fn expand_class(declaration: &JavaApi, metadata: &Metadata, class: &ClassDecl) -
         );
     }
 
+    let runtime = &declaration.runtime;
     let class_since = metadata.classes[&jni_name].since;
     let doc = format!(
         "Wrappers for `{}`.\n\nIntroduced in API level {class_since}.",
@@ -299,6 +300,23 @@ fn expand_class(declaration: &JavaApi, metadata: &Metadata, class: &ClassDecl) -
         impl #name {
             /// JNI name of the class, as accepted by `JNIEnv::find_class`.
             pub const CLASS: &'static str = #jni_name;
+
+            /// Global reference to the class, looked up on first use. It also keeps the class from
+            /// being unloaded, which keeps the member IDs cached by the wrappers valid.
+            pub fn class(
+                env: &mut ::jni::JNIEnv<'_>,
+            ) -> ::jni::errors::Result<&'static ::jni::objects::GlobalRef> {
+                static CLASS: ::std::sync::OnceLock<::jni::objects::GlobalRef> =
+                    ::std::sync::OnceLock::new();
+                if let Some(class) = CLASS.get() {
+                    return Ok(class);
+                }
+                let __result = env.find_class(#jni_name);
+                let local = #runtime::checked(env, __result)?;
+                let global = env.new_global_ref(&local)?;
+                env.delete_local_ref(local)?;
+                Ok(CLASS.get_or_init(|| global))
+            }
 
             #members
         }
@@ -515,9 +533,30 @@ fn generate(
 
     let name = &member.name;
     let return_ty = return_type.return_type();
+    let return_signature = return_type.return_signature();
+    let class_ty = &class.name;
+
+    // Expression yielding the member ID, which is looked up once and cached. Looking a member up by
+    // name and parsing its descriptor costs far more than the call itself, and the wrappers are
+    // called for every frame.
+    let cached_id = |id_ty: TokenStream, lookup: TokenStream| {
+        quote! {{
+            static ID: ::std::sync::OnceLock<#id_ty> = ::std::sync::OnceLock::new();
+            match ID.get() {
+                Some(id) => *id,
+                None => {
+                    let class = #class_ty::class(env)?;
+                    let __result = env.#lookup(class, #java_name, #descriptor);
+                    let id = #runtime::checked(env, __result)?;
+                    *ID.get_or_init(|| id)
+                }
+            }
+        }}
+    };
 
     match member.kind {
         MemberKind::Method if is_constructor => {
+            let method_id = cached_id(quote!(::jni::objects::JMethodID), quote!(get_method_id));
             quote! {
                 #(#attrs)*
                 #[doc = #doc]
@@ -527,16 +566,43 @@ fn generate(
                     #api_param
                     #(#params),*
                 ) -> ::jni::errors::Result<::jni::objects::JObject<'local>> {
-                    let __result = env.new_object(#class_name, #descriptor, &[#(#args),*]);
+                    let __id = #method_id;
+                    let class = #class_ty::class(env)?;
+                    // SAFETY: The ID was looked up with the descriptor the arguments are built from.
+                    let __result =
+                        unsafe { env.new_object_unchecked(class, __id, &[#(#args.as_jni()),*]) };
                     #check(env, __result)
                 }
             }
         }
         MemberKind::Method => {
+            // SAFETY (of the generated calls): The ID was looked up with the descriptor that the
+            // argument values and the return type are derived from.
             let call = if member.is_static {
-                quote!(env.call_static_method(#class_name, #java_name, #descriptor, &[#(#args),*]))
+                let method_id = cached_id(
+                    quote!(::jni::objects::JStaticMethodID),
+                    quote!(get_static_method_id),
+                );
+                quote! {{
+                    let __id = #method_id;
+                    let class = #class_ty::class(env)?;
+                    unsafe {
+                        env.call_static_method_unchecked(
+                            class,
+                            __id,
+                            #return_signature,
+                            &[#(#args.as_jni()),*],
+                        )
+                    }
+                }}
             } else {
-                quote!(env.call_method(this, #java_name, #descriptor, &[#(#args),*]))
+                let method_id = cached_id(quote!(::jni::objects::JMethodID), quote!(get_method_id));
+                quote! {{
+                    let __id = #method_id;
+                    unsafe {
+                        env.call_method_unchecked(this, __id, #return_signature, &[#(#args.as_jni()),*])
+                    }
+                }}
             };
             let extract = return_type.from_jvalue(quote!(__value));
             quote! {
@@ -558,10 +624,15 @@ fn generate(
         MemberKind::Field => {
             let setter = format_ident!("set_{}", name);
             let extract = return_type.from_jvalue(quote!(__value));
+            let field_id = cached_id(quote!(::jni::objects::JFieldID), quote!(get_field_id));
             let get = if member.is_static {
+                // Static fields are read once and cached by their callers, so their ID is not.
                 quote!(env.get_static_field(#class_name, #java_name, #descriptor))
             } else {
-                quote!(env.get_field(this, #java_name, #descriptor))
+                quote! {{
+                    let __id = #field_id;
+                    env.get_field_unchecked(this, __id, #return_signature)
+                }}
             };
             let set = if member.is_static {
                 // Static field writes are not generated: nothing in this crate needs them, and the
@@ -580,7 +651,8 @@ fn generate(
                         this: &::jni::objects::JObject<'_>,
                         #value_arg: #value_ty,
                     ) -> ::jni::errors::Result<()> {
-                        let __result = env.set_field(this, #java_name, #descriptor, #value_jvalue);
+                        let __id = #field_id;
+                        let __result = env.set_field_unchecked(this, __id, #value_jvalue);
                         #check(env, __result)
                     }
                 })
@@ -674,10 +746,7 @@ C java/lang/Object 1
             generated.contains(r#""getKeys" , "()Ljava/util/Set;""#),
             "{generated}"
         );
-        assert!(
-            generated.contains(r#"new_object ("android/media/MediaFormat" , "()V""#),
-            "{generated}"
-        );
+        assert!(generated.contains(r#""<init>" , "()V""#), "{generated}");
         assert!(generated.contains(r#""flags" , "I""#), "{generated}");
         // The declaration string itself must never reach a JNI call.
         assert!(

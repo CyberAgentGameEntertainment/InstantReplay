@@ -20,6 +20,15 @@ pub enum AndroidError {
     #[error("Buffer is not a direct buffer")]
     NotDirectBuffer,
 
+    #[error("Range exceeds the capacity of the buffer")]
+    BufferOverflow,
+
+    #[error("Failed to spawn a thread: {0}")]
+    ThreadSpawnFailed(std::io::Error),
+
+    #[error("Encoder input thread has stopped")]
+    EncoderInputThreadStopped,
+
     // MediaCodec related errors
     #[error("Image is null")]
     ImageNull,
@@ -167,6 +176,9 @@ impl CategorizedError for AndroidError {
 
             // Resource allocation errors
             AndroidError::NotDirectBuffer => ErrorCategory::ResourceAllocation,
+            AndroidError::BufferOverflow => ErrorCategory::ResourceAllocation,
+            AndroidError::ThreadSpawnFailed(_) => ErrorCategory::ResourceAllocation,
+            AndroidError::EncoderInputThreadStopped => ErrorCategory::Communication,
             AndroidError::ImageNull => ErrorCategory::ResourceAllocation,
             AndroidError::NoInputBuffer => ErrorCategory::ResourceAllocation,
             AndroidError::ByteBufferCreationFailed => ErrorCategory::ResourceAllocation,
