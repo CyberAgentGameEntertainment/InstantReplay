@@ -7,7 +7,7 @@ use jni::{
 use std::future::Future;
 use std::pin::Pin;
 use std::{collections::HashMap, fmt::Display, sync::Arc, time::Duration};
-use unienc_common::{EncodedData, SpawnBlocking, UniencSampleKind, VideoFrameBgra32};
+use unienc_common::{EncodedData, Runtime, SpawnBlocking, UniencSampleKind, VideoFrameBgra32};
 
 use crate::bindings;
 use crate::error::{AndroidError, Result};
@@ -579,18 +579,27 @@ pub(crate) fn dequeue_input_buffer_off_executor<R: SpawnBlocking>(
     runtime.spawn_blocking(move || codec.dequeue_input_buffer(timeout))
 }
 
-/// Encoded outputs that the drain thread may hold before it waits for the consumer.
+/// Runs a long-running blocking loop on the blocking pool of the runtime.
+///
+/// The future of the blocking call is awaited by a task on the runtime rather than dropped, because
+/// dropping it may cancel the call before it starts.
+pub(crate) fn run_on_blocking_pool<R: Runtime>(runtime: &R, f: impl FnOnce() + Send + 'static) {
+    runtime.spawn(runtime.spawn_blocking(f));
+}
+
+/// Encoded outputs that the drain loop may hold before it waits for the consumer.
 const OUTPUT_QUEUE_CAPACITY: usize = 8;
 
-/// Drains the output of a codec on a dedicated thread.
+/// Drains the output of a codec in a loop that runs on the blocking pool.
 ///
-/// The thread waits in `dequeueOutputBuffer` itself, copies each output out of the codec and
-/// releases the buffer, and hands the result over through a bounded channel. Handing every dequeue
-/// to the blocking pool instead costs a task, a wake-up and a park per call, which amounts to more
-/// than the JNI calls themselves at the rate audio and video produce outputs. The thread stays
-/// attached to the JVM for its lifetime.
+/// The loop waits in `dequeueOutputBuffer` itself, copies each output out of the codec and releases
+/// the buffer, and hands the result over through a bounded channel. Handing every dequeue to the
+/// blocking pool as a separate call instead costs a task, a wake-up and a park per call, which
+/// amounts to more than the JNI calls themselves at the rate audio and video produce outputs. The
+/// whole loop is handed over once instead, so it occupies one thread of the pool while it runs, and
+/// the thread returns to the pool afterwards.
 ///
-/// The thread ends after the end-of-stream output, after an error, or once the receiver is dropped,
+/// The loop ends after the end-of-stream output, after an error, or once the receiver is dropped,
 /// which it notices within [`DEQUEUE_TIMEOUT`]. It holds a reference to the codec until then.
 pub(crate) struct OutputDrainer {
     rx: tokio::sync::mpsc::Receiver<Result<CommonEncodedData>>,
@@ -598,14 +607,11 @@ pub(crate) struct OutputDrainer {
 
 impl OutputDrainer {
     /// Starts draining. The codec must have been started.
-    pub fn start(codec: &MediaCodec, thread_name: &str) -> Result<Self> {
+    pub fn start<R: Runtime>(runtime: &R, codec: &MediaCodec) -> Self {
         let (tx, rx) = tokio::sync::mpsc::channel(OUTPUT_QUEUE_CAPACITY);
         let codec = codec.clone();
-        std::thread::Builder::new()
-            .name(thread_name.to_owned())
-            .spawn(move || drain_output(codec, tx))
-            .map_err(AndroidError::ThreadSpawnFailed)?;
-        Ok(Self { rx })
+        run_on_blocking_pool(runtime, move || drain_output(codec, tx));
+        Self { rx }
     }
 
     /// Returns the next output, or `None` once the end-of-stream output has been returned.

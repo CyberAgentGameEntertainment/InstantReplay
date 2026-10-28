@@ -21,9 +21,9 @@ pub struct MediaCodecAudioEncoderInput<R: unienc_common::Runtime + 'static> {
     /// Expected input timestamp (in samples) of the next push, i.e. the previous push's timestamp plus
     /// the number of frames it delivered. Used to detect discontinuities in the input timeline.
     next_input_position: Option<u64>,
-    /// Hands PCM to the input thread. Dropping it lets the thread signal the end of the stream.
+    /// Hands PCM to the input loop. Dropping it lets the loop signal the end of the stream.
     tx: tokio::sync::mpsc::Sender<AudioInputChunk>,
-    /// The error that stopped the input thread, if any.
+    /// The error that stopped the input loop, if any.
     error: Arc<Mutex<Option<AndroidError>>>,
     _runtime: PhantomData<R>,
 }
@@ -35,16 +35,16 @@ pub struct MediaCodecAudioEncoderOutput<R: unienc_common::Runtime + 'static> {
     _runtime: PhantomData<R>,
 }
 
-/// PCM handed from `push` to the input thread.
+/// PCM handed from `push` to the input loop.
 struct AudioInputChunk {
     /// Input timestamp (in samples) of the first frame of `bytes`. Only the first chunk's is used;
-    /// the thread derives the rest from the frames it has queued.
+    /// the loop derives the rest from the frames it has queued.
     timestamp_in_samples: u64,
     /// Signed 16-bit little-endian PCM, including any leading silence that fills a gap.
     bytes: Vec<u8>,
 }
 
-/// Chunks `push` may hand over before it waits for the input thread.
+/// Chunks `push` may hand over before it waits for the input loop.
 const INPUT_QUEUE_CAPACITY: usize = 2;
 
 /// Timed-out dequeues tolerated while waiting for the input buffer that carries the end of stream.
@@ -60,7 +60,7 @@ impl<R: unienc_common::Runtime + 'static> Encoder for MediaCodecAudioEncoder<R> 
 }
 
 impl<R: unienc_common::Runtime + 'static> MediaCodecAudioEncoder<R> {
-    pub fn new<A: unienc_common::AudioEncoderOptions>(options: &A, _runtime: R) -> Result<Self> {
+    pub fn new<A: unienc_common::AudioEncoderOptions>(options: &A, runtime: R) -> Result<Self> {
         let env = &mut attach_current_thread()?;
 
         // Create MediaFormat
@@ -75,11 +75,11 @@ impl<R: unienc_common::Runtime + 'static> MediaCodecAudioEncoder<R> {
         // Start encoder
         codec.start()?;
 
-        let drainer = OutputDrainer::start(&codec, "unienc-aud-out")?;
+        let drainer = OutputDrainer::start(&runtime, &codec);
 
         let (tx, rx) = tokio::sync::mpsc::channel(INPUT_QUEUE_CAPACITY);
         let error = Arc::new(Mutex::new(None));
-        let input_thread = AudioInputThread {
+        let input_loop = AudioInputLoop {
             codec,
             sample_rate: options.sample_rate(),
             channels: options.channels(),
@@ -88,10 +88,7 @@ impl<R: unienc_common::Runtime + 'static> MediaCodecAudioEncoder<R> {
         };
         {
             let error = error.clone();
-            std::thread::Builder::new()
-                .name("unienc-aud-in".to_owned())
-                .spawn(move || input_thread.run(rx, error))
-                .map_err(AndroidError::ThreadSpawnFailed)?;
+            run_on_blocking_pool(&runtime, move || input_loop.run(rx, error));
         }
 
         Ok(Self {
@@ -156,7 +153,7 @@ async fn push_impl<R: unienc_common::Runtime + 'static>(
             .lock()
             .map_err(|_| AndroidError::MutexPoisoned)?
             .take();
-        return Err(error.unwrap_or(AndroidError::EncoderInputThreadStopped));
+        return Err(error.unwrap_or(AndroidError::EncoderInputStopped));
     }
 
     Ok(())
@@ -170,10 +167,11 @@ impl<R: unienc_common::Runtime + 'static> EncoderOutput for MediaCodecAudioEncod
     }
 }
 
-/// Feeds PCM to the codec on a dedicated thread, which waits in `dequeueInputBuffer` itself rather
-/// than handing every wait to the blocking pool (see [`OutputDrainer`] for the rationale). Once the
+/// Feeds PCM to the codec in a loop that runs on the blocking pool and waits in `dequeueInputBuffer`
+/// itself, rather than handing every wait to the blocking pool as a separate call (see
+/// [`OutputDrainer`] for the rationale). Once the
 /// input is dropped and the queued PCM has been fed, it signals the end of the stream.
-struct AudioInputThread {
+struct AudioInputLoop {
     codec: MediaCodec,
     sample_rate: u32,
     channels: u32,
@@ -185,7 +183,7 @@ struct AudioInputThread {
     position_in_samples: Option<u64>,
 }
 
-impl AudioInputThread {
+impl AudioInputLoop {
     fn run(
         mut self,
         mut rx: tokio::sync::mpsc::Receiver<AudioInputChunk>,
@@ -285,7 +283,7 @@ impl AudioInputThread {
 
     fn queue_end_of_stream(&self) -> Result<()> {
         // A free input buffer appears only while the output is drained. If the output has already been
-        // dropped, none will, so give up rather than keep the thread waiting forever.
+        // dropped, none will, so give up rather than keep the loop waiting forever.
         let buffer_index = self.dequeue_input_buffer(Some(EOS_DEQUEUE_ATTEMPTS))?;
         self.codec.queue_input_buffer(
             buffer_index,

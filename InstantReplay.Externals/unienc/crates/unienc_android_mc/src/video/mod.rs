@@ -68,7 +68,7 @@ pub struct MediaCodecVideoEncoderOutput<R: unienc_common::Runtime + 'static> {
     initialization: Option<tokio::sync::oneshot::Receiver<()>>,
     /// Started on the first pull after the codec has been started.
     drainer: Option<OutputDrainer>,
-    _runtime: std::marker::PhantomData<R>,
+    runtime: R,
 }
 
 impl<R: unienc_common::Runtime + 'static> Encoder for MediaCodecVideoEncoder<R> {
@@ -165,7 +165,7 @@ impl<R: unienc_common::Runtime + 'static> MediaCodecVideoEncoder<R> {
                 codec: codec_output,
                 initialization: rx.into(),
                 drainer: None,
-                _runtime: std::marker::PhantomData,
+                runtime,
             },
         })
     }
@@ -404,7 +404,7 @@ async fn pull_video_output_impl<R: unienc_common::Runtime + 'static>(
         Some(drainer) => drainer,
         None => this
             .drainer
-            .insert(OutputDrainer::start(&this.codec, "unienc-vid-out")?),
+            .insert(OutputDrainer::start(&this.runtime, &this.codec)),
     };
     drainer.pull().await
 }
