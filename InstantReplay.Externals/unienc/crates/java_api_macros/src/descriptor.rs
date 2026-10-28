@@ -67,9 +67,7 @@ impl JType {
 
     /// `jni::signature::ReturnType` of a method or field of this type.
     pub fn return_signature(self) -> TokenStream {
-        let primitive = |name: TokenStream| {
-            quote!(::jni::signature::ReturnType::Primitive(::jni::signature::Primitive::#name))
-        };
+        let primitive = |name: TokenStream| quote!(::jni::signature::ReturnType::Primitive(::jni::signature::Primitive::#name));
         match self {
             JType::Void => primitive(quote!(Void)),
             JType::Bool => primitive(quote!(Boolean)),

@@ -74,7 +74,10 @@ impl HardwareBufferSurface {
         &self,
         ahb: *mut ndk_sys::AHardwareBuffer,
     ) -> Result<Arc<HardwareBufferTarget>> {
-        let mut targets = self.targets.lock().map_err(|_| AndroidError::MutexPoisoned)?;
+        let mut targets = self
+            .targets
+            .lock()
+            .map_err(|_| AndroidError::MutexPoisoned)?;
         if let Some(target) = targets.iter().find(|target| target.vk_image.ahb() == ahb) {
             return Ok(target.clone());
         }

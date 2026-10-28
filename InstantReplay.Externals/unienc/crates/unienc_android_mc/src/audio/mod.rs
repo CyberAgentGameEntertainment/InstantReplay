@@ -151,7 +151,11 @@ async fn push_impl<R: unienc_common::Runtime + 'static>(
         bytes,
     };
     if this.tx.send(chunk).await.is_err() {
-        let error = this.error.lock().map_err(|_| AndroidError::MutexPoisoned)?.take();
+        let error = this
+            .error
+            .lock()
+            .map_err(|_| AndroidError::MutexPoisoned)?
+            .take();
         return Err(error.unwrap_or(AndroidError::EncoderInputThreadStopped));
     }
 
@@ -263,8 +267,13 @@ impl AudioInputThread {
             self.last_timestamp = timestamp_us;
 
             // Queue input buffer
-            self.codec
-                .queue_input_buffer(buffer_index, position, bytes_to_write, timestamp_us, 0)?;
+            self.codec.queue_input_buffer(
+                buffer_index,
+                position,
+                bytes_to_write,
+                timestamp_us,
+                0,
+            )?;
 
             // Advance by the number of whole frames written (2 bytes per i16 sample, `channels` per frame).
             let frames_written = (bytes_to_write / (2 * self.channels as usize)) as u64;
