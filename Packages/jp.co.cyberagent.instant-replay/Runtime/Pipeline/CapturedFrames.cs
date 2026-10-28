@@ -210,30 +210,32 @@ namespace InstantReplay
     }
 
     /// <summary>
-    ///     Frames whose payloads are held in the <see cref="EncodedFrameRingStorage" /> of an in-memory buffer. The
-    ///     storage is no longer written to, and it is released together with this object.
+    ///     Frames whose payloads are held in the <see cref="EncodedFrameTrackStorage" /> of each stream of an in-memory
+    ///     buffer. The storages are no longer written to, and they are released together with this object.
     /// </summary>
-    internal sealed class RingStorageCapturedFrames : CapturedFrames
+    internal sealed class TrackStorageCapturedFrames : CapturedFrames
     {
         private readonly ArraySegment<StoredEncodedFrame> _audio;
         private readonly EncodedFrameDescriptor[] _audioDescriptors;
         private readonly EncodedFrame[] _audioMetadata;
         private readonly Action<Exception> _onError;
-        private EncodedFrameRingStorage _storage;
         private readonly ArraySegment<StoredEncodedFrame> _video;
         private readonly EncodedFrameDescriptor[] _videoDescriptors;
         private readonly EncodedFrame[] _videoMetadata;
+        private EncodedFrameTrackStorage _audioStorage;
         private bool _disposed;
+        private EncodedFrameTrackStorage _videoStorage;
 
         /// <param name="videoMetadata">Configuration records of the video stream, which this object takes over.</param>
         /// <param name="audioMetadata">Configuration records of the audio stream, which this object takes over.</param>
-        public RingStorageCapturedFrames(EncodedFrameRingStorage storage, EncodedFrame[] videoMetadata,
-            ArraySegment<StoredEncodedFrame> video, EncodedFrame[] audioMetadata,
-            ArraySegment<StoredEncodedFrame> audio, Action<Exception> onError = null)
+        public TrackStorageCapturedFrames(EncodedFrameTrackStorage videoStorage, EncodedFrame[] videoMetadata,
+            ArraySegment<StoredEncodedFrame> video, EncodedFrameTrackStorage audioStorage,
+            EncodedFrame[] audioMetadata, ArraySegment<StoredEncodedFrame> audio, Action<Exception> onError = null)
         {
-            _storage = storage;
+            _videoStorage = videoStorage;
             _videoMetadata = videoMetadata;
             _video = video;
+            _audioStorage = audioStorage;
             _audioMetadata = audioMetadata;
             _audio = audio;
             _onError = onError;
@@ -247,11 +249,11 @@ namespace InstantReplay
         public override EncodedFrameSelection CreateSelection(int videoStart, int videoEnd, int audioStart,
             int audioEnd)
         {
-            if (_disposed) throw new ObjectDisposedException(nameof(RingStorageCapturedFrames));
+            if (_disposed) throw new ObjectDisposedException(nameof(TrackStorageCapturedFrames));
             return new EncodedFrameSelection(
-                new RingStorageFrameReader(_storage, _videoMetadata, false,
+                new TrackStorageFrameReader(_videoStorage, _videoMetadata, false,
                     _video.Slice(videoStart, videoEnd - videoStart)),
-                new RingStorageFrameReader(_storage, _audioMetadata, false,
+                new TrackStorageFrameReader(_audioStorage, _audioMetadata, false,
                     _audio.Slice(audioStart, audioEnd - audioStart)));
         }
 
@@ -260,7 +262,8 @@ namespace InstantReplay
             if (_disposed) return;
             _disposed = true;
             // Released explicitly, since the capture may stay referenced after it is disposed.
-            _storage = null;
+            _videoStorage = null;
+            _audioStorage = null;
             EncodedFrameSelector.DisposeAll(_videoMetadata, _onError);
             EncodedFrameSelector.DisposeAll(_audioMetadata, _onError);
         }

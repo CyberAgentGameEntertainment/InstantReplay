@@ -39,9 +39,11 @@ namespace InstantReplay.DiskBufferTests
             Run("in-memory capture can be read repeatedly", InMemoryCaptureCanBeReadRepeatedly);
             Run("capture duration ignores a trailing frame at time zero", DurationIgnoresTrailingFrameAtTimeZero);
             Run("disk capture reads ranges and releases its directory", DiskCaptureReadsRanges);
-            Run("ring storage keeps payloads across chunks and wrap-around", RingStorageKeepsPayloads);
+            Run("track storage keeps payloads across chunks", TrackStorageKeepsPayloads);
             Run("in-memory buffer stays within its budget", InMemoryBufferStaysWithinBudget);
-            Run("in-memory capture from the ring storage can be read repeatedly", RingStorageCaptureCanBeReadRepeatedly);
+            Run("in-memory buffer evicts in timestamp order when audio arrives late", InMemoryBufferEvictsInTimestampOrder);
+            Run("in-memory buffer gives the budget to the stream that keeps arriving", InMemoryBufferSharesBudget);
+            Run("in-memory capture from the track storages can be read repeatedly", TrackStorageCaptureCanBeReadRepeatedly);
             RunEndToEnd();
 
             Console.WriteLine(_failures == 0
@@ -609,36 +611,51 @@ namespace InstantReplay.DiskBufferTests
             AssertEqual(1, released, "the directory is released once");
         }
 
-        private static void RingStorageKeepsPayloads(string directory)
+        private static void TrackStorageKeepsPayloads(string directory)
         {
             _ = directory;
 
-            // A capacity that is not a multiple of the chunk size, and payloads that straddle chunks and wrap around.
-            var storage = new EncodedFrameRingStorage(1000, 64);
-            var live = new Queue<(long Position, byte[] Payload)>();
+            // Two storages share a pool of 16 chunks, and their payloads straddle chunks.
+            var pool = new EncodedFrameChunkPool(64, 16);
+            var storages = new[] { new EncodedFrameTrackStorage(pool), new EncodedFrameTrackStorage(pool) };
+            var live = new[] { new Queue<(long Position, byte[] Payload)>(), new Queue<(long Position, byte[] Payload)>() };
             byte[] scratch = null;
 
-            for (var i = 0; i < 200; i++)
+            for (var i = 0; i < 400; i++)
             {
+                var track = i * 7 % 3 == 0 ? 1 : 0;
                 var payload = Payload(1 + i * 37 % 300, (byte)i);
-                while (storage.Capacity - storage.UsedBytes < payload.Length)
+                var storage = storages[track];
+                while (pool.AvailableChunks < storage.GetChunksToAllocate(payload.Length))
                 {
-                    var (position, oldest) = live.Dequeue();
-                    storage.Release(position + oldest.Length);
+                    // Releases the other track first while it holds anything, then this one.
+                    var victim = live[1 - track].Count > 0 ? 1 - track : track;
+                    var (position, oldest) = live[victim].Dequeue();
+                    storages[victim].Release(position + oldest.Length);
                 }
 
-                live.Enqueue((storage.Write(payload), payload));
-                AssertTrue(storage.UsedBytes <= storage.Capacity, $"frame {i}: used bytes stay within the capacity");
+                live[track].Enqueue((storage.Write(payload), payload));
+                AssertTrue(pool.AllocatedBytes <= pool.Capacity, $"frame {i}: the chunks stay within the capacity");
 
-                foreach (var (position, expected) in live)
-                    if (!storage.GetPayload(position, expected.Length, ref scratch).SequenceEqual(expected))
+                for (var t = 0; t < 2; t++)
+                foreach (var (position, expected) in live[t])
+                    if (!storages[t].GetPayload(position, expected.Length, ref scratch).SequenceEqual(expected))
                     {
-                        AssertTrue(false, $"frame {i}: payload at {position} is intact");
+                        AssertTrue(false, $"frame {i}: payload at {position} of track {t} is intact");
                         break;
                     }
             }
 
-            AssertEqual(1000L, storage.AllocatedBytes, "chunks add up to the capacity exactly");
+            // Emptying a storage returns every chunk, including the partly written one.
+            for (var t = 0; t < 2; t++)
+                while (live[t].Count > 0)
+                {
+                    var (position, payload) = live[t].Dequeue();
+                    storages[t].Release(position + payload.Length);
+                }
+
+            AssertEqual(pool.MaxChunks, pool.AvailableChunks, "every chunk is returned once the storages are empty");
+            AssertEqual(pool.Capacity, pool.AllocatedBytes, "the chunks are reused rather than allocated again");
         }
 
         private static void InMemoryBufferStaysWithinBudget(string directory)
@@ -659,6 +676,7 @@ namespace InstantReplay.DiskBufferTests
                 AssertTrue(buffer.TryAddAudioFrame(EncodedFrame.CreateWithCopy(Payload(300, (byte)i), i * 0.1,
                     UniencSampleKind.Key)), $"audio frame {i} is accepted");
                 AssertTrue(buffer.GetStatistics().UsedBytes <= budget, $"frame {i}: the budget is honoured");
+                AssertTrue(buffer.AllocatedBytes <= budget, $"frame {i}: the chunks stay within the budget");
             }
 
             AssertTrue(!buffer.TryAddVideoFrame(EncodedFrame.CreateWithCopy(Payload(budget + 1, 0), 10,
@@ -687,7 +705,74 @@ namespace InstantReplay.DiskBufferTests
             AssertTrue(buffer.GetFramesForDurationAsync(null).Result.IsEmpty, "the frames are taken only once");
         }
 
-        private static void RingStorageCaptureCanBeReadRepeatedly(string directory)
+        private static void InMemoryBufferEvictsInTimestampOrder(string directory)
+        {
+            _ = directory;
+
+            // About 20 KB/s against a budget of 128 KiB, so about six seconds are retained.
+            const int budget = 128 * 1024;
+            using var buffer = new BoundedEncodedFrameBuffer(budget, null, 1024);
+            var audioTime = 0.0;
+            var evicted = false;
+
+            for (var i = 0; i < 30 * 30; i++)
+            {
+                var time = i / 30.0;
+                buffer.TryAddVideoFrame(EncodedFrame.CreateWithCopy(Payload(500, (byte)i), time,
+                    i % 30 == 0 ? UniencSampleKind.Key : UniencSampleKind.Interpolated));
+
+                // The audio arrives in bursts that cover the last two seconds.
+                if (i % 60 != 59) continue;
+                for (; audioTime <= time; audioTime += 0.02)
+                    buffer.TryAddAudioFrame(EncodedFrame.CreateWithCopy(Payload(100, (byte)i), audioTime,
+                        UniencSampleKind.Key));
+
+                var (video, audio) = buffer.OldestTimestamps;
+                if (video > 0) evicted = true;
+                AssertTrue(Math.Abs(video.Value - audio.Value) < 0.05,
+                    $"{time:F1} s: the oldest video ({video:F3} s) and audio ({audio:F3} s) are aligned");
+                AssertTrue(buffer.AllocatedBytes <= budget, $"{time:F1} s: the chunks stay within the budget");
+            }
+
+            AssertTrue(evicted, "frames have been evicted");
+            AssertTrue(buffer.GetStatistics().UsedBytes >= budget - 8 * 1024,
+                "the budget is used except for partly filled chunks");
+        }
+
+        private static void InMemoryBufferSharesBudget(string directory)
+        {
+            _ = directory;
+
+            const int budget = 64 * 1024;
+            using var buffer = new BoundedEncodedFrameBuffer(budget, null, 1024);
+
+            // Both streams for a second, then only the video, which takes over the budget held by the audio.
+            for (var i = 0; i < 50; i++)
+                buffer.TryAddAudioFrame(EncodedFrame.CreateWithCopy(Payload(300, (byte)i), i * 0.02,
+                    UniencSampleKind.Key));
+            for (var i = 0; i < 1000; i++)
+            {
+                buffer.TryAddVideoFrame(EncodedFrame.CreateWithCopy(Payload(700, (byte)i), i / 30.0,
+                    i % 30 == 0 ? UniencSampleKind.Key : UniencSampleKind.Interpolated));
+                AssertTrue(buffer.AllocatedBytes <= budget, $"video frame {i}: the chunks stay within the budget");
+            }
+
+            AssertTrue(buffer.OldestTimestamps.Audio == null, "the older audio is evicted first");
+            AssertTrue(buffer.GetStatistics().UsedBytes >= budget - 2 * 1024, "the video uses the whole budget");
+
+            // Only audio.
+            using var audioOnly = new BoundedEncodedFrameBuffer(budget, null, 1024);
+            for (var i = 0; i < 1000; i++)
+            {
+                AssertTrue(audioOnly.TryAddAudioFrame(EncodedFrame.CreateWithCopy(Payload(300, (byte)i), i * 0.02,
+                    UniencSampleKind.Key)), $"audio frame {i} is accepted");
+                AssertTrue(audioOnly.AllocatedBytes <= budget, $"audio frame {i}: the chunks stay within the budget");
+            }
+
+            AssertTrue(audioOnly.OldestTimestamps.Audio > 0, "the oldest audio is evicted");
+        }
+
+        private static void TrackStorageCaptureCanBeReadRepeatedly(string directory)
         {
             _ = directory;
 
