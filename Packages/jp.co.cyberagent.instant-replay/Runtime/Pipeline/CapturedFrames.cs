@@ -210,6 +210,63 @@ namespace InstantReplay
     }
 
     /// <summary>
+    ///     Frames whose payloads are held in the <see cref="EncodedFrameRingStorage" /> of an in-memory buffer. The
+    ///     storage is no longer written to, and it is released together with this object.
+    /// </summary>
+    internal sealed class RingStorageCapturedFrames : CapturedFrames
+    {
+        private readonly ArraySegment<StoredEncodedFrame> _audio;
+        private readonly EncodedFrameDescriptor[] _audioDescriptors;
+        private readonly EncodedFrame[] _audioMetadata;
+        private readonly Action<Exception> _onError;
+        private EncodedFrameRingStorage _storage;
+        private readonly ArraySegment<StoredEncodedFrame> _video;
+        private readonly EncodedFrameDescriptor[] _videoDescriptors;
+        private readonly EncodedFrame[] _videoMetadata;
+        private bool _disposed;
+
+        /// <param name="videoMetadata">Configuration records of the video stream, which this object takes over.</param>
+        /// <param name="audioMetadata">Configuration records of the audio stream, which this object takes over.</param>
+        public RingStorageCapturedFrames(EncodedFrameRingStorage storage, EncodedFrame[] videoMetadata,
+            ArraySegment<StoredEncodedFrame> video, EncodedFrame[] audioMetadata,
+            ArraySegment<StoredEncodedFrame> audio, Action<Exception> onError = null)
+        {
+            _storage = storage;
+            _videoMetadata = videoMetadata;
+            _video = video;
+            _audioMetadata = audioMetadata;
+            _audio = audio;
+            _onError = onError;
+            _videoDescriptors = Rebase(EncodedFrameSelector.ToDescriptors(video.AsSpan()));
+            _audioDescriptors = Rebase(EncodedFrameSelector.ToDescriptors(audio.AsSpan()));
+        }
+
+        public override IReadOnlyList<EncodedFrameDescriptor> Video => _videoDescriptors;
+        public override IReadOnlyList<EncodedFrameDescriptor> Audio => _audioDescriptors;
+
+        public override EncodedFrameSelection CreateSelection(int videoStart, int videoEnd, int audioStart,
+            int audioEnd)
+        {
+            if (_disposed) throw new ObjectDisposedException(nameof(RingStorageCapturedFrames));
+            return new EncodedFrameSelection(
+                new RingStorageFrameReader(_storage, _videoMetadata, false,
+                    _video.Slice(videoStart, videoEnd - videoStart)),
+                new RingStorageFrameReader(_storage, _audioMetadata, false,
+                    _audio.Slice(audioStart, audioEnd - audioStart)));
+        }
+
+        public override void Dispose()
+        {
+            if (_disposed) return;
+            _disposed = true;
+            // Released explicitly, since the capture may stay referenced after it is disposed.
+            _storage = null;
+            EncodedFrameSelector.DisposeAll(_videoMetadata, _onError);
+            EncodedFrameSelector.DisposeAll(_audioMetadata, _onError);
+        }
+    }
+
+    /// <summary>
     ///     Frames left in the segment files of a disk buffer. Only the location of every frame is held in memory, and the
     ///     payloads are read while muxing. The session directory is deleted when this object is disposed.
     /// </summary>

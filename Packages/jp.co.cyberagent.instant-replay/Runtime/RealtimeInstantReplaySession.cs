@@ -75,7 +75,8 @@ namespace InstantReplay
             var audioEncoder = encodingSystem.CreateAudioEncoder();
             var buffer = _buffer = options.DiskBuffer is { } diskBufferOptions
                 ? new DiskEncodedFrameBuffer(diskBufferOptions, options.VideoOptions, options.AudioOptions)
-                : new BoundedEncodedFrameBuffer(options.MaxMemoryUsageBytesForCompressedFrames);
+                : new BoundedEncodedFrameBuffer(options.MaxMemoryUsageBytesForCompressedFrames,
+                    ILogger.LogExceptionCore);
 
             // ReSharper disable once ConvertToLocalFunction
             Action<LazyVideoFrameData> onLazyVideoFrameDataDropped = async static dropped =>

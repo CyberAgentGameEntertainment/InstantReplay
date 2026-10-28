@@ -39,6 +39,9 @@ namespace InstantReplay.DiskBufferTests
             Run("in-memory capture can be read repeatedly", InMemoryCaptureCanBeReadRepeatedly);
             Run("capture duration ignores a trailing frame at time zero", DurationIgnoresTrailingFrameAtTimeZero);
             Run("disk capture reads ranges and releases its directory", DiskCaptureReadsRanges);
+            Run("ring storage keeps payloads across chunks and wrap-around", RingStorageKeepsPayloads);
+            Run("in-memory buffer stays within its budget", InMemoryBufferStaysWithinBudget);
+            Run("in-memory capture from the ring storage can be read repeatedly", RingStorageCaptureCanBeReadRepeatedly);
             RunEndToEnd();
 
             Console.WriteLine(_failures == 0
@@ -604,6 +607,119 @@ namespace InstantReplay.DiskBufferTests
             captured.Dispose();
             captured.Dispose();
             AssertEqual(1, released, "the directory is released once");
+        }
+
+        private static void RingStorageKeepsPayloads(string directory)
+        {
+            _ = directory;
+
+            // A capacity that is not a multiple of the chunk size, and payloads that straddle chunks and wrap around.
+            var storage = new EncodedFrameRingStorage(1000, 64);
+            var live = new Queue<(long Position, byte[] Payload)>();
+            byte[] scratch = null;
+
+            for (var i = 0; i < 200; i++)
+            {
+                var payload = Payload(1 + i * 37 % 300, (byte)i);
+                while (storage.Capacity - storage.UsedBytes < payload.Length)
+                {
+                    var (position, oldest) = live.Dequeue();
+                    storage.Release(position + oldest.Length);
+                }
+
+                live.Enqueue((storage.Write(payload), payload));
+                AssertTrue(storage.UsedBytes <= storage.Capacity, $"frame {i}: used bytes stay within the capacity");
+
+                foreach (var (position, expected) in live)
+                    if (!storage.GetPayload(position, expected.Length, ref scratch).SequenceEqual(expected))
+                    {
+                        AssertTrue(false, $"frame {i}: payload at {position} is intact");
+                        break;
+                    }
+            }
+
+            AssertEqual(1000L, storage.AllocatedBytes, "chunks add up to the capacity exactly");
+        }
+
+        private static void InMemoryBufferStaysWithinBudget(string directory)
+        {
+            _ = directory;
+
+            const int budget = 64 * 1024;
+            using var buffer = new BoundedEncodedFrameBuffer(budget);
+            buffer.TryAddVideoFrame(EncodedFrame.CreateWithCopy(Payload(7, 0xAA), 0, UniencSampleKind.Metadata));
+
+            var videoPayloads = new List<byte[]>();
+            for (var i = 0; i < 100; i++)
+            {
+                var payload = Payload(i % 10 == 0 ? 6000 : 1500, (byte)i);
+                videoPayloads.Add(payload);
+                AssertTrue(buffer.TryAddVideoFrame(EncodedFrame.CreateWithCopy(payload, i * 0.1,
+                    i % 10 == 0 ? UniencSampleKind.Key : UniencSampleKind.Interpolated)), $"video frame {i} is accepted");
+                AssertTrue(buffer.TryAddAudioFrame(EncodedFrame.CreateWithCopy(Payload(300, (byte)i), i * 0.1,
+                    UniencSampleKind.Key)), $"audio frame {i} is accepted");
+                AssertTrue(buffer.GetStatistics().UsedBytes <= budget, $"frame {i}: the budget is honoured");
+            }
+
+            AssertTrue(!buffer.TryAddVideoFrame(EncodedFrame.CreateWithCopy(Payload(budget + 1, 0), 10,
+                UniencSampleKind.Key)), "a frame larger than the budget is rejected");
+
+            var selection = buffer.GetFramesForDurationAsync(null).Result;
+            using (selection)
+            {
+                AssertTrue(!selection.IsEmpty, "the selection is not empty");
+                AssertTrue(selection.VideoFrames.TryReadNext(out var metadata), "the configuration record is read");
+                AssertEqual(UniencSampleKind.Metadata, metadata.Kind, "the configuration record comes first");
+                metadata.Dispose();
+
+                var read = new List<EncodedFrame>();
+                while (selection.VideoFrames.TryReadNext(out var frame)) read.Add(frame);
+
+                AssertTrue(read.Count > 0, "samples are selected");
+                AssertEqual(UniencSampleKind.Key, read[0].Kind, "the selection starts at a key frame");
+                AssertTrue(Math.Abs(read[0].Timestamp) < 1e-9, "the selection is rebased");
+                var first = videoPayloads.Count - read.Count;
+                for (var i = 0; i < read.Count; i++)
+                    AssertTrue(read[i].Data.SequenceEqual(videoPayloads[first + i]), $"sample {i} is intact");
+                foreach (var frame in read) frame.Dispose();
+            }
+
+            AssertTrue(buffer.GetFramesForDurationAsync(null).Result.IsEmpty, "the frames are taken only once");
+        }
+
+        private static void RingStorageCaptureCanBeReadRepeatedly(string directory)
+        {
+            _ = directory;
+
+            using var buffer = new BoundedEncodedFrameBuffer(1024 * 1024);
+            buffer.TryAddVideoFrame(EncodedFrame.CreateWithCopy(Payload(7, 0xAA), 0, UniencSampleKind.Metadata));
+            var videoPayloads = new List<byte[]>();
+            for (var i = 0; i < 10; i++)
+            {
+                var payload = Payload(70000 + i, (byte)i);
+                videoPayloads.Add(payload);
+                buffer.TryAddVideoFrame(EncodedFrame.CreateWithCopy(payload, i * 0.1,
+                    i % 5 == 0 ? UniencSampleKind.Key : UniencSampleKind.Interpolated));
+            }
+
+            using var captured = buffer.CaptureAsync(null).Result;
+            AssertEqual(10, captured.Video.Count, "every sample is captured");
+
+            for (var pass = 0; pass < 2; pass++)
+            {
+                captured.ResolveRange(0.5, null, out var videoStart, out var videoEnd, out var audioStart,
+                    out var audioEnd);
+                using var selection = captured.CreateSelection(videoStart, videoEnd, audioStart, audioEnd);
+                var video = new List<EncodedFrame>();
+                while (selection.VideoFrames.TryReadNext(out var frame)) video.Add(frame);
+
+                AssertEqual(6, video.Count, $"pass {pass}: the configuration record and five samples are read");
+                AssertEqual(UniencSampleKind.Metadata, video[0].Kind, $"pass {pass}: the configuration record is first");
+                for (var i = 1; i < video.Count; i++)
+                    AssertTrue(video[i].Data.SequenceEqual(videoPayloads[4 + i]), $"pass {pass}: sample {i} is intact");
+                AssertTrue(Math.Abs(video[1].Timestamp) < 1e-9, $"pass {pass}: samples are rebased");
+                foreach (var frame in video) frame.Dispose();
+            }
         }
 
         private static InMemoryCapturedFrames CreateInMemoryCapture(out List<byte[]> videoPayloads,
