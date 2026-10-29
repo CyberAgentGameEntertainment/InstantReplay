@@ -132,7 +132,7 @@ CI runs only the tests of the native library; the Unity and C# sides are not tes
 
 ### Disk Buffer
 
-`InstantReplay.Externals/src/InstantReplay.DiskBuffer.Tests` compiles the storage layer of the disk-buffered mode without UnityEngine and exercises it together with the real native encoder. It is a console application that returns a non-zero exit code when a check fails.
+`InstantReplay.Externals/src/InstantReplay.DiskBuffer.Tests` compiles the storage layer of the disk-buffered mode and the in-memory buffer without UnityEngine and exercises them together with the real native encoder. It is a console application that returns a non-zero exit code when a check fails.
 
 ```sh
 cd InstantReplay.Externals

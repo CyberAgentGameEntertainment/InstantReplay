@@ -94,7 +94,7 @@ namespace InstantReplay
 
             // Always observe both tasks even if one of them fails, so that the muxer is not
             // disposed (by the caller) while the other task is still using it.
-            var whenAll = Task.WhenAll(MuxVideoAsync().AsTask(), MuxAudioAsync().AsTask());
+            var whenAll = Task.WhenAll(StartTrack(MuxVideoAsync), StartTrack(MuxAudioAsync));
             try
             {
                 await whenAll.ConfigureAwait(ContinueOnCapturedContext);
@@ -107,6 +107,21 @@ namespace InstantReplay
             }
 
             await muxer.CompleteAsync().ConfigureAwait(false);
+        }
+
+        /// <summary>
+        ///     Starts muxing one track. A push completes synchronously while the muxer has room for the frame, so a track
+        ///     started on the calling thread pushes most of the selection there before it first yields. The caller is
+        ///     typically the main thread of Unity, where this stalls the application for the duration of the export.
+        ///     Each track is therefore started on the thread pool, except on Web, which has no threads.
+        /// </summary>
+        private static Task StartTrack(Func<ValueTask> track)
+        {
+#if UNITY_WEBGL && !UNITY_EDITOR
+            return track().AsTask();
+#else
+            return Task.Run(() => track().AsTask());
+#endif
         }
     }
 }

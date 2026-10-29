@@ -65,8 +65,9 @@ unsafe impl<R: unienc_common::Runtime + 'static> Send for MediaCodecVideoEncoder
 
 pub struct MediaCodecVideoEncoderOutput<R: unienc_common::Runtime + 'static> {
     codec: MediaCodec,
-    end_of_stream: bool,
     initialization: Option<tokio::sync::oneshot::Receiver<()>>,
+    /// Started on the first pull after the codec has been started.
+    drainer: Option<OutputDrainer>,
     runtime: R,
 }
 
@@ -162,8 +163,8 @@ impl<R: unienc_common::Runtime + 'static> MediaCodecVideoEncoder<R> {
             },
             output: MediaCodecVideoEncoderOutput {
                 codec: codec_output,
-                end_of_stream: false,
                 initialization: rx.into(),
+                drainer: None,
                 runtime,
             },
         })
@@ -399,7 +400,13 @@ async fn pull_video_output_impl<R: unienc_common::Runtime + 'static>(
         this.initialization = None;
     }
 
-    pull_encoded_data_with_codec(this.runtime.clone(), &this.codec, &mut this.end_of_stream).await
+    let drainer = match &mut this.drainer {
+        Some(drainer) => drainer,
+        None => this
+            .drainer
+            .insert(OutputDrainer::start(&this.runtime, &this.codec)),
+    };
+    drainer.pull().await
 }
 
 // Helper functions for JNI MediaCodec calls
