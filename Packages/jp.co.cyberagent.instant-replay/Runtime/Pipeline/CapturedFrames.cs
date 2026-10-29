@@ -210,6 +210,66 @@ namespace InstantReplay
     }
 
     /// <summary>
+    ///     Frames whose payloads are held in the <see cref="EncodedFrameTrackStorage" /> of each stream of an in-memory
+    ///     buffer. The storages are no longer written to, and they are released together with this object.
+    /// </summary>
+    internal sealed class TrackStorageCapturedFrames : CapturedFrames
+    {
+        private readonly ArraySegment<StoredEncodedFrame> _audio;
+        private readonly EncodedFrameDescriptor[] _audioDescriptors;
+        private readonly EncodedFrame[] _audioMetadata;
+        private readonly Action<Exception> _onError;
+        private readonly ArraySegment<StoredEncodedFrame> _video;
+        private readonly EncodedFrameDescriptor[] _videoDescriptors;
+        private readonly EncodedFrame[] _videoMetadata;
+        private EncodedFrameTrackStorage _audioStorage;
+        private bool _disposed;
+        private EncodedFrameTrackStorage _videoStorage;
+
+        /// <param name="videoMetadata">Configuration records of the video stream, which this object takes over.</param>
+        /// <param name="audioMetadata">Configuration records of the audio stream, which this object takes over.</param>
+        public TrackStorageCapturedFrames(EncodedFrameTrackStorage videoStorage, EncodedFrame[] videoMetadata,
+            ArraySegment<StoredEncodedFrame> video, EncodedFrameTrackStorage audioStorage,
+            EncodedFrame[] audioMetadata, ArraySegment<StoredEncodedFrame> audio, Action<Exception> onError = null)
+        {
+            _videoStorage = videoStorage;
+            _videoMetadata = videoMetadata;
+            _video = video;
+            _audioStorage = audioStorage;
+            _audioMetadata = audioMetadata;
+            _audio = audio;
+            _onError = onError;
+            _videoDescriptors = Rebase(EncodedFrameSelector.ToDescriptors(video.AsSpan()));
+            _audioDescriptors = Rebase(EncodedFrameSelector.ToDescriptors(audio.AsSpan()));
+        }
+
+        public override IReadOnlyList<EncodedFrameDescriptor> Video => _videoDescriptors;
+        public override IReadOnlyList<EncodedFrameDescriptor> Audio => _audioDescriptors;
+
+        public override EncodedFrameSelection CreateSelection(int videoStart, int videoEnd, int audioStart,
+            int audioEnd)
+        {
+            if (_disposed) throw new ObjectDisposedException(nameof(TrackStorageCapturedFrames));
+            return new EncodedFrameSelection(
+                new TrackStorageFrameReader(_videoStorage, _videoMetadata, false,
+                    _video.Slice(videoStart, videoEnd - videoStart)),
+                new TrackStorageFrameReader(_audioStorage, _audioMetadata, false,
+                    _audio.Slice(audioStart, audioEnd - audioStart)));
+        }
+
+        public override void Dispose()
+        {
+            if (_disposed) return;
+            _disposed = true;
+            // Released explicitly, since the capture may stay referenced after it is disposed.
+            _videoStorage = null;
+            _audioStorage = null;
+            EncodedFrameSelector.DisposeAll(_videoMetadata, _onError);
+            EncodedFrameSelector.DisposeAll(_audioMetadata, _onError);
+        }
+    }
+
+    /// <summary>
     ///     Frames left in the segment files of a disk buffer. Only the location of every frame is held in memory, and the
     ///     payloads are read while muxing. The session directory is deleted when this object is disposed.
     /// </summary>

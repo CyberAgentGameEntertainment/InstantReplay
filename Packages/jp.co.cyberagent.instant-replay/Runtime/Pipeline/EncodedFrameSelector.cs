@@ -104,6 +104,14 @@ namespace InstantReplay
             return descriptors;
         }
 
+        public static EncodedFrameDescriptor[] ToDescriptors(ReadOnlySpan<StoredEncodedFrame> frames)
+        {
+            var descriptors = new EncodedFrameDescriptor[frames.Length];
+            for (var i = 0; i < frames.Length; i++)
+                descriptors[i] = new EncodedFrameDescriptor(frames[i].Timestamp, frames[i].Kind);
+            return descriptors;
+        }
+
         public static EncodedFrameDescriptor[] ToDescriptors(IReadOnlyList<DiskBufferScannedRecord> records)
         {
             var descriptors = new EncodedFrameDescriptor[records.Count];
