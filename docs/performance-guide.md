@@ -2,7 +2,7 @@
 
 This document is intended for developers who use Instant Replay in projects with strict performance requirements. It describes the memory and the CPU / GPU work used by `RealtimeInstantReplaySession`, and how each setting affects them. Measurements on physical devices are given in the second half.
 
-The measured values are examples for specific devices, scenes and settings, and are not guaranteed for other environments. Verify the impact on your own project on physical devices, using the methods described in this document. The content of this document is based on Instant Replay v1.7.0.
+The measured values are examples for specific devices, scenes and settings, and are not guaranteed for other environments. Verify the impact on your own project on physical devices, using the methods described in this document. The descriptions apply to the versions after Instant Replay v1.7.0, which include the changes described in [Changes after v1.7.0](#changes-after-v170). Unless otherwise noted, the measured values were obtained with v1.7.0.
 
 A Japanese version of this document is available in [performance-guide.ja.md](performance-guide.ja.md).
 
@@ -30,7 +30,7 @@ Calling `StopAndExportAsync()` multiplexes (muxes) the data in the buffer into a
 | Frames before encoding (CPU) | Encoding width × height × 4 bytes × number of frames | Readback path | Native heap of UniEnc (described below) |
 | Input surfaces of the encoder | Encoding width × height × 4 bytes × a few | Blit path | Not shown |
 | Internal memory of the encoder | Unknown | Always | Not shown |
-| Buffer of encoded data | About 1.5 to 2 times `MaxMemoryUsageBytesForCompressedFrames` | Memory buffer | `System.Byte[]` in the managed heap |
+| Buffer of encoded data | Up to `MaxMemoryUsageBytesForCompressedFrames` | Memory buffer | `System.Byte[]` of 64 KiB in the managed heap |
 | Write queue of the disk buffer | Up to `DiskBufferOptions.MaxPendingWriteBytes` | Disk buffer | `System.Byte[]` in the managed heap |
 | Native heap of UniEnc | Allocated in units of 32 MiB | Always | `UniEnc` / `mimalloc` |
 
@@ -48,7 +48,11 @@ On the blit path, the GPU draws directly into the input surfaces of the encoder 
 
 #### Buffer of encoded data
 
-With the memory buffer, each encoded frame is stored in a `byte[]` rented from `ArrayPool<byte>.Shared`. Because `ArrayPool<byte>.Shared` returns arrays whose sizes are rounded up to a power of two, the total size of the allocated arrays is larger than the total size of the stored data. `MaxMemoryUsageBytesForCompressedFrames` limits the total size of the stored data and does not include the rounding. In the measurements, the managed heap usage (GC Used Memory) increased by 35 to 50 MB with the default of 20 MiB, and by approximately 103 MB with 60 MiB.
+With the memory buffer, each encoded frame is copied into chunks of 64 KiB on the managed heap. The video and audio streams take their chunks from one pool, and the total size of the chunks does not exceed `MaxMemoryUsageBytesForCompressedFrames`. A chunk is allocated when it is first needed and is reused after all frames in it have been discarded, so the managed heap grows while the buffer fills and stops growing when the buffer reaches the limit. Each chunk is smaller than the threshold of the large object heap. When the buffer is full, the oldest frames are discarded in timestamp order across the video and audio streams. The chunks are released when the session is disposed.
+
+In the measurements on Android, the managed heap usage (GC Used Memory) with a full buffer increased by approximately 23 MB with the default of 20 MiB, and by approximately 70 MB with 60 MiB. These values include a few megabytes of allocations other than the buffer.
+
+In v1.7.0, each encoded frame was stored in a `byte[]` rented from `ArrayPool<byte>.Shared`, which returns arrays whose sizes are rounded up to a power of two. The managed heap usage therefore increased by 35 to 50 MB with 20 MiB, and by approximately 103 MB with 60 MiB. In addition, after an export, the buffer could remain on the managed heap even after the session was disposed.
 
 Once the managed heap has grown, it rarely shrinks, so GC Reserved Memory remains increased after recording ends.
 
@@ -74,7 +78,7 @@ The input surfaces of the encoder, the internal buffers of the hardware encoder,
 3. Examine the following items.
    - Unity Objects: the RenderTextures `InstantReplay ScreenshotFrameProvider` and `InstantReplay Preprocessing`
    - The `UniEnc` area under Native in All Of Memory
-   - Managed Objects: the total size of `System.Byte[]`. The arrays of encoded data are referenced through `UniEnc.EncodedFrame[]`.
+   - Managed Objects: the total size of `System.Byte[]`. The chunks of encoded data are arrays of 65,536 bytes referenced through `InstantReplay.EncodedFrameTrackStorage` and `InstantReplay.EncodedFrameChunkPool`.
 4. Perform the same steps without recording, and compare the two snapshots.
 
 ## CPU / GPU Work
@@ -100,15 +104,15 @@ This work runs in parallel with frame rendering and is not added directly to the
 The following work occurs at specific points rather than on every frame.
 
 - Session creation: the constructor of `RealtimeInstantReplaySession` initializes the encoders. In the measurements, it took 30 to 110 ms on iOS and 55 to 220 ms on Android, the longest being with the disk buffer on both platforms.
-- Export: with the memory buffer, part of the processing of `StopAndExportAsync()` runs synchronously on the main thread, and in the measurements one frame of 95 to 135 ms occurred. It appears as `UnitySynchronizationContext.ExecuteTasks()` in the Profiler. This stall was not observed with the disk buffer.
+- Export: `StopAndExportAsync()` multiplexes the video and audio on the thread pool. In the measurements on Android with the memory buffer, the longest frame during export was 33 to 50 ms. In v1.7.0, the multiplexing and the first initialization of the local time zone, which is used for the default name of the output file, ran on the main thread, and one frame of 95 to 135 ms occurred. The time zone is now initialized on the thread pool when the session is created. On Web, which has no threads, these steps still run on the main thread.
 
 ## Effect of Settings on Memory and Frame Time
 
 ### Type of buffer (memory or disk)
 
-The memory buffer holds the encoded data in the managed heap. The duration that can be held is determined by `MaxMemoryUsageBytesForCompressedFrames` and the bitrate, and the managed heap usage increases by about 1.5 to 2 times that size.
+The memory buffer holds the encoded data in the managed heap. The duration that can be held is determined by `MaxMemoryUsageBytesForCompressedFrames` and the bitrate, and the managed heap usage increases by up to about that size.
 
-The disk buffer writes the encoded data to files, so the managed heap hardly increases. In the measurements, the increase in physical memory with a full buffer was approximately 40 % (iOS) and 60 % (Android) of that with the memory buffer, and no stall of the main thread was observed during export. On the other hand, the continuous writes to storage increased the CPU usage on Android and shorten the lifespan of flash memory. The disk buffer is intended primarily for development and quality-assurance builds. See [disk-buffered-recording.md](disk-buffered-recording.md) for details.
+The disk buffer writes the encoded data to files, so the managed heap hardly increases. In the measurements with v1.7.0, the increase in physical memory with a full buffer was approximately 40 % (iOS) and 60 % (Android) of that with the memory buffer. The difference is smaller in later versions, because the memory buffer no longer rounds up the size of each frame. On the other hand, the continuous writes to storage increased the CPU usage on Android and shorten the lifespan of flash memory. The disk buffer is intended primarily for development and quality-assurance builds. See [disk-buffered-recording.md](disk-buffered-recording.md) for details.
 
 ### Screen size and encoding size
 
@@ -136,14 +140,16 @@ Disabling audio recording (using `NullAudioSampleProvider`) removes the audio en
 
 ## Recommendations
 
-- Determine the size of the memory buffer from the bitrate and the required duration, and allow for the managed heap usage to increase by up to about twice that size.
+- Determine the size of the memory buffer from the bitrate and the required duration, and allow for the managed heap usage to increase by about that size.
 - Set `MaxNumberOfRawFrameBuffers` when the readback path is used.
 - Use the smallest frame rate and encoding size that meet the purpose. The frame rate in particular directly affects the CPU and GPU load.
-- Create sessions and export at points where frame drops are acceptable, such as during loading or on a result screen.
+- Create sessions at points where frame drops are acceptable, such as during loading or on a result screen. Exporting no longer stalls the main thread for a long time, but it still adds work to the frames during the export.
 - On Android, check the bitrate and the duration held on the target devices.
 - Check the effect on physical memory with the values reported by the OS, not only with Memory Profiler.
 
 ## Measurement Results
+
+The values in this section were measured with v1.7.0. The values affected by later changes are described in [Changes after v1.7.0](#changes-after-v170).
 
 ### Conditions
 
@@ -224,3 +230,23 @@ The state of rendering at 60 fps while recording with the default settings (30 f
 - The increase in physical memory at the start is due to the RenderTexture for capture, the encoders and the initialization of the native library; the growth of the managed heap is added as the buffer fills.
 - With the disk buffer, the increase in physical memory with a full buffer was 25 to 40 MB smaller than with the memory buffer.
 - On iOS, the duration held changed according to the specified bitrate, whereas on Android it did not change between 1 Mbps and 2.5 Mbps (the default). On Android, the duration held changed with the encoding size because the bitrate actually produced by the encoder changed.
+
+### Changes after v1.7.0
+
+The following changes were made after v1.7.0. Their effect was measured on the Galaxy S22 under the same conditions as above, with the default settings and with a 60 MiB buffer. iOS was not measured again.
+
+- The buffer of encoded data stores the frames in chunks of 64 KiB within `MaxMemoryUsageBytesForCompressedFrames`, instead of in arrays rounded up to a power of two.
+- The memory held by a session is released when the session is disposed, also after an export.
+- Exporting no longer runs the multiplexing or the first initialization of the local time zone on the main thread.
+- On Android, the CPU usage of the threads of the native library is lower. The waits for MediaCodec are no longer handed to a thread pool one by one, the Vulkan objects created for each input surface of the encoder are reused, and the lookups of Java methods are cached.
+
+| Item | Condition | v1.7.0 | After the changes |
+| --- | --- | --- | --- |
+| GC Used Memory, full (MB) | Default | +38 to +39 | +23 to +24 |
+| GC Used Memory, full (MB) | 60 MiB buffer | +108 | +70 to +71 |
+| Physical memory, full (MB) | Default | +66 to +71 | +47 to +60 |
+| Physical memory, full (MB) | 60 MiB buffer | +151 to +153 | +117 to +120 |
+| GC Used Memory after the session is disposed (MB) | Default | 38 to 39 | 2.5 to 2.6 |
+| Longest frame during export (ms) | Default | 100 to 117 | 33 to 50 |
+
+The GC Used Memory without recording was approximately 2.1 MB. The CPU usage was measured with simpleperf on the same application, replacing only the native library. The CPU time of the threads of the native library during recording decreased from approximately 195 ms/s to approximately 120 ms/s. The CPU usage of the whole process varied between runs by more than this difference, and decreased by approximately 50 ms/s in a separate measurement.
