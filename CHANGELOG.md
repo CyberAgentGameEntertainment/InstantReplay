@@ -1,3 +1,23 @@
+## [1.7.1] - 2026/10/29
+
+### Added
+
+- Added the [performance guide](docs/performance-guide.md) ([日本語](docs/performance-guide.ja.md)), which explains the memory, CPU and GPU cost of recording and how the encoding options affect it. It is linked from the memory usage section of the README.
+
+### Changed
+
+- The in-memory buffer now stores encoded frames in fixed-size chunks that are shared by video and audio, so that the managed memory it uses stays close to `MaxMemoryUsageBytesForCompressedFrames`. Previously the managed heap grew by about 1.75 times the limit. On a Galaxy S22 with the default limit (20 MiB), the growth of the managed heap while the buffer was full decreased from about 36 MB to about 23 MB.
+- A single encoded frame larger than the memory limit is now dropped with a warning instead of being kept.
+- A `MaxMemoryUsageBytesForCompressedFrames` of zero or less now throws `ArgumentOutOfRangeException`.
+- `CapturedReplay` returned by `StopAndCaptureAsync` on a session with the in-memory buffer now holds the whole buffer, up to the memory limit, instead of only the captured range.
+- Reduced the CPU usage of recording on Android. On a Galaxy S22 with the default options, the CPU time of the native encoding library decreased from about 195 ms/s to about 120 ms/s.
+
+### Fixed
+
+- Fixed the memory of a session that had been exported remaining on the managed heap after the session was disposed. On a Galaxy S22, about 35 MB (about 104 MB with a memory limit of 60 MiB) remained even after `GC.Collect()`.
+- Fixed `StopAndExportAsync` stalling the main thread for about 100 ms on Android when using the in-memory buffer.
+- Fixed the audio input of the Android encoder possibly waiting indefinitely when a session was disposed before the encoder finished.
+
 ## [1.7.0] - 2026/10/22
 
 ### Added
