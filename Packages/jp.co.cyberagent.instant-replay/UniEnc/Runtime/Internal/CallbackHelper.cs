@@ -173,7 +173,6 @@ namespace UniEnc
             {
                 if (Pool.TryDequeue(out var context))
                 {
-                    context._core.Reset();
                     context._state = state;
                     return context;
                 }
@@ -186,6 +185,11 @@ namespace UniEnc
 
             public void Return()
             {
+                // Reset before pooling. Otherwise the pooled context keeps the continuation of the
+                // last awaiter (and, for DataCallbackContext<T>, its result), which keeps the
+                // awaiting state machine and everything it references alive until the context is
+                // rented again.
+                _core.Reset();
                 Pool.Enqueue(this);
             }
 
@@ -245,7 +249,6 @@ namespace UniEnc
             {
                 if (Pool.TryDequeue(out var context))
                 {
-                    context._core.Reset();
                     return context;
                 }
 
@@ -254,6 +257,11 @@ namespace UniEnc
 
             public void Return()
             {
+                // Reset before pooling. Otherwise the pooled context keeps the continuation of the
+                // last awaiter (and, for DataCallbackContext<T>, its result), which keeps the
+                // awaiting state machine and everything it references alive until the context is
+                // rented again.
+                _core.Reset();
                 Pool.Enqueue(this);
             }
 
