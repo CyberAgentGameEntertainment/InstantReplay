@@ -4,6 +4,7 @@
 
 using System;
 using System.IO;
+using System.Threading;
 using System.Threading.Tasks;
 using UniEnc;
 using UnityEngine;
@@ -39,6 +40,8 @@ namespace InstantReplay
             bool disposeAudioSampleProvider = true,
             Action<Exception> onException = null)
         {
+            WarmUpLocalTimeZone();
+
             if (frameProvider == null)
             {
                 frameProvider = new ScreenshotFrameProvider();
@@ -195,6 +198,19 @@ namespace InstantReplay
         public static RealtimeInstantReplaySession CreateDefault()
         {
             return new RealtimeInstantReplaySession(RealtimeEncodingOptions.Default);
+        }
+
+        /// <summary>
+        ///     Loads the local time zone on the thread pool. The default output path of <see cref="StopAndExportAsync" />
+        ///     contains the local time, and the first access to the local time zone reads the time zone database, which
+        ///     stalls the calling thread for about 100 ms on Android. Loading it in advance keeps the export from stalling
+        ///     the main thread for this reason. The time zone is cached after the first access, so later calls are cheap.
+        /// </summary>
+        private static void WarmUpLocalTimeZone()
+        {
+#if !UNITY_WEBGL || UNITY_EDITOR
+            ThreadPool.QueueUserWorkItem(static _ => _ = TimeZoneInfo.Local);
+#endif
         }
 
         /// <summary>
