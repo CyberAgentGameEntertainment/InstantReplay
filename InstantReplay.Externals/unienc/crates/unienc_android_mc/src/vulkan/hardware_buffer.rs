@@ -169,6 +169,11 @@ impl HardwareBufferImage {
     pub fn vk_image_view(&self) -> vk::ImageView {
         *self.view
     }
+
+    /// The hardware buffer this image was imported from.
+    pub fn ahb(&self) -> *mut ndk_sys::AHardwareBuffer {
+        self.ahb
+    }
 }
 
 impl Drop for HardwareBufferImage {

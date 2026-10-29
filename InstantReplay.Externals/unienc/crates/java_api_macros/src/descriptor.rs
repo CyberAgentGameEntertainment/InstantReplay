@@ -65,6 +65,23 @@ impl JType {
         }
     }
 
+    /// `jni::signature::ReturnType` of a method or field of this type.
+    pub fn return_signature(self) -> TokenStream {
+        let primitive = |name: TokenStream| quote!(::jni::signature::ReturnType::Primitive(::jni::signature::Primitive::#name));
+        match self {
+            JType::Void => primitive(quote!(Void)),
+            JType::Bool => primitive(quote!(Boolean)),
+            JType::Byte => primitive(quote!(Byte)),
+            JType::Char => primitive(quote!(Char)),
+            JType::Short => primitive(quote!(Short)),
+            JType::Int => primitive(quote!(Int)),
+            JType::Long => primitive(quote!(Long)),
+            JType::Float => primitive(quote!(Float)),
+            JType::Double => primitive(quote!(Double)),
+            JType::String | JType::Object => quote!(::jni::signature::ReturnType::Object),
+        }
+    }
+
     /// Expression extracting this type out of `#value`, a `JValueOwned`.
     pub fn from_jvalue(self, value: TokenStream) -> TokenStream {
         match self {

@@ -7,7 +7,7 @@ use jni::{
 use std::future::Future;
 use std::pin::Pin;
 use std::{collections::HashMap, fmt::Display, sync::Arc, time::Duration};
-use unienc_common::{EncodedData, SpawnBlocking, UniencSampleKind, VideoFrameBgra32};
+use unienc_common::{EncodedData, Runtime, SpawnBlocking, UniencSampleKind, VideoFrameBgra32};
 
 use crate::bindings;
 use crate::error::{AndroidError, Result};
@@ -447,24 +447,28 @@ pub fn write_to_buffer(env: &mut JNIEnv, buffer: &SafeGlobalRef, data: &[u8]) ->
 }
 
 /// Read data from ByteBuffer
+///
+/// The buffers MediaCodec hands out are direct, so the bytes are copied straight out of the
+/// buffer's memory instead of through a Java byte array.
 pub fn read_from_buffer(
     env: &mut JNIEnv,
     buffer: &SafeGlobalRef,
     offset: usize,
     size: usize,
 ) -> Result<Vec<u8>> {
-    bindings::ByteBuffer::set_position(env, buffer.as_obj(), offset as jint)?;
+    let byte_buffer: &jni::objects::JByteBuffer = buffer.as_obj().into();
+    let base_address = env.get_direct_buffer_address(byte_buffer)?;
+    if base_address.is_null() {
+        return Err(AndroidError::NotDirectBuffer);
+    }
+    let capacity = env.get_direct_buffer_capacity(byte_buffer)?;
+    if offset.checked_add(size).is_none_or(|end| end > capacity) {
+        return Err(AndroidError::BufferOverflow);
+    }
 
-    let byte_array = env.new_byte_array(size as jint)?;
-    bindings::ByteBuffer::get(env, buffer.as_obj(), &byte_array, 0, size as jint)?;
-
-    // Convert to Vec<u8>
-    let mut result = vec![0u8; size];
-    env.get_byte_array_region(&byte_array, 0, unsafe {
-        std::slice::from_raw_parts_mut(result.as_mut_ptr() as *mut i8, size)
-    })?;
-
-    Ok(result)
+    // SAFETY: The range lies within the buffer, which the codec does not touch until the output
+    // buffer is released.
+    Ok(unsafe { std::slice::from_raw_parts(base_address.add(offset), size) }.to_vec())
 }
 
 /// Read data from ByteBuffer
@@ -575,89 +579,131 @@ pub(crate) fn dequeue_input_buffer_off_executor<R: SpawnBlocking>(
     runtime.spawn_blocking(move || codec.dequeue_input_buffer(timeout))
 }
 
-/// The output-side counterpart of [`dequeue_input_buffer_off_executor`], for the
-/// same reason.
-pub(crate) fn dequeue_output_buffer_off_executor<R: SpawnBlocking>(
-    runtime: &R,
+/// Runs a long-running blocking loop on the blocking pool of the runtime.
+///
+/// The future of the blocking call is awaited by a task on the runtime rather than dropped, because
+/// dropping it may cancel the call before it starts.
+pub(crate) fn run_on_blocking_pool<R: Runtime>(runtime: &R, f: impl FnOnce() + Send + 'static) {
+    runtime.spawn(runtime.spawn_blocking(f));
+}
+
+/// Encoded outputs that the drain loop may hold before it waits for the consumer.
+const OUTPUT_QUEUE_CAPACITY: usize = 8;
+
+/// Drains the output of a codec in a loop that runs on the blocking pool.
+///
+/// The loop waits in `dequeueOutputBuffer` itself, copies each output out of the codec and releases
+/// the buffer, and hands the result over through a bounded channel. Handing every dequeue to the
+/// blocking pool as a separate call instead costs a task, a wake-up and a park per call, which
+/// amounts to more than the JNI calls themselves at the rate audio and video produce outputs. The
+/// whole loop is handed over once instead, so it occupies one thread of the pool while it runs, and
+/// the thread returns to the pool afterwards.
+///
+/// The loop ends after the end-of-stream output, after an error, or once the receiver is dropped,
+/// which it notices within [`DEQUEUE_TIMEOUT`]. It holds a reference to the codec until then.
+pub(crate) struct OutputDrainer {
+    rx: tokio::sync::mpsc::Receiver<Result<CommonEncodedData>>,
+}
+
+impl OutputDrainer {
+    /// Starts draining. The codec must have been started.
+    pub fn start<R: Runtime>(runtime: &R, codec: &MediaCodec) -> Self {
+        let (tx, rx) = tokio::sync::mpsc::channel(OUTPUT_QUEUE_CAPACITY);
+        let codec = codec.clone();
+        run_on_blocking_pool(runtime, move || drain_output(codec, tx));
+        Self { rx }
+    }
+
+    /// Returns the next output, or `None` once the end-of-stream output has been returned.
+    pub async fn pull(&mut self) -> Result<Option<CommonEncodedData>> {
+        match self.rx.recv().await {
+            Some(result) => result.map(Some),
+            None => Ok(None),
+        }
+    }
+}
+
+fn drain_output(codec: MediaCodec, tx: tokio::sync::mpsc::Sender<Result<CommonEncodedData>>) {
+    let result = (|| -> Result<()> {
+        // One `BufferInfo` serves every iteration: `dequeueOutputBuffer` overwrites its fields on
+        // each successful call.
+        let buffer_info = {
+            let env = &mut attach_current_thread()?;
+            create_buffer_info(env)?
+        };
+
+        loop {
+            if tx.is_closed() {
+                return Ok(());
+            }
+            let Some((data, end_of_stream)) =
+                dequeue_encoded_data(&codec, &buffer_info, DEQUEUE_TIMEOUT)?
+            else {
+                continue;
+            };
+            if tx.blocking_send(Ok(data)).is_err() || end_of_stream {
+                return Ok(());
+            }
+        }
+    })();
+
+    if let Err(error) = result {
+        _ = tx.blocking_send(Err(error));
+    }
+}
+
+/// Waits up to `timeout` for an output of the codec. Returns `None` when there is nothing to take
+/// yet, and otherwise the output together with whether it ends the stream.
+fn dequeue_encoded_data(
     codec: &MediaCodec,
     buffer_info: &SafeGlobalRef,
     timeout: Duration,
-) -> Pin<Box<dyn Future<Output = Result<jint>> + Send + 'static>> {
-    let codec = codec.clone();
-    let buffer_info = buffer_info.clone();
-    let timeout_us = timeout.as_micros() as i64;
-    runtime.spawn_blocking(move || codec.dequeue_output_buffer(&buffer_info, timeout_us))
-}
+) -> Result<Option<(CommonEncodedData, bool)>> {
+    let buffer_index = codec.dequeue_output_buffer(buffer_info, timeout.as_micros() as i64)?;
 
-/// Takes the codec's runtime by value rather than by reference because the
-/// future has to be `Send` and `Runtime` is not `Sync`.
-pub(crate) async fn pull_encoded_data_with_codec<R: SpawnBlocking>(
-    runtime: R,
-    codec: &MediaCodec,
-    end_of_stream: &mut bool,
-) -> Result<Option<CommonEncodedData>> {
-    if *end_of_stream {
-        return Ok(None);
-    }
-
-    // One `BufferInfo` serves every iteration: `dequeueOutputBuffer` overwrites
-    // its fields on each successful call.
-    let buffer_info = {
+    if buffer_index >= 0 {
         let env = &mut attach_current_thread()?;
-        create_buffer_info(env)?
-    };
+        let output_buffer = codec.get_output_buffer(buffer_index)?;
+        let (offset, size, flags, timestamp) = read_buffer_info_common(env, buffer_info)?;
 
-    loop {
-        let buffer_index =
-            dequeue_output_buffer_off_executor(&runtime, codec, &buffer_info, DEQUEUE_TIMEOUT)
-                .await?;
+        // Read encoded data
+        let encoded_data = read_from_buffer(env, &output_buffer, offset, size)?;
 
-        if buffer_index >= 0 {
-            let env = &mut attach_current_thread()?;
-            let output_buffer = codec.get_output_buffer(buffer_index)?;
-            let (offset, size, flags, timestamp) = read_buffer_info_common(env, &buffer_info)?;
+        log::trace!(
+            "new frame data: flags: {:?}, length: {}, timestamp: {}, offset: {}, {:?}",
+            flags,
+            encoded_data.len(),
+            timestamp,
+            offset,
+            encoded_data.iter().take(32).collect::<Vec<_>>()
+        );
 
-            // Read encoded data
-            let encoded_data = read_from_buffer(env, &output_buffer, offset, size)?;
+        let video_data = CommonEncodedData {
+            content: CommonEncodedDataContent::Buffer {
+                data: encoded_data,
+                buffer_flag: flags,
+            },
+            timestamp: timestamp as f64 / 1_000_000.0, // Convert from microseconds
+        };
 
-            log::trace!(
-                "new frame data: flags: {:?}, length: {}, timestamp: {}, offset: {}, {:?}",
-                flags,
-                encoded_data.len(),
-                timestamp,
-                offset,
-                encoded_data.iter().take(32).collect::<Vec<_>>()
-            );
+        codec.release_output_buffer(buffer_index, false)?;
 
-            let video_data = CommonEncodedData {
-                content: CommonEncodedDataContent::Buffer {
-                    data: encoded_data,
-                    buffer_flag: flags,
-                },
-                timestamp: timestamp as f64 / 1_000_000.0, // Convert from microseconds
-            };
-
-            codec.release_output_buffer(buffer_index, false)?;
-
-            if (flags & media_codec_buffer_flag::BUFFER_FLAG_END_OF_STREAM) != 0 {
-                *end_of_stream = true;
-            }
-            return Ok(Some(video_data));
-        }
-
-        if buffer_index == media_codec_errors::INFO_OUTPUT_FORMAT_CHANGED {
-            let map = codec.get_output_format()?;
-
-            let metadata = CommonEncodedData {
-                content: CommonEncodedDataContent::FormatInfo(map),
-                timestamp: 0.0,
-            };
-            return Ok(Some(metadata));
-        }
-
-        // Anything else, `INFO_TRY_AGAIN_LATER` included, means there is nothing
-        // to take yet. The dequeue above already waited, so retry straight away.
+        let end_of_stream = (flags & media_codec_buffer_flag::BUFFER_FLAG_END_OF_STREAM) != 0;
+        return Ok(Some((video_data, end_of_stream)));
     }
+
+    if buffer_index == media_codec_errors::INFO_OUTPUT_FORMAT_CHANGED {
+        let map = codec.get_output_format()?;
+
+        let metadata = CommonEncodedData {
+            content: CommonEncodedDataContent::FormatInfo(map),
+            timestamp: 0.0,
+        };
+        return Ok(Some((metadata, false)));
+    }
+
+    // Anything else, `INFO_TRY_AGAIN_LATER` included, means there is nothing to take yet.
+    Ok(None)
 }
 
 pub(crate) fn format_to_map(

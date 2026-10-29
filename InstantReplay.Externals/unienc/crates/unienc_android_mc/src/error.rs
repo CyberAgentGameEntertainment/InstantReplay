@@ -20,6 +20,12 @@ pub enum AndroidError {
     #[error("Buffer is not a direct buffer")]
     NotDirectBuffer,
 
+    #[error("Range exceeds the capacity of the buffer")]
+    BufferOverflow,
+
+    #[error("Encoder input loop has stopped")]
+    EncoderInputStopped,
+
     // MediaCodec related errors
     #[error("Image is null")]
     ImageNull,
@@ -167,6 +173,8 @@ impl CategorizedError for AndroidError {
 
             // Resource allocation errors
             AndroidError::NotDirectBuffer => ErrorCategory::ResourceAllocation,
+            AndroidError::BufferOverflow => ErrorCategory::ResourceAllocation,
+            AndroidError::EncoderInputStopped => ErrorCategory::Communication,
             AndroidError::ImageNull => ErrorCategory::ResourceAllocation,
             AndroidError::NoInputBuffer => ErrorCategory::ResourceAllocation,
             AndroidError::ByteBufferCreationFailed => ErrorCategory::ResourceAllocation,
