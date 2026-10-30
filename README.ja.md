@@ -66,6 +66,9 @@ Instant Replay は Unity で直近のゲームプレイ動画をいつでも保�
     * [録画時間とフレームレートの設定](#録画時間とフレームレートの設定)
     * [サイズの設定](#サイズの設定)
     * [映像・音声ソースの設定](#映像音声ソースの設定)
+  * [ログ](#ログ)
+    * [ログの出力先を変更する](#ログの出力先を変更する)
+    * [ネイティブライブラリのログ](#ネイティブライブラリのログ)
   * [リリースビルドから除外する](#リリースビルドから除外する)
   * [ライセンス](#ライセンス)
 <!-- TOC -->
@@ -722,6 +725,67 @@ new InstantReplaySession(numFrames: 900, fixedFrameRate: 30);
 ### 映像・音声ソースの設定
 
 `InstantReplaySession` も `RealtimeInstantReplaySession` と同様に、`IFrameProvider` や `IAudioSampleProvider` を使用して映像・音声ソースをカスタマイズできます。
+
+## ログ
+
+Instant Replay のログは、パッケージの C# コードとネイティブのエンコードライブラリの 2 つから独立に出力されます。それぞれ個別に設定し、ネイティブライブラリのログは以下で説明する C# のロガーを経由しません。
+
+### ログの出力先を変更する
+
+パッケージの C# コードは、警告と例外を `InstantReplay.ILogger` を通して出力します。デフォルトでは `UnityEngine.Debug` に出力されます。出力先を変更するには、`InstantReplay.ILogger.Logger` に実装を設定します。`null` を設定するとデフォルトに戻ります。
+
+```csharp
+using System;
+using UnityEngine;
+
+public class MyLogger : InstantReplay.ILogger
+{
+    public void Log(string message) => Debug.Log($"[InstantReplay] {message}");
+    public void LogWarning(string message) => Debug.LogWarning($"[InstantReplay] {message}");
+    public void LogError(string message) => Debug.LogError($"[InstantReplay] {message}");
+    public void LogException(Exception exception) => Debug.LogException(exception);
+}
+
+public static class LoggerSetup
+{
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
+    private static void Initialize()
+    {
+        InstantReplay.ILogger.Logger = new MyLogger();
+    }
+}
+```
+
+`UnityEngine` 名前空間にも `ILogger` という名前の型が存在するため、両方の名前空間を参照している場合は `InstantReplay.ILogger` と記述してください。
+
+各メソッドはメインスレッドとバックグラウンドスレッドの両方から呼び出されます。そのため、実装はスレッドセーフである必要があり、メインスレッドからのみ呼び出せる Unity API を使用してはいけません。
+
+### ネイティブライブラリのログ
+
+ネイティブのエンコードライブラリは、`[unienc]` という接頭辞を付けてログを出力します。出力先は以下のとおりです。
+
+| プラットフォーム | 出力先 |
+| --- | --- |
+| Editor とスタンドアロンプレイヤー | Unity のログ (Console ウィンドウとプレイヤーログ) |
+| Android | Unity のログ (logcat の `Unity` タグ)。Unity がプラグインを読み込む前に出力されたログは、logcat の `unienc` タグに出力されます。 |
+| iOS | Unity のログ (Xcode のコンソール) |
+| Web | ブラウザのコンソール |
+
+設定されたレベルより低いログは破棄されます。デフォルトのレベルは `Warn` であり、変更しない限り警告とエラーのみが出力されます。レベルはコードから `UniEnc.NativeLogging.SetLevel` で変更できます。
+
+```csharp
+UniEnc.NativeLogging.SetLevel(UniEnc.NativeLogLevel.Debug);
+```
+
+指定できるレベルは `Off`、`Error`、`Warn`、`Info`、`Debug`、`Trace` です。レベルはプロセス全体に適用され、実行中のセッションを含めて直ちに反映されます。
+
+レベルはコードを書かずに、Editor の **Preferences > UniEnc** からも設定できます。この設定はマシンごとに保存され、以下のように動作します。
+
+- **Native Log Level** は Editor に直ちに適用されます。また、**Autoconnect Profiler** を有効にしたビルドなど、プレイヤー接続によって Editor に接続されている Development Build にも送信されます。`Default (build-dependent)` を選択した場合はレベルを変更しません。
+- **Bake Into Player Builds** を有効にすると、この Editor でビルドするすべてのプレイヤーに設定したレベルが埋め込まれ、録画の開始より前の起動時点で適用されます。最初のセッションの開始時に出力されるログを取得する場合や、リリースビルドを含めて Editor に接続されていないビルドでレベルを設定する場合に必要です。設定はマシンごとに保存されるため、レベルを設定していないビルドマシンでは何も埋め込まれません。
+
+> [!NOTE]
+> Development Build では、Unity はデフォルトでログごとにスタックトレースを取得します。レベルを `Debug` や `Trace` にすると録画中に大量のログが出力されるため、パフォーマンスに影響する可能性があります。
 
 ## リリースビルドから除外する
 
