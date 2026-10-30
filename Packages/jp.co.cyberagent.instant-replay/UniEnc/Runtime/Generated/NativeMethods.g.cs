@@ -111,7 +111,7 @@ namespace UniEnc.Native
         /// <summary>
         ///  Installs the native logger if it is not installed yet, and discards any record below `level`.
         ///  Safe to call at any point; records emitted before the first call use the build-dependent default
-        ///  (`Debug` for debug builds, `Info` for release builds).
+        ///  (`Debug` for debug builds, `Warn` for release builds).
         /// </summary>
         [DllImport(__DllName, EntryPoint = "unienc_set_log_level", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
         internal static extern void unienc_set_log_level(UniencLogLevel level);

@@ -66,6 +66,9 @@ When a bug occurs, you can export the recent gameplay leading up to the bug as a
     * [Setting Recording Time and Frame Rate](#setting-recording-time-and-frame-rate)
     * [Setting the Size](#setting-the-size)
     * [Video and Audio Sources](#video-and-audio-sources)
+  * [Logging](#logging)
+    * [Redirecting Log Messages](#redirecting-log-messages)
+    * [Native Library Logs](#native-library-logs)
   * [Excluding from the Release Builds](#excluding-from-the-release-builds)
   * [License](#license)
 <!-- TOC -->
@@ -726,6 +729,67 @@ By default, recordings use the actual screen size. You can cap the output resolu
 ### Video and Audio Sources
 
 `InstantReplaySession` also supports custom video and audio sources in the same way as `RealtimeInstantReplaySession`.
+
+## Logging
+
+Instant Replay emits log messages from two independent sources: the C# code of the package and the native encoding library. Each source is configured separately, and the messages of the native library do not pass through the C# logger described below.
+
+### Redirecting Log Messages
+
+The C# code of the package writes its warnings and exceptions through `InstantReplay.ILogger`. By default, they are forwarded to `UnityEngine.Debug`. To route them elsewhere, assign an implementation to `InstantReplay.ILogger.Logger`; assigning `null` restores the default.
+
+```csharp
+using System;
+using UnityEngine;
+
+public class MyLogger : InstantReplay.ILogger
+{
+    public void Log(string message) => Debug.Log($"[InstantReplay] {message}");
+    public void LogWarning(string message) => Debug.LogWarning($"[InstantReplay] {message}");
+    public void LogError(string message) => Debug.LogError($"[InstantReplay] {message}");
+    public void LogException(Exception exception) => Debug.LogException(exception);
+}
+
+public static class LoggerSetup
+{
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
+    private static void Initialize()
+    {
+        InstantReplay.ILogger.Logger = new MyLogger();
+    }
+}
+```
+
+The name `ILogger` also exists in the `UnityEngine` namespace, so refer to it as `InstantReplay.ILogger` where both namespaces are imported.
+
+The methods are called from the main thread and from background threads alike. An implementation must therefore be thread-safe and must not call Unity APIs that are restricted to the main thread.
+
+### Native Library Logs
+
+The native encoding library writes its messages with the `[unienc]` prefix. They are written to the following destinations.
+
+| Platform | Destination |
+| --- | --- |
+| Editor and standalone players | Unity log (the Console window and the player log) |
+| Android | Unity log, which is logcat under the `Unity` tag. Messages emitted before Unity has loaded the plugin are written to logcat under the `unienc` tag. |
+| iOS | Unity log (the Xcode console) |
+| Web | Browser console |
+
+Messages below the configured level are discarded. The default level is `Warn`, so only warnings and errors are logged unless the level is changed. The level can be changed from code with `UniEnc.NativeLogging.SetLevel`.
+
+```csharp
+UniEnc.NativeLogging.SetLevel(UniEnc.NativeLogLevel.Debug);
+```
+
+The available levels are `Off`, `Error`, `Warn`, `Info`, `Debug` and `Trace`. The level applies to the whole process and takes effect immediately, including for sessions that are already running.
+
+The level can also be configured in the Editor under **Preferences > UniEnc**, without any code. The setting is stored per machine and behaves as follows.
+
+- **Native Log Level** applies to the Editor immediately. It is also sent to every development build that is connected to the Editor through the player connection, such as a build made with **Autoconnect Profiler**. `Default (build-dependent)` leaves the level unchanged.
+- **Bake Into Player Builds** embeds the configured level into every player built from this Editor, so that it takes effect at startup, before any recording begins. This is needed to capture the messages emitted while the first session starts, and to set the level in builds that are not connected to the Editor, including release builds. Because the setting is stored per machine, a build machine on which no level has been configured embeds nothing.
+
+> [!NOTE]
+> In a development build, Unity captures a stack trace for each message by default. Setting the level to `Debug` or `Trace` produces a large number of messages while recording and can therefore affect performance.
 
 ## Excluding from the Release Builds
 
