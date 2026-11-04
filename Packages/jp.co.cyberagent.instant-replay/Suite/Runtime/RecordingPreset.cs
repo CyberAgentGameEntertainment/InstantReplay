@@ -370,12 +370,12 @@ namespace InstantReplay.Suite
         }
 
         /// <summary>
-        ///     Captures the current screen size and the output sample rate of the Unity audio system. Call it on the main
-        ///     thread.
+        ///     Captures the current screen size and the output sample rate of the Unity audio system. If the Unity audio
+        ///     system is disabled, 48000 Hz is used as the sample rate. Call it on the main thread.
         /// </summary>
         public static PresetContext FromCurrentEnvironment()
         {
-            return new PresetContext(Screen.width, Screen.height, AudioSettings.outputSampleRate);
+            return new PresetContext(Screen.width, Screen.height, UnityAudioOutput.GetSampleRate());
         }
     }
 }

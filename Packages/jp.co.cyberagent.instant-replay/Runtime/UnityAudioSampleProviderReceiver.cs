@@ -15,12 +15,12 @@ namespace InstantReplay
 
         private void Update()
         {
-            _sampleRate = AudioSettings.outputSampleRate;
+            _sampleRate = UnityAudioOutput.GetSampleRate();
         }
 
         private void OnEnable()
         {
-            _sampleRate = AudioSettings.outputSampleRate;
+            _sampleRate = UnityAudioOutput.GetSampleRate();
         }
 
         private void OnAudioFilterRead(float[] data, int channels)
