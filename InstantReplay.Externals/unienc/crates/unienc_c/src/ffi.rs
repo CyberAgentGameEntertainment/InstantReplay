@@ -206,30 +206,53 @@ pub trait ApplyCallback<Callback> {
     fn apply_callback(&self, callback: Callback, user_data: SendPtr<c_void>);
 }
 
+/// Invokes the callback without checking whether managed callbacks are enabled.
+trait ApplyCallbackUnchecked<Callback> {
+    fn apply_callback_unchecked(&self, callback: Callback, user_data: SendPtr<c_void>);
+}
+
 impl ApplyCallback<UniencCallback> for UniencError {
     fn apply_callback(&self, callback: UniencCallback, user_data: SendPtr<c_void>) {
-        self.with_native(|native| unsafe { callback(user_data.into(), *native) });
+        crate::managed::invoke(|| {
+            self.with_native(|native| unsafe { callback(user_data.into(), *native) })
+        });
     }
 }
 
 impl ApplyCallback<UniencCallback> for Result<(), UniencError> {
     fn apply_callback(&self, callback: UniencCallback, user_data: SendPtr<c_void>) {
-        match self {
+        crate::managed::invoke(|| match self {
             Ok(()) => unsafe { callback(user_data.into(), UniencErrorNative::SUCCESS) },
             Err(err) => err.with_native(|native| unsafe { callback(user_data.into(), *native) }),
-        }
+        });
     }
 }
 
 impl<Data: Default> ApplyCallback<UniencDataCallback<Data>> for UniencError {
     fn apply_callback(&self, callback: UniencDataCallback<Data>, user_data: SendPtr<c_void>) {
-        self.with_native(|native| unsafe { callback(Data::default(), user_data.into(), *native) });
+        crate::managed::invoke(|| {
+            self.with_native(|native| unsafe {
+                callback(Data::default(), user_data.into(), *native)
+            })
+        });
     }
 }
 impl<T: EncodedData> ApplyCallback<UniencDataCallback<UniencSampleData>>
     for Result<Option<T>, UniencError>
 {
     fn apply_callback(
+        &self,
+        callback: UniencDataCallback<UniencSampleData>,
+        user_data: SendPtr<c_void>,
+    ) {
+        crate::managed::invoke(|| self.apply_callback_unchecked(callback, user_data));
+    }
+}
+
+impl<T: EncodedData> ApplyCallbackUnchecked<UniencDataCallback<UniencSampleData>>
+    for Result<Option<T>, UniencError>
+{
+    fn apply_callback_unchecked(
         &self,
         callback: UniencDataCallback<UniencSampleData>,
         user_data: SendPtr<c_void>,
