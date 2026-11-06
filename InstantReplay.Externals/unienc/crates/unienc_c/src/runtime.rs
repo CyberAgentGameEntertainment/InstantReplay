@@ -1,6 +1,8 @@
 use blocking::unblock;
 use futures::executor::LocalPool;
-use futures::task::{SpawnExt, noop_waker_ref};
+#[cfg(not(feature = "multi-thread"))]
+use futures::task::SpawnExt;
+use futures::task::noop_waker_ref;
 use std::cell::RefCell;
 use std::io;
 use std::marker::PhantomData;
@@ -39,7 +41,7 @@ impl WeakRuntime {
 }
 
 #[cfg(feature = "multi-thread")]
-type Executor = futures::executor::ThreadPool;
+type Executor = crate::thread_pool::ThreadPool;
 #[cfg(not(feature = "multi-thread"))]
 type Executor = LocalExecutor;
 
@@ -94,10 +96,7 @@ impl Runtime {
             if let Some(runtime) = local.as_ref().and_then(WeakRuntime::upgrade) {
                 #[cfg(feature = "multi-thread")]
                 {
-                    runtime
-                        .executor
-                        .spawn(fut)
-                        .expect("Failed to spawn task on threaded executor");
+                    runtime.executor.spawn(fut);
                 }
                 #[cfg(not(feature = "multi-thread"))]
                 {
@@ -149,6 +148,17 @@ impl Runtime {
         }
     }
 
+    /// Runs `job` once on every worker thread and waits until all of them have run it or the
+    /// timeout elapses. Returns `true` if every worker has run the job within the timeout.
+    #[cfg(feature = "multi-thread")]
+    pub fn broadcast(
+        &self,
+        job: impl Fn() + Send + Sync + 'static,
+        timeout: std::time::Duration,
+    ) -> bool {
+        self.executor.broadcast(job, timeout)
+    }
+
     pub fn weak(&self) -> WeakRuntime {
         WeakRuntime {
             executor: Arc::downgrade(&self.executor),
@@ -181,8 +191,9 @@ fn new_executor(lazy_runtime: Arc<Mutex<Option<WeakRuntime>>>) -> Executor {
 
     #[cfg(feature = "multi-thread")]
     {
-        futures::executor::ThreadPoolBuilder::new()
-            .after_start(move |_index| {
+        crate::thread_pool::ThreadPool::new(
+            "unienc-worker-",
+            move |_index| {
                 CURRENT.with_borrow_mut(|local| match local {
                     Some(_) => {}
                     None => {
@@ -193,14 +204,15 @@ fn new_executor(lazy_runtime: Arc<Mutex<Option<WeakRuntime>>>) -> Executor {
                         *local = lazy_runtime.lock().unwrap().clone();
                     }
                 })
-            })
-            .before_stop(|_index| {
+            },
+            |_index| {
+                crate::managed::on_worker_stop();
                 CURRENT.with_borrow_mut(|local| {
                     *local = None;
                 })
-            })
-            .create()
-            .expect("Failed to create thread pool")
+            },
+        )
+        .expect("Failed to create thread pool")
     }
 }
 

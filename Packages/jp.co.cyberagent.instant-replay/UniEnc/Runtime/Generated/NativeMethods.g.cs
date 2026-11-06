@@ -83,6 +83,25 @@ namespace UniEnc.Native
         [DllImport(__DllName, EntryPoint = "unienc_drop_runtime", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
         internal static extern void unienc_drop_runtime(Runtime* runtime);
 
+        /// <summary>
+        ///  Enables the persistent attachment of the worker threads to IL2CPP. Call it only in an IL2CPP
+        ///  player. Returns `false` if the IL2CPP API cannot be resolved; the worker threads are then attached
+        ///  by IL2CPP for each callback as before.
+        /// </summary>
+        [DllImport(__DllName, EntryPoint = "unienc_enable_il2cpp_thread_attach", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        [return: MarshalAs(UnmanagedType.U1)]
+        internal static extern bool unienc_enable_il2cpp_thread_attach();
+
+        /// <summary>
+        ///  Disables every managed callback and detaches the worker threads of the runtime from IL2CPP.
+        ///  Call it when the managed runtime is shutting down; no callback is invoked afterwards, so the
+        ///  operations in progress never complete. Returns `false` if some worker has not been detached
+        ///  within `timeout_ms`.
+        /// </summary>
+        [DllImport(__DllName, EntryPoint = "unienc_runtime_shutdown_managed_callbacks", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+        [return: MarshalAs(UnmanagedType.U1)]
+        internal static extern bool unienc_runtime_shutdown_managed_callbacks(Runtime* runtime, uint timeout_ms);
+
         [DllImport(__DllName, EntryPoint = "unienc_new_encoding_system", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
         internal static extern PlatformEncodingSystem* unienc_new_encoding_system(Runtime* runtime, VideoEncoderOptionsNative* video_options, AudioEncoderOptionsNative* audio_options);
 

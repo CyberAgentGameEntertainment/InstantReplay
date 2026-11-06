@@ -2,8 +2,11 @@ mod api;
 mod buffer;
 mod ffi;
 pub mod logging;
+mod managed;
 mod platform;
 mod runtime;
+#[cfg(feature = "multi-thread")]
+mod thread_pool;
 mod types;
 #[cfg(feature = "unity")]
 pub mod unity;

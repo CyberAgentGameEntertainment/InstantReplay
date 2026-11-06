@@ -19,6 +19,9 @@ log = { workspace = true }
 blocking = "1.6.2"
 mimalloc = { version = "0.1.48", features = ["unity"], optional = true }
 
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
 [target.'cfg(target_os = "android")'.dependencies]
 ndk-sys = "0.6.0"
 
@@ -26,7 +29,7 @@ ndk-sys = "0.6.0"
 default = ["multi-thread"]
 unity = ["unity-native-plugin", "unienc/unity"]
 mimalloc = ["dep:mimalloc", "unienc/mimalloc"]
-multi-thread = ["futures/thread-pool"]
+multi-thread = []
 
 [build-dependencies]
 csbindgen = "1.9.7"

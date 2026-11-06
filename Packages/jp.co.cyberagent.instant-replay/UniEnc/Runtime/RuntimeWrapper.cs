@@ -11,15 +11,23 @@ namespace UniEnc
 {
     public unsafe class RuntimeWrapper : SafeHandle
     {
-        // A handle to access UniEnc runtime (mainly for Rust async runtime management).
-        // We need to drop the async runtime when domain unloads because Unity will crash if async callbacks are
-        // invoked through unmanaged function pointer acquired with Marshal.GetFunctionPointerForDelegate() after domain is unloaded.
-        // tokio::runtime::Runtime waits for all pending tasks to complete synchronously when dropped.
-        // In addition, we can only drop the runtime from the finalizer of THIS object because tokio::runtime::Runtime panics if it is dropped within async context.
-        // For example if we keep lifetime of the runtime object by reference counting and release it in Dispose() of other native handles, and it happens to be called from an async callback, it will crash.
-        // It means we cannot use the runtime to drop native resources.
+        // A handle to the native runtime, which owns the thread pool that runs the asynchronous operations of the
+        // encoders and the muxers. A single instance is shared by the whole process.
+        //
+        // The native handles that require the runtime to be released (the inputs and the outputs of the encoders)
+        // keep a reference to this handle with DangerousAddRef(), so the runtime is released only after all of them.
+        // ReleaseHandle() takes the write lock, so the runtime is not released while a native function is using it
+        // through GetScope().
+        //
+        // Releasing the runtime does not wait for the tasks in progress. The worker threads exit after every task
+        // spawned on the pool has been dropped.
 
-        private static readonly RuntimeWrapper Instance = new((nint)NativeMethods.unienc_new_runtime());
+        private static readonly RuntimeWrapper Instance = Create();
+
+#if ENABLE_IL2CPP
+        // Maximum time to wait for the native worker threads to detach from IL2CPP at shutdown.
+        private const uint ShutdownTimeoutMilliseconds = 1000;
+#endif
 
         private readonly ReaderWriterLockSlim _lock = new(LockRecursionPolicy.SupportsRecursion);
 
@@ -29,6 +37,40 @@ namespace UniEnc
         }
 
         public override bool IsInvalid => handle == IntPtr.Zero;
+
+        private static RuntimeWrapper Create()
+        {
+            var instance = new RuntimeWrapper((nint)NativeMethods.unienc_new_runtime());
+#if ENABLE_IL2CPP
+            // IL2CPP attaches a native thread for each managed callback and keeps a record of every
+            // attachment until the finalizer of the managed thread object runs, which makes the shutdown
+            // of the application wait for each record. The native worker threads therefore stay
+            // attached, and they must be detached before IL2CPP aborts the attached threads at shutdown.
+            // AppDomain.ProcessExit is raised before that.
+            NativeMethods.unienc_enable_il2cpp_thread_attach();
+            AppDomain.CurrentDomain.ProcessExit += (_, _) => instance.ShutdownManagedCallbacks();
+#endif
+            return instance;
+        }
+
+#if ENABLE_IL2CPP
+        private void ShutdownManagedCallbacks()
+        {
+            _lock.EnterReadLock();
+            try
+            {
+                if (IsInvalid)
+                    return;
+
+                NativeMethods.unienc_runtime_shutdown_managed_callbacks((Runtime*)handle,
+                    ShutdownTimeoutMilliseconds);
+            }
+            finally
+            {
+                _lock.ExitReadLock();
+            }
+        }
+#endif
 
         protected override bool ReleaseHandle()
         {

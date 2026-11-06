@@ -63,13 +63,17 @@ impl GraphicsEventIssuer for UniencGraphicsEventIssuer {
             native_texture_ptr: std::ptr::null_mut(),
             rust_context: rust_data,
         })) as *mut c_void;
-        unsafe {
+        let invoked = crate::managed::invoke(|| unsafe {
             (self.func)(
                 Some(graphics_event_callback_trampoline),
                 event_id,
                 user_data,
                 texture_token,
             )
+        });
+        if invoked.is_none() {
+            // The managed side will never release the context.
+            unsafe { (*Box::from_raw(user_data as *mut GraphicsEventContext)).drop_rust_context() };
         }
     }
 }
